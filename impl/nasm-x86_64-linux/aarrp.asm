@@ -31,6 +31,7 @@ extern fn_exit
 extern fn_write_char
 extern fn_read_char
 extern fn_malloc
+extern fn_realloc
 extern fn_write_as_base
 extern fn_free
 
@@ -56,23 +57,45 @@ _start:
   mov rdi, 4096
   call fn_malloc
 
+  ;; Store new pointer in r12
   mov r12, rax
+
+  ;; Show off our new pointer
+  mov rdi, r12
+  mov rsi, 16
+  mov rdx, stdout_fd
+  call fn_write_as_base
+
+  ;; newline
+  mov rdi, 10
+  mov rsi, stdout_fd
+  call fn_write_char
+
+  ;; call realloc
+  mov rdi, r12
+  mov rsi, 8192
+  call fn_realloc
+
+  ;; Store new pointer in r12
+  mov r12, rax
+
+  ;; Show off our new pointer
+  mov rdi, r12
+  mov rsi, 16
+  mov rdx, stdout_fd
+  call fn_write_as_base
+
+  ;; Write to our allocated region
   mov qword [r12], 0
 
-  mov rdi, rax
+  ;; Free
+  mov rdi, r12
   call fn_free
 
-  ;;mov rdi, rax
-  ;;mov rsi, 16
-  ;;mov rdx, stdout_fd
-  ;;call fn_write_as_base
-
-  ;;mov qword [r12], 10
-
- ;; Print pointer given to us by malloc
- ;; mov rdi, rax
- ;; mov rsi, stdout_fd
- ;; call fn_write_char
+  ;; newline
+  mov rdi, 10
+  mov rsi, stdout_fd
+  call fn_write_char
 
   mov rdi, 0
   call fn_exit
