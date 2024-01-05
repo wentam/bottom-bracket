@@ -5,6 +5,7 @@ sys_read:  equ 0
 sys_exit:  equ 60
 sys_brk:   equ 12
 sys_mmap:  equ 9
+sys_munmap:   equ 11
 
 
 stdin_fd: equ 0
@@ -22,6 +23,7 @@ global fn_exit
 global fn_read_char
 global fn_write_char
 global fn_malloc
+global fn_free
 global fn_write_as_base
 global fn_digit_to_ascii
 
@@ -96,10 +98,13 @@ fn_malloc:
     mov rax, 0
     ret
 
-;;; TODO
-;;; free(ptr)
-;;;
+;;; free(ptr) -> int
+;;;   Frees memory allocated with malloc. Returns 0 on success, -errno on error.
 fn_free:
+  sub rdi, 8   ; Walk back to the start of the allocation (uncovering metadata)
+  mov rsi, qword [rdi] ; Grab our length from our metadata prefix
+  mov rax, sys_munmap
+  syscall
   ret
 
 ;;; TODO realloc

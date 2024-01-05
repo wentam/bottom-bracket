@@ -32,9 +32,7 @@ extern fn_write_char
 extern fn_read_char
 extern fn_malloc
 extern fn_write_as_base
-
-section .data
-testdata: db 0
+extern fn_free
 
 section .rodata
 
@@ -58,14 +56,20 @@ _start:
   mov rdi, 4096
   call fn_malloc
 
-  mov qword [testdata], rax
+  mov r12, rax
+  mov qword [r12], 0
 
   mov rdi, rax
-  mov rsi, 16
-  mov rdx, stdout_fd
-  call fn_write_as_base
+  call fn_free
 
-  ;; Print pointer given to us by malloc
+  ;;mov rdi, rax
+  ;;mov rsi, 16
+  ;;mov rdx, stdout_fd
+  ;;call fn_write_as_base
+
+  ;;mov qword [r12], 10
+
+ ;; Print pointer given to us by malloc
  ;; mov rdi, rax
  ;; mov rsi, stdout_fd
  ;; call fn_write_char
