@@ -1,11 +1,14 @@
+;;; TODO function for linux errno to string
+
 section .rodata
 ;;; Syscall numbers
-sys_write: equ 1
-sys_read:  equ 0
-sys_exit:  equ 60
-sys_brk:   equ 12
-sys_mmap:  equ 9
-sys_munmap:   equ 11
+sys_write:  equ 1
+sys_read:   equ 0
+sys_exit:   equ 60
+sys_brk:    equ 12
+sys_mmap:   equ 9
+sys_munmap: equ 11
+sys_mremap: equ 25
 
 
 stdin_fd: equ 0
@@ -16,6 +19,7 @@ stderr_fd: equ 2
 %define MAP_PRIVATE 0x02
 %define PROT_READ 0x1
 %define PROT_WRITE 0x2
+%define MREMAP_MAYMOVE 0x1
 
 section .text
 global fn_print
@@ -23,6 +27,7 @@ global fn_exit
 global fn_read_char
 global fn_write_char
 global fn_malloc
+global fn_realloc
 global fn_free
 global fn_write_as_base
 global fn_digit_to_ascii
@@ -101,14 +106,42 @@ fn_malloc:
 ;;; free(ptr) -> int
 ;;;   Frees memory allocated with malloc. Returns 0 on success, -errno on error.
 fn_free:
-  sub rdi, 8   ; Walk back to the start of the allocation (uncovering metadata)
+  sub rdi, 8   ; Walk back to the start of the mmap region
   mov rsi, qword [rdi] ; Grab our length from our metadata prefix
   mov rax, sys_munmap
   syscall
   ret
 
-;;; TODO realloc
-;;; TODO linux errno to string
+;;; realloc(ptr, new_size) -> ptr
+;;;   Reallocate memory to new_size.
+;;;
+;;;   After the allocation, the pointer to the previous allocation is invalid.
+;;;
+;;;   Returns 0 (NULL pointer) on failure.
+fn_realloc:
+  ;; remap mmap region
+  sub rdi, 8              ; Walk back to the start of the mmap region
+  mov rdx, rsi            ; New length from function argument
+  mov rsi, qword [rdi]    ; Length from our metadata
+  mov r10, MREMAP_MAYMOVE ; flags
+  mov  r8, 0              ; new address (unused with current flags)
+  mov rax, sys_mremap
+  syscall
+
+  ;; Failed codepath if realloc failed
+  test rax, rax
+  js realloc_failed
+
+  ;; write new length to metadata
+  mov qword [rax], rdx
+
+  ;; Return mmaped region with metadata hidden
+  add rax, 8
+  ret
+
+  realloc_failed:
+    mov rax, 0
+    ret
 
 ;;; digit_to_ascii(int) -> char
 ;;;   Converts any numeric value representing a digit (up to base 36) to ASCII
