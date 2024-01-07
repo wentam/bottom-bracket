@@ -22,6 +22,7 @@ stderr_fd: equ 2
 
 section .text
 global fn_print
+global fn_error_exit
 global fn_exit
 global fn_read_char
 global fn_write_char
@@ -41,6 +42,18 @@ fn_print:
   mov rdi, r10       ; Output fd
   mov rax, sys_write ; syscall number
   syscall
+  ret
+
+;;; error_exit(*string, len)
+;;;   prints an error to stderr and exits
+fn_error_exit:
+  ;mov rdi, rdi
+  ;mov rsi, rsi
+  mov rdx, stderr_fd
+  call fn_print
+
+  mov rdi, 1
+  call fn_exit
   ret
 
 ;;; exit(exit_code) - Exits the program with the given exit code

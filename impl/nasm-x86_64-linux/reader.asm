@@ -5,6 +5,9 @@ extern fn_malloc
 extern fn_realloc
 extern fn_free
 extern fn_write_char
+extern fn_print
+extern fn_exit
+extern fn_error_exit
 
 section .rodata
 ;;; Syscall numbers
@@ -21,6 +24,15 @@ stderr_fd: equ 2
 %define EOF 256
 %define NEWLINE 10
 %define TAB 9
+
+unexpected_eof_str: db "Error: Unexpected EOF while reading (did you give me any input?)",10
+unexpected_eof_str_len: equ $ - unexpected_eof_str
+
+unexpected_eof_array_str: db "Error: Unexpected EOF while reading array",10
+unexpected_eof_array_str_len: equ $ - unexpected_eof_array_str
+
+unexpected_eof_atom_str: db "Error: Unexpected EOF while reading atom",10
+unexpected_eof_atom_str_len: equ $ - unexpected_eof_atom_str
 
 section .text
 
@@ -43,7 +55,7 @@ section .text
 ;;; read(fd) -> ptr
 ;;;   Reads one expression from the file descriptor into internal representation
 ;;;
-;;;   Caller owns the memory and must free it when done.
+;;;   Caller owns the memory and must free it when done. TODO: provide function for this
 fn_read:
   push r14 ; Preserve
   push r13 ; Preserve
@@ -121,15 +133,9 @@ fn__read:
   mov rsi, r13
   call fn_consume_whitespace
 
-  ;; Peek the next char to decide between array and atom
-  mov rdi, r12
-  mov rsi, r13
-  call fn_peek_char
-
-  ;; If we got EOF, return
-  ;; TODO: perhaps error?
+  ;; If we got EOF, Error
   cmp rax, EOF
-  je __read_epilogue
+  je __read_unexpected_eof
 
   ;; Prepare arguments for _read_array/_read_atom
   mov rdi, r13
@@ -146,7 +152,12 @@ fn__read:
 
   __read_array:
   call fn__read_array
-  ;jmp __read_epilogue ; Return; rax is already a pointer to the array
+  jmp __read_epilogue ; Return; rax is already a pointer to the array
+
+  __read_unexpected_eof:
+  mov rdi, unexpected_eof_str
+  mov rsi, unexpected_eof_str_len
+  call fn_error_exit
 
   __read_epilogue:
   pop r15
@@ -155,6 +166,7 @@ fn__read:
   pop r12
   ret
 
+;;; TODO: are we breaking the 16-byte stack boundary rule with this?
 ;;; _read_array(fd, *read_buffer, *output_buffer) -> ptr
 ;;;   Reads an array from the read buffer+fd
 ;;;   Writes the array to the output buffer
@@ -185,12 +197,19 @@ fn__read_array:
   mov rsi, r13
   call fn_consume_whitespace
 
-  ;; Peek the next char. If it's ')' we're done.
-  mov rdi, r12
-  mov rsi, r13
-  call fn_peek_char
+  ;; Peek the next char (consume whitespace also peeks). If it's ')' we're done.
   cmp rax, ')'
   je __read_array_done
+
+  ;; Error if it's EOF here
+  cmp rax, EOF
+  jne __read_array_no_eof
+
+  mov rdi, unexpected_eof_array_str
+  mov rsi, unexpected_eof_array_str_len
+  call fn_error_exit
+
+  __read_array_no_eof:
 
   ;; Read a child
   mov rdi, r13
@@ -268,6 +287,15 @@ fn__read_atom:
   mov rdi, r12
   mov rsi, r13
   call fn_consume_whitespace
+
+  cmp rax, EOF
+  jne __read_atom_no_eof
+
+  mov rdi, unexpected_eof_atom_str
+  mov rsi, unexpected_eof_atom_str_len
+  call fn_error_exit
+
+  __read_atom_no_eof:
 
   ;; Write length placeholder
   mov rdi, 0
@@ -394,8 +422,11 @@ fn_write_to_output_buffer:
   pop r12 ; Restore
   ret
 
-;;; consume_whitespace(*read_buffer, fd)
+;;; consume_whitespace(*read_buffer, fd) -> next char
 ;;;   Consumes all of the whitespace at the front of the read buffer.
+;;;
+;;;   Returns the next (non-whitespace) char with consuming it from the
+;;;   read buffer.
 fn_consume_whitespace:
   push r12
   push r13
@@ -432,8 +463,14 @@ fn_peek_char:
 
   call fn_read_char_buffered
 
+  ;; EOF is handled specially in read_char_buffered and doesn't actually end
+  ;; up in the buffer or moving the pointer. Hence we skip the decrement.
+  cmp rax, EOF
+  je peek_char_nodec
+
   dec qword[r12] ; Decrement read pointer so we don't consume
 
+  peek_char_nodec:
   pop r12
   ret
 
