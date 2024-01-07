@@ -3,6 +3,8 @@
 * reader macros
 * symbol macros
 * sections?
+* array data type option 3: pointery. Probably doing it this way.
+* need a way to define helper functions available to macros at macroexpand time
 
 TODO: we've been assuming the array deliminators are '(' and ')'. Could we
 instead allow the user to choose what chars they want at compile time?
@@ -56,16 +58,14 @@ TODO: how large can the array length be? fixed? leb128? If fixed size, we
 
 ## Semantics
 
-The base data type is an array whose elements are either another array or a
-string of characters (but not a string literal with quotes like a programming
-language data type would be).
+The base data type is an array whose elements are either another array or an
+atom.
 
 TODO: define character: is it ASCII? 8-byte unicode? Defined by user at build
 time? Note: we really only care about the integer size backing the character and
 which integers represent '(' and ')' or whatever our array deliminators are.
 
-* Characters placed side-by-side are a string, a type distinct from array
-  (but logically an array)
+* Characters placed side-by-side are an atom.
 
   hence:
   (foo bar baz) != ((f o o) (b a r) (b a z))
@@ -91,7 +91,45 @@ Where 'a' is the character encoded number for the letter 'a' (97 in ASCII).
 A positive number represents the length of the following array while negative
 lengths represent the length of the string.
 
-## TODO: how large can the array and string lengths be? fixed? leb128?
+# Array data type option 3
+
+## Semantics
+
+The base data type is an array whose elements are either another array or an
+atom.
+
+TODO: define character: is it ASCII? 8-byte unicode? Defined by user at build
+time? Note: we really only care about the integer size backing the character and
+which integers represent '(' and ')' or whatever our array deliminators are.
+
+* Characters placed side-by-side are an atom (the smallest type of object with
+  no other type composing it)
+
+  hence:
+  (foo bar baz) != ((f o o) (b a r) (b a z))
+
+* double quotes or numbers at this level would have no special meaning.
+
+  hence:
+  "foo" is the literal string "\"foo\""
+  5 is the string "5"
+
+  The only characters with special meaning are ( and )
+
+## Memory structure
+
+Arrays are represented without any pointers as follows:
+
+(foo): [1, -3, 'f', 'o', 'o']
+(foo four): [2, -3, 'f', 'o', 'o', -4, 'f', 'o', 'u', 'r']
+(foo (bar baz)): [2, -3, 'f', 'o', 'o', 2, -3, 'b', 'a', 'r', -3, 'b', 'a', 'z']
+
+Where 'a' is the character encoded number for the letter 'a' (97 in ASCII).
+
+A positive number represents the length of the following array while negative
+lengths represent the length of the string.
+
+## TODO: how large can the array and atom lengths be? fixed? leb128?
 
 * leb128 would require macro-writers to have the tools available to decode
   leb128, probably in the form of a function available at compile-time in the
@@ -140,8 +178,26 @@ lengths represent the length of the string.
 * What if instead of specifying textual instructions, the user specified
   hex opcodes at the top level? The 'mov' macro could then implement that
   behavior via the opcodes of the relevant platform.
+* macros need to be able to use macros
 
 # Problems to think about
+
+## numeric literals in arrays are a problem
+
+With the current design, the array (1 2 3 4) is not the numbers [1,2,3,4] bit
+an array with the chars ['1', '2','3','4']. This would neccesitate languages
+to have their own (make-array '(1 2 3 4)) to actually get a numeric array.
+
+This is confusing - as a homoiconic language we want you to be able to actually
+use the built-in datatype as part of the language.
+
+This is tricky, though: what if you wanted to implement a bignum library and
+have bignums in the array? what width are the integers? We exist at too low of
+a level to make these decisions.
+
+I think reader macros are the answer, much like with string issues:
+a reader macro can find number literals and wrap them up as (number 5) for
+example.
 
 ## non-special parenthesis
 
