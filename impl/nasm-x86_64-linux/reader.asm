@@ -28,7 +28,7 @@ stderr_fd: equ 2
 unexpected_eof_str: db "Error: Unexpected EOF while reading (did you give me any input?)",10
 unexpected_eof_str_len: equ $ - unexpected_eof_str
 
-unexpected_paren_str: db "Error: Unexpected ')'",10
+unexpected_paren_str: db "Error: Unexpected ')' while reading",10
 unexpected_paren_str_len: equ $ - unexpected_paren_str
 
 unexpected_eof_array_str: db "Error: Unexpected EOF while reading array (are your parenthesis mismatched?)",10
