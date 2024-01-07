@@ -28,7 +28,10 @@ stderr_fd: equ 2
 unexpected_eof_str: db "Error: Unexpected EOF while reading (did you give me any input?)",10
 unexpected_eof_str_len: equ $ - unexpected_eof_str
 
-unexpected_eof_array_str: db "Error: Unexpected EOF while reading array",10
+unexpected_paren_str: db "Error: Unexpected ')'",10
+unexpected_paren_str_len: equ $ - unexpected_paren_str
+
+unexpected_eof_array_str: db "Error: Unexpected EOF while reading array (are your parenthesis mismatched?)",10
 unexpected_eof_array_str_len: equ $ - unexpected_eof_array_str
 
 unexpected_eof_atom_str: db "Error: Unexpected EOF while reading atom",10
@@ -137,6 +140,10 @@ fn__read:
   cmp rax, EOF
   je __read_unexpected_eof
 
+  ;; If we got an array end, error
+  cmp rax, ')'
+  je __read_unexpected_closing_paren
+
   ;; Prepare arguments for _read_array/_read_atom
   mov rdi, r13
   mov rsi, r12
@@ -157,6 +164,11 @@ fn__read:
   __read_unexpected_eof:
   mov rdi, unexpected_eof_str
   mov rsi, unexpected_eof_str_len
+  call fn_error_exit
+
+  __read_unexpected_closing_paren:
+  mov rdi, unexpected_paren_str
+  mov rsi, unexpected_paren_str_len
   call fn_error_exit
 
   __read_epilogue:
