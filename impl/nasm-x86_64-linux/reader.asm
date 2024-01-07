@@ -252,8 +252,6 @@ fn__read_array:
 ;;;   Reads an atom from the read buffer+fd.
 ;;;   Writes the atom to the output buffer.
 ;;;
-;;;   The first character in the buffer must be a non-whitespace character.
-;;;
 ;;;   Returns a pointer to the atom.
 fn__read_atom:
   push r12
@@ -265,6 +263,11 @@ fn__read_atom:
   mov r12, rsi ; Preserve read buffer
   mov r13, rdi ; Preserve fd
   mov r14, rdx ; Preserve output buffer
+
+  ;; Consume all the leading whitespace
+  mov rdi, r12
+  mov rsi, r13
+  call fn_consume_whitespace
 
   ;; Write length placeholder
   mov rdi, 0
