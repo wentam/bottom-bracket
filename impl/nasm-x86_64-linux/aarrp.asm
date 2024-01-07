@@ -32,8 +32,9 @@ extern fn_write_char
 extern fn_read_char
 extern fn_malloc
 extern fn_realloc
-extern fn_write_as_base
 extern fn_free
+extern fn_write_as_base
+extern fn_read
 
 section .rodata
 
@@ -46,56 +47,50 @@ welcome_msg_len:  equ $ - welcome_msg
 
 section .text
 
+;; TODO: count allocations and warn if not everything has been freed at the end
+;; TODO: utility to push all registers and utility to pop all registers,
+;;       to make it easy to inject debugging functions in the middle of something
+;; TODO: we should probably split out the buffered char reader from the reader
+;; TODO: we should probably split out the reader's output buffer to be a byte vector
+;; TODO: make sure we're handling all errors that could occur from syscalls
+;; TODO fn_write_as_base isn't keeping the stack 16-aligned while making function calls
 _start:
   ;; Output welcome string to stderr
-  mov rdi, welcome_msg
-  mov rsi, welcome_msg_len
-  mov rdx, stderr_fd
-  call fn_print
+  ;;mov rdi, welcome_msg
+  ;;mov rsi, welcome_msg_len
+  ;;mov rdx, stderr_fd
+  ;;call fn_print
 
-  ;; Test malloc
-  mov rdi, 4096
-  call fn_malloc
-
-  ;; Store new pointer in r12
+  mov rdi, stdin_fd
+  call fn_read
   mov r12, rax
 
-  ;; Show off our new pointer
-  mov rdi, r12
-  mov rsi, 16
-  mov rdx, stdout_fd
-  call fn_write_as_base
+  ;; Dump read result to STDOUT
+  ;; TODO implement dump func for testing?
+  mov r14, 256
 
-  ;; newline
-  mov rdi, 10
-  mov rsi, stdout_fd
-  call fn_write_char
+  mov r13, r12
+  dump:
+  cmp r14, 0
+  je break
+  ;; Dump the byte
+  ;;mov dil, byte [r13]
+  ;;mov rsi, stdout_fd
+  ;;call fn_write_char
 
-  ;; call realloc
-  mov rdi, r12
-  mov rsi, 8192
-  call fn_realloc
+  inc r13
+  dec r14
+  jmp dump
+  break:
 
-  ;; Store new pointer in r12
-  mov r12, rax
+  ;; TODO: free the read result. We'll need to implement a function
+  ;; in the reader for this as our return result is not the start of
+  ;; the struct
 
-  ;; Show off our new pointer
-  mov rdi, r12
-  mov rsi, 16
-  mov rdx, stdout_fd
-  call fn_write_as_base
-
-  ;; Write to our allocated region
-  mov qword [r12], 0
-
-  ;; Free
-  mov rdi, r12
-  call fn_free
-
-  ;; newline
-  mov rdi, 10
-  mov rsi, stdout_fd
-  call fn_write_char
+  ;; Newline
+  ;;mov rdi, 10
+  ;;mov rsi, stdout_fd
+  ;;call fn_write_char
 
   mov rdi, 0
   call fn_exit

@@ -10,15 +10,14 @@ sys_mmap:   equ 9
 sys_munmap: equ 11
 sys_mremap: equ 25
 
-
-stdin_fd: equ 0
+stdin_fd:  equ 0
 stdout_fd: equ 1
 stderr_fd: equ 2
 
-%define MAP_ANONYMOUS 0x20
-%define MAP_PRIVATE 0x02
-%define PROT_READ 0x1
-%define PROT_WRITE 0x2
+%define MAP_ANONYMOUS  0x20
+%define MAP_PRIVATE    0x02
+%define PROT_READ      0x1
+%define PROT_WRITE     0x2
 %define MREMAP_MAYMOVE 0x1
 
 section .text
@@ -32,7 +31,9 @@ global fn_free
 global fn_write_as_base
 global fn_digit_to_ascii
 
-;;; print(string, len, fd) - Outputs given string to fd
+;;; TODO: if sys_write doesn't return our full length, call it again
+;;        (it's not gauranteed to write the whole string in one go)
+;;; print(*string, len, fd) - Outputs given string to fd
 fn_print:
   mov r10, rdx       ; We're about to clobber rdx, move to r10
   mov rdx, rsi       ; String length
@@ -63,13 +64,12 @@ fn_read_char:
 
 ;;; fn_write_char(char, fd) - Writes a single character to an FD
 fn_write_char:
-  dec rsp
-  mov byte [rsp], dil
+  push rdi
   mov rdi, rsp
   mov rdx, rsi
   mov rsi, 1
   call fn_print
-  inc rsp
+  pop rdi
   ret
 
 ;;; malloc(size) -> ptr
@@ -106,7 +106,7 @@ fn_malloc:
 ;;; free(ptr) -> int
 ;;;   Frees memory allocated with malloc. Returns 0 on success, -errno on error.
 fn_free:
-  sub rdi, 8   ; Walk back to the start of the mmap region
+  sub rdi, 8           ; Walk back to the start of the mmap region
   mov rsi, qword [rdi] ; Grab our length from our metadata prefix
   mov rax, sys_munmap
   syscall
@@ -115,7 +115,7 @@ fn_free:
 ;;; realloc(ptr, new_size) -> ptr
 ;;;   Reallocate memory to new_size.
 ;;;
-;;;   After the allocation, the pointer to the previous allocation is invalid.
+;;;   After the allocation the pointer to the previous allocation is invalid.
 ;;;
 ;;;   Returns 0 (NULL pointer) on failure.
 fn_realloc:
@@ -204,4 +204,3 @@ fn_write_as_base:
   pop r12 ; Restore
   pop r13 ; Restore
   ret
-
