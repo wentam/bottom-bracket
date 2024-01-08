@@ -74,7 +74,7 @@ fn_read:
 
   mov r12, rdi ; We'll need this later but are about to clobber it
 
-  ;; Create new read buffer
+  ;; Create new buffered reader
   mov rdi, r12
   call fn_buffered_reader_new
   mov r13, rax ; r13 = new buffered reader
@@ -94,7 +94,7 @@ fn_read:
   mov rsi, r14
   call fn__read
 
-  ;; Free read buffer
+  ;; Free buffered reader
   push rax
   mov rdi, r13
   call fn_buffered_reader_free
@@ -273,7 +273,7 @@ fn__read_array:
   ret
 
 ;;; _read_atom(*buffered_reader, *output_buffer) -> ptr
-;;;   Reads an atom from the read buffer+fd.
+;;;   Reads an atom from the buffered reader.
 ;;;   Writes the atom to the output buffer.
 ;;;
 ;;;   Returns a pointer to the atom.
@@ -283,7 +283,7 @@ fn__read_atom:
   push r15
   push rbx
 
-  mov r12, rdi ; Preserve read buffer
+  mov r12, rdi ; Preserve buffered reader
   mov r14, rsi ; Preserve output buffer
 
   ;; Consume all the leading whitespace
@@ -309,7 +309,7 @@ fn__read_atom:
   __read_atom_char:
   ;; Peek the next char - if it's '(', ')' or whitespace, we're done.
   ;; We cannot consume because consuming '(' or ')' would be damaging.
-  mov rdi, r12 ; read buffer
+  mov rdi, r12 ; buffered reader
   call fn_buffered_reader_peek_byte
   cmp rax, ')'
   je __read_atom_finish
