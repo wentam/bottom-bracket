@@ -97,7 +97,7 @@ fn_read:
   ;; Free read buffer
   push rax
   mov rdi, r13
-  call fn_free
+  call fn_buffered_reader_free
   pop rax
 
   ;; TODO TMP dump the output buffer
