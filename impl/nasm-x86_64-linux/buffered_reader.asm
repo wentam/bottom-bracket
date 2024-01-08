@@ -1,0 +1,188 @@
+;;;; Buffered reader
+;;;;
+;;;; Reads from an fd in a buffered fashion - and allows 'peeking' at the next
+;;;; char.
+
+section .text
+global fn_buffered_reader_new
+global fn_buffered_reader_free
+global fn_buffered_reader_read_byte
+global fn_buffered_reader_peek_byte
+global fn_buffered_reader_consume_leading_whitespace
+global BUFFERED_READER_EOF
+
+extern fn_malloc
+extern fn_free
+extern fn_realloc
+extern fn_error_exit
+
+section .rodata
+
+sys_read:  equ 0x00
+BUFFERED_READER_EOF: equ 256
+malloc_failed_error_str: db "ERROR: Failed to allocate read buffer (out of memory?)",10
+malloc_failed_error_str_len: equ $ - malloc_failed_error_str
+
+section .text
+
+;;; struct buffered_reader {
+;;;   int64_t fd;     // File descriptor to read data from
+;;;   char* read_ptr; // Pointer to the next byte to read
+;;;   char* end_ptr;  // Pointer to the end of valid data + 1
+;;;                   // (first invalid byte) in the buffer
+;;;
+;;;   char buf[READ_BUFFER_SIZE] // Buffer (flat in struct, not pointer)
+;;; }
+
+;;; Offsets for the elements in above struct. Defining them here allows us
+;;; to easily modify the struct definition later if needed.
+%define BUFFERED_READER_FD_OFFSET 0
+%define BUFFERED_READER_READ_PTR_OFFSET 8
+%define BUFFERED_READER_END_PTR_OFFSET 16
+%define BUFFERED_READER_BUF_OFFSET 24
+
+%define READ_BUFFER_SIZE 4096 ; For simplicity read buffers are constant size
+%define BUFFERED_READER_SIZE (READ_BUFFER_SIZE + 24)
+
+%define NEWLINE 10
+%define TAB 9
+
+;;; buffered_reader_new(fd)
+;;;   Creates a new buffered reader.
+;;;
+;;;   Free with buffered_reader_free when done.
+fn_buffered_reader_new:
+  push r12
+  sub rsp, 8
+
+  mov r12, rdi
+
+  ;; Allocate the struct
+  mov rdi, BUFFERED_READER_SIZE
+  call fn_malloc
+
+  ;; Error and exit if malloc failed
+  cmp rax, 0
+  jne good_malloc
+
+  mov rdi, malloc_failed_error_str
+  mov rsi, malloc_failed_error_str_len
+  call fn_error_exit
+
+  good_malloc:
+
+  ;; Initialize the members
+  mov qword [rax+BUFFERED_READER_FD_OFFSET], r12
+  mov qword [rax+BUFFERED_READER_READ_PTR_OFFSET], 0
+  mov qword [rax+BUFFERED_READER_END_PTR_OFFSET], 0
+
+  add rsp, 8
+  pop r12
+  ret
+
+;;; buffered_reader_free(*buffered_reader)
+;;;   Frees a buffered reader.
+fn_buffered_reader_free:
+  call fn_free
+  ret
+
+;;; buffered_reader_read_byte(*buffered_reader)
+;;;   Reads a byte.
+fn_buffered_reader_read_byte:
+  push r12
+  push r13
+  mov r12, rdi                                   ; Struct pointer
+  mov r13, qword [r12+BUFFERED_READER_FD_OFFSET] ; fd
+
+  ;; Decide if we need to refill the buffer
+  mov rdi, qword [r12+BUFFERED_READER_READ_PTR_OFFSET]
+  cmp rdi, qword [r12+BUFFERED_READER_END_PTR_OFFSET]
+  jne read_byte_do_read ; read pointer != end of data -> skip refill
+
+  ;; Refill buffer from fd
+  mov rsi, r12                        ; Struct pointer
+  add rsi, BUFFERED_READER_BUF_OFFSET ; Move to start of the buffer
+  mov rdi, r13                        ; FD to read from
+  mov rdx, READ_BUFFER_SIZE           ; Length to read
+  mov rax, sys_read                   ; syscall number
+  syscall
+
+  ;; If sys_read returns zero, take EOF codepath
+  cmp rax, 0
+  je read_byte_eof
+
+  ;; Set read pointer to front of buffer
+  mov qword [r12+BUFFERED_READER_READ_PTR_OFFSET], rsi
+
+  ;; Set end pointer to end of valid data based upon sys_read return value
+  mov rdi, rsi
+  add rdi, rax
+  mov qword [r12+BUFFERED_READER_END_PTR_OFFSET], rdi
+
+  read_byte_do_read:
+  mov rsi, qword [r12+BUFFERED_READER_READ_PTR_OFFSET] ; Obtain read pointer
+  xor rax, rax                                         ; Zero rax
+  mov  al, byte [rsi]                                  ; Read at read pointer
+  inc qword [r12+BUFFERED_READER_READ_PTR_OFFSET]      ; increment read pointer
+
+  pop r13
+  pop r12
+  ret
+
+  read_byte_eof:
+  mov rax, BUFFERED_READER_EOF
+  pop r13
+  pop r12
+  ret
+
+;;; buffered_reader_peek_byte(*buffered_reader)
+;;;   Returns the next byte without consuming it.
+fn_buffered_reader_peek_byte:
+  push r12
+  sub rsp, 8
+  mov r12, rdi ; Preserve struct pointer
+
+  call fn_buffered_reader_read_byte
+
+  ;; EOF is handled specially by read_byte and doesn't add anything to the
+  ;; buffer or move the pointer. Hence skip decrement if it's EOF.
+  cmp rax, BUFFERED_READER_EOF
+  je peek_byte_nodec
+
+  dec qword[r12+BUFFERED_READER_READ_PTR_OFFSET]
+
+  peek_byte_nodec:
+
+  add rsp, 8
+  pop r12
+  ret
+
+;;; buffered_reader_consume_leading_whitespace(*buffered_reader)
+;;;   Consumes all of the whitespace at the front of the read buffer.
+;;;
+;;;   Returns the next (non-whitespace) char without consuming it from the read
+;;;   buffer.
+fn_buffered_reader_consume_leading_whitespace:
+  push r12
+  sub rsp, 8
+  mov r12, rdi ; Struct pointer
+
+  consume_loop:
+  mov rdi, r12
+  call fn_buffered_reader_peek_byte
+  cmp rax, ' '
+  je found_whitespace
+  cmp rax, NEWLINE
+  je found_whitespace
+  cmp rax, TAB
+  je found_whitespace
+
+  add rsp, 8
+  pop r12
+  ret
+
+  found_whitespace:
+  mov rdi, r12
+  call fn_buffered_reader_read_byte ; consume
+  jmp consume_loop
+

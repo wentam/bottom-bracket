@@ -8,6 +8,14 @@ extern fn_write_char
 extern fn_print
 extern fn_exit
 extern fn_error_exit
+extern BUFFERED_READER_EOF
+
+
+extern fn_buffered_reader_new
+extern fn_buffered_reader_free
+extern fn_buffered_reader_read_byte
+extern fn_buffered_reader_peek_byte
+extern fn_buffered_reader_consume_leading_whitespace
 
 section .rodata
 ;;; Syscall numbers
@@ -21,20 +29,20 @@ stderr_fd: equ 2
 
 %define READ_BUFFER_SIZE 4096
 %define OUTPUT_BUFFER_START_SIZE 16
-%define EOF 256
+%define EOF 256 ;; TODO remove after factoring out buffered reader
 %define NEWLINE 10
 %define TAB 9
 
-unexpected_eof_str: db "Error: Unexpected EOF while reading (did you give me any input?)",10
+unexpected_eof_str: db "ERROR: Unexpected EOF while reading (did you give me any input?)",10
 unexpected_eof_str_len: equ $ - unexpected_eof_str
 
-unexpected_paren_str: db "Error: Unexpected ')' while reading",10
+unexpected_paren_str: db "ERROR: Unexpected ')' while reading",10
 unexpected_paren_str_len: equ $ - unexpected_paren_str
 
-unexpected_eof_array_str: db "Error: Unexpected EOF while reading array (are your parenthesis mismatched?)",10
+unexpected_eof_array_str: db "ERROR: Unexpected EOF while reading array (are your parenthesis mismatched?)",10
 unexpected_eof_array_str_len: equ $ - unexpected_eof_array_str
 
-unexpected_eof_atom_str: db "Error: Unexpected EOF while reading atom",10
+unexpected_eof_atom_str: db "ERROR: Unexpected EOF while reading atom",10
 unexpected_eof_atom_str_len: equ $ - unexpected_eof_atom_str
 
 section .text
@@ -66,13 +74,10 @@ fn_read:
 
   mov r12, rdi ; We'll need this later but are about to clobber it
 
-  ;; Allocate new struct read_buffer
-  mov rdi, (READ_BUFFER_SIZE + 16)
-  call fn_malloc
-  ;; TODO: check for malloc NULL, error
-  mov r13, rax
-  mov qword [r13], 0   ; initialize read ptr
-  mov qword [r13+8], 0 ; initialize end ptr
+  ;; Create new read buffer
+  mov rdi, r12
+  call fn_buffered_reader_new
+  mov r13, rax ; r13 = new buffered reader
 
   ;; Allocate output buffer
   mov rdi, (OUTPUT_BUFFER_START_SIZE + 16)
@@ -85,9 +90,8 @@ fn_read:
   mov qword [r14+8], OUTPUT_BUFFER_START_SIZE ; initialize length
 
   ;; Call recursive implementation
-  mov rdi, r12
-  mov rsi, r13
-  mov rdx, r14
+  mov rdi, r13
+  mov rsi, r14
   call fn__read
 
   ;; Free read buffer
@@ -120,21 +124,19 @@ fn_read:
   pop r14 ; Restore
   ret
 
-;;; _read(fd, *read_buffer, *output_buffer) -> ptr
+;;; _read(*buffered_reader, *output_buffer) -> ptr
 ;;;   Recursive implementation of read()
 fn__read:
   push r12
   push r13
   push r14
   push r15
-  mov r12, rsi ; Preserve read buffer
-  mov r13, rdi ; Preserve fd
-  mov r14, rdx ; Preserve output buffer
+  mov r12, rdi ; Preserve buffered reader
+  mov r14, rsi ; Preserve output buffer
 
-  ;; Consume all the leading whitespace
+  ;; Consume all the leading whitespace (this also peeks)
   mov rdi, r12
-  mov rsi, r13
-  call fn_consume_whitespace
+  call fn_buffered_reader_consume_leading_whitespace
 
   ;; If we got EOF, Error
   cmp rax, EOF
@@ -145,9 +147,8 @@ fn__read:
   je __read_unexpected_closing_paren
 
   ;; Prepare arguments for _read_array/_read_atom
-  mov rdi, r13
-  mov rsi, r12
-  mov rdx, r14
+  mov rdi, r12
+  mov rsi, r14
 
   ;; If it looks like an array take array codepath, else atom codepath
   cmp rax, '('
@@ -178,9 +179,8 @@ fn__read:
   pop r12
   ret
 
-;;; TODO: are we breaking the 16-byte stack boundary rule with this?
-;;; _read_array(fd, *read_buffer, *output_buffer) -> ptr
-;;;   Reads an array from the read buffer+fd
+;;; _read_array(*buffered_reader, *output_buffer) -> ptr
+;;;   Reads an array from the buffered reader
 ;;;   Writes the array to the output buffer
 ;;;
 ;;;   The first character in the buffer must be '(' TODO: assert?
@@ -188,26 +188,22 @@ fn__read:
 ;;;   Returns a pointer to the array.
 fn__read_array:
   push r12
-  push r13
   push r14
   push r15
   push rbx
 
-  mov r12, rsi ; Preserve read buffer
-  mov r13, rdi ; Preserve fd
-  mov r14, rdx ; Preserve output buffer
+  mov r12, rdi ; Preserve buffered reader
+  mov r14, rsi ; Preserve output buffer
 
-  ;; Consume the leading '('
+  ;; Consume the leading '(' TODO assert that it is actually (
   mov rdi, r12
-  mov rsi, r13
-  call fn_read_char_buffered
+  call fn_buffered_reader_read_byte
 
   mov r15, 0 ; child counter
   __read_array_children:
   ;; Consume all whitespace
   mov rdi, r12
-  mov rsi, r13
-  call fn_consume_whitespace
+  call fn_buffered_reader_consume_leading_whitespace
 
   ;; Peek the next char (consume whitespace also peeks). If it's ')' we're done.
   cmp rax, ')'
@@ -224,9 +220,8 @@ fn__read_array:
   __read_array_no_eof:
 
   ;; Read a child
-  mov rdi, r13
-  mov rsi, r12
-  mov rdx, r14
+  mov rdi, r12
+  mov rsi, r14
   call fn__read
 
   ;; Push a pointer to this child onto the stack
@@ -240,8 +235,7 @@ fn__read_array:
 
   ;; Consume the trailing ')'
   mov rdi, r12
-  mov rsi, r13
-  call fn_read_char_buffered
+  call fn_buffered_reader_read_byte
 
   ;; Zero rbx to start tracking array size in bytes
   xor rbx, rbx
@@ -275,30 +269,26 @@ fn__read_array:
   pop rbx
   pop r15
   pop r14
-  pop r13
   pop r12
   ret
 
-;;; _read_atom(fd, *read_buffer, *output_buffer) -> ptr
+;;; _read_atom(*buffered_reader, *output_buffer) -> ptr
 ;;;   Reads an atom from the read buffer+fd.
 ;;;   Writes the atom to the output buffer.
 ;;;
 ;;;   Returns a pointer to the atom.
 fn__read_atom:
   push r12
-  push r13
   push r14
   push r15
   push rbx
 
-  mov r12, rsi ; Preserve read buffer
-  mov r13, rdi ; Preserve fd
-  mov r14, rdx ; Preserve output buffer
+  mov r12, rdi ; Preserve read buffer
+  mov r14, rsi ; Preserve output buffer
 
   ;; Consume all the leading whitespace
   mov rdi, r12
-  mov rsi, r13
-  call fn_consume_whitespace
+  call fn_buffered_reader_consume_leading_whitespace
 
   cmp rax, EOF
   jne __read_atom_no_eof
@@ -320,8 +310,7 @@ fn__read_atom:
   ;; Peek the next char - if it's '(', ')' or whitespace, we're done.
   ;; We cannot consume because consuming '(' or ')' would be damaging.
   mov rdi, r12 ; read buffer
-  mov rsi, r13 ; fd
-  call fn_peek_char
+  call fn_buffered_reader_peek_byte
   cmp rax, ')'
   je __read_atom_finish
   cmp rax, '('
@@ -336,9 +325,8 @@ fn__read_atom:
   je __read_atom_finish
 
   ;; Read the next char
-  mov rsi, r13
   mov rdi, r12
-  call fn_read_char_buffered
+  call fn_buffered_reader_read_byte
   mov r15, rax
 
   ;; Output this char to the buffer
@@ -364,7 +352,6 @@ fn__read_atom:
   pop rbx
   pop r15
   pop r14
-  pop r13
   pop r12
   ret
 
@@ -411,10 +398,6 @@ fn_write_to_output_buffer:
   cmp rax, qword [r13]   ; Compare end of struct to write pointer
   jne after_expand       ; Skip expand if we haven't reached length
 
-  ;;mov dil, 'd'
-  ;;mov rsi, stdout_fd
-  ;;call fn_write_char
-
   ;; Expand the buffer
   mov rdi, r13           ; Output buffer struct
   mov rsi, qword [r13+8] ; New size = length of old buffer (for now)
@@ -433,105 +416,3 @@ fn_write_to_output_buffer:
   pop r13 ; Restore
   pop r12 ; Restore
   ret
-
-;;; consume_whitespace(*read_buffer, fd) -> next char
-;;;   Consumes all of the whitespace at the front of the read buffer.
-;;;
-;;;   Returns the next (non-whitespace) char with consuming it from the
-;;;   read buffer.
-fn_consume_whitespace:
-  push r12
-  push r13
-  mov r12, rdi ; read buffer
-  mov r13, rsi ; fd
-
-  consume_loop:
-  mov rdi, r12
-  mov rsi, r13
-  call fn_peek_char
-  cmp rax, ' '
-  je found_whitespace
-  cmp rax, NEWLINE
-  je found_whitespace
-  cmp rax, TAB
-  je found_whitespace
-
-  pop r13
-  pop r12
-  ret
-
-  found_whitespace:
-  mov rdi, r12
-  mov rsi, r13
-  call fn_read_char_buffered ; consume
-  jmp consume_loop
-
-
-;;; peek_char(*read_buffer, fd)
-;;;   Reads the next char off the read buffer without consuming it
-fn_peek_char:
-  push r12
-  mov r12, rdi ; Preserve struct pointer
-
-  call fn_read_char_buffered
-
-  ;; EOF is handled specially in read_char_buffered and doesn't actually end
-  ;; up in the buffer or moving the pointer. Hence we skip the decrement.
-  cmp rax, EOF
-  je peek_char_nodec
-
-  dec qword[r12] ; Decrement read pointer so we don't consume
-
-  peek_char_nodec:
-  pop r12
-  ret
-
-;;; read_char_buffered(*read_buffer, fd)
-;;;   Reads a char off of a read buffer, filling the read buffer from fd
-;;;   as needed
-fn_read_char_buffered:
-  push r12     ; Preserve
-  push r13     ; Preserve
-  mov r12, rdi ; Preserve struct pointer
-  mov r13, rsi ; Preserve fd
-
-  ;; Decide if we need to refill the buffer
-  mov rdi, qword [r12]
-  cmp rdi, qword [r12+8] ; Compare seek pointer to end of valid data
-  jne do_read            ; seek pointer != end of data -> skip refill
-
-  ;; Refill buffer from fd
-  mov rsi, r12              ; Struct pointer
-  add rsi, 16               ; Seek in the struct to the start of the buffer
-  mov rdi, r13              ; FD to read from
-  mov rdx, READ_BUFFER_SIZE ; Length to read
-  mov rax, sys_read         ; syscall number
-  syscall
-
-  ;; If sys_read returns zero, take EOF codepath
-  cmp rax, 0
-  je end_of_file
-
-  ;; Set read pointer to front of buffer
-  mov qword [r12], rsi
-
-  ;; Set end pointer to end of valid data based upon sys_read return value
-  mov rdi, rsi
-  add rdi, rax
-  mov qword [r12+8], rdi
-
-  do_read:
-  mov rsi, qword [r12] ; Obtain read pointer
-  xor rax, rax         ; Zero rax
-  mov  al, byte [rsi]  ; Read at read pointer (to rax)
-  inc qword [r12]      ; increment read pointer
-
-  pop r13 ; Restore
-  pop r12 ; Restore
-  ret
-
-  end_of_file:
-    mov rax, EOF
-    pop r13 ; Restore
-    pop r12 ; Restore
-    ret
