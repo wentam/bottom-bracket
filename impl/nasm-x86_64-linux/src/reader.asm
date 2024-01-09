@@ -9,6 +9,7 @@ extern fn_print
 extern fn_exit
 extern fn_error_exit
 extern BUFFERED_READER_EOF
+extern fn_assert_stack_aligned
 
 
 extern fn_buffered_reader_new
@@ -29,7 +30,6 @@ stderr_fd: equ 2
 
 %define READ_BUFFER_SIZE 4096
 %define OUTPUT_BUFFER_START_SIZE 16
-%define EOF 256 ;; TODO remove after factoring out buffered reader
 %define NEWLINE 10
 %define TAB 9
 
@@ -71,6 +71,10 @@ fn_read:
   push r14 ; Preserve
   push r13 ; Preserve
   push r12 ; Preserve
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call fn_assert_stack_aligned
+  %endif
 
   mov r12, rdi ; We'll need this later but are about to clobber it
 
@@ -131,15 +135,20 @@ fn__read:
   push r13
   push r14
   push r15
+  sub rsp, 8
   mov r12, rdi ; Preserve buffered reader
   mov r14, rsi ; Preserve output buffer
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call fn_assert_stack_aligned
+  %endif
 
   ;; Consume all the leading whitespace (this also peeks)
   mov rdi, r12
   call fn_buffered_reader_consume_leading_whitespace
 
   ;; If we got EOF, Error
-  cmp rax, EOF
+  cmp rax, BUFFERED_READER_EOF
   je __read_unexpected_eof
 
   ;; If we got an array end, error
@@ -173,6 +182,7 @@ fn__read:
   call fn_error_exit
 
   __read_epilogue:
+  add rsp, 8
   pop r15
   pop r14
   pop r13
@@ -191,6 +201,11 @@ fn__read_array:
   push r14
   push r15
   push rbx
+  sub rsp, 8
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call fn_assert_stack_aligned
+  %endif
 
   mov r12, rdi ; Preserve buffered reader
   mov r14, rsi ; Preserve output buffer
@@ -210,7 +225,7 @@ fn__read_array:
   je __read_array_done
 
   ;; Error if it's EOF here
-  cmp rax, EOF
+  cmp rax, BUFFERED_READER_EOF
   jne __read_array_no_eof
 
   mov rdi, unexpected_eof_array_str
@@ -225,6 +240,7 @@ fn__read_array:
   call fn__read
 
   ;; Push a pointer to this child onto the stack
+  sub rsp, 8
   push rax
 
   inc r15 ; increment child counter
@@ -252,6 +268,7 @@ fn__read_array:
   cmp r15, 0
   je _output_array_break
   pop rdi
+  add rsp, 8
   mov rsi, r14
   call fn_write_int64_to_output_buffer
 
@@ -266,6 +283,7 @@ fn__read_array:
   mov rax, qword[r14]
   sub rax, rbx
 
+  add rsp, 8
   pop rbx
   pop r15
   pop r14
@@ -282,6 +300,11 @@ fn__read_atom:
   push r14
   push r15
   push rbx
+  sub rsp, 8
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call fn_assert_stack_aligned
+  %endif
 
   mov r12, rdi ; Preserve buffered reader
   mov r14, rsi ; Preserve output buffer
@@ -290,7 +313,7 @@ fn__read_atom:
   mov rdi, r12
   call fn_buffered_reader_consume_leading_whitespace
 
-  cmp rax, EOF
+  cmp rax, BUFFERED_READER_EOF
   jne __read_atom_no_eof
 
   mov rdi, unexpected_eof_atom_str
@@ -317,7 +340,7 @@ fn__read_atom:
   je __read_atom_finish
   cmp rax, ' '
   je __read_atom_finish
-  cmp rax, EOF
+  cmp rax, BUFFERED_READER_EOF
   je __read_atom_finish
   cmp rax, NEWLINE
   je __read_atom_finish
@@ -349,6 +372,7 @@ fn__read_atom:
   mov qword[rax], rbx ; Write our length
   ; rax should now contain a pointer to the start of our data, return
 
+  add rsp, 8
   pop rbx
   pop r15
   pop r14
@@ -363,6 +387,10 @@ fn_write_int64_to_output_buffer:
   push r14
   mov r13, rdi ; int64 to write
   mov r14, rsi ; output buffer
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call fn_assert_stack_aligned
+  %endif
 
   ;; Make the space with zero bytes
   mov r12, 8
@@ -388,8 +416,14 @@ fn_write_int64_to_output_buffer:
 fn_write_to_output_buffer:
   push r12     ; Preserve
   push r13     ; Preserve
+  sub rsp, 8
+
   mov r12, rdi ; Preserve rdi (byte)
   mov r13, rsi ; Preserve rsi (output buffer)
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call fn_assert_stack_aligned
+  %endif
 
   ;; Check if we need to expand the buffer
   mov rax, r13           ; rax  = start of struct
@@ -412,7 +446,8 @@ fn_write_to_output_buffer:
   mov rax, qword[r13] ; Grab write pointer
   mov qword[rax], r12 ; Write our byte at the write pointer
   inc qword[r13]      ; Increment write pointer
-
+  
+  add rsp, 8
   pop r13 ; Restore
   pop r12 ; Restore
   ret

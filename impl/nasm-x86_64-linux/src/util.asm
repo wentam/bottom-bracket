@@ -1,6 +1,9 @@
 ;;; TODO function for linux errno to string
 
 section .rodata
+stack_unaligned_str: db "ERROR: stack not 16-byte-aligned at stack alignment assertion",10
+stack_unaligned_str_len: equ $ - stack_unaligned_str
+
 ;;; Syscall numbers
 sys_write:  equ 1
 sys_read:   equ 0
@@ -31,6 +34,7 @@ global fn_realloc
 global fn_free
 global fn_write_as_base
 global fn_digit_to_ascii
+global fn_assert_stack_aligned
 
 ;;; TODO: if sys_write doesn't return our full length, call it again
 ;;        (it's not gauranteed to write the whole string in one go)
@@ -78,6 +82,11 @@ fn_read_char:
 ;;; fn_write_char(char, fd) - Writes a single character to an FD
 fn_write_char:
   push rdi
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call fn_assert_stack_aligned
+  %endif
+
   mov rdi, rsp
   mov rdx, rsi
   mov rsi, 1
@@ -88,6 +97,11 @@ fn_write_char:
 ;;; malloc(size) -> ptr
 ;;;  Allocates memory. returns 0/NULL if allocation fails.
 fn_malloc:
+  sub rsp, 8
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call fn_assert_stack_aligned
+  %endif
+
   ;; mmap in a chunk of memory at requested size+8
   ;; The extra 8 bytes will be used to store the length of the allocation
   add rdi, 8        ; Make room for our metadata
@@ -110,19 +124,31 @@ fn_malloc:
 
   ;; Return a pointer to the block+8 so the user doesn't get our metadata
   add rax, 8
+
+  add rsp, 8
   ret
 
   malloc_failed:
     mov rax, 0
+
+    add rsp, 8
     ret
 
 ;;; free(ptr) -> int
 ;;;   Frees memory allocated with malloc. Returns 0 on success, -errno on error.
 fn_free:
+  sub rsp, 8
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call fn_assert_stack_aligned
+  %endif
+
   sub rdi, 8           ; Walk back to the start of the mmap region
   mov rsi, qword [rdi] ; Grab our length from our metadata prefix
   mov rax, sys_munmap
   syscall
+
+  add rsp, 8
   ret
 
 ;;; realloc(ptr, new_size) -> ptr
@@ -132,6 +158,12 @@ fn_free:
 ;;;
 ;;;   Returns 0 (NULL pointer) on failure.
 fn_realloc:
+  sub rsp, 8
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call fn_assert_stack_aligned
+  %endif
+
   ;; remap mmap region
   sub rdi, 8              ; Walk back to the start of the mmap region
   mov rdx, rsi            ; New length from function argument
@@ -150,16 +182,26 @@ fn_realloc:
 
   ;; Return mmaped region with metadata hidden
   add rax, 8
+
+  add rsp, 8
   ret
 
   realloc_failed:
     mov rax, 0
+
+    add rsp, 8
     ret
 
 ;;; digit_to_ascii(int) -> char
 ;;;   Converts any numeric value representing a digit (up to base 36) to ASCII
 ;;;   (0-9 A-Z)
 fn_digit_to_ascii:
+  sub rsp, 8
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call fn_assert_stack_aligned
+  %endif
+
   mov rax, rdi
   cmp rax, 9
   jle as_digit
@@ -167,10 +209,14 @@ fn_digit_to_ascii:
   as_letter:
     sub rax, 10
     add rax, 'A'
+
+    add rsp, 8
     ret
 
   as_digit:
     add rax, '0'
+
+    add rsp, 8
     ret
 
 ;;; write_as_base(int, base, fd)
@@ -182,6 +228,10 @@ fn_write_as_base:
   push r13 ; Preserve
   push r12 ; Preserve
   push rdi ; Preserve
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call fn_assert_stack_aligned
+  %endif
 
   mov r13, rdx ; Preserve output fd as we need rdx for other things
   mov r12, rsp ; Preserve stack ptr
@@ -216,4 +266,32 @@ fn_write_as_base:
   pop rdi ; Restore
   pop r12 ; Restore
   pop r13 ; Restore
+  ret
+
+;;; assert_stack_aligned()
+;;;   asserts that rsp is 16-byte aligned at the callsite.
+;;;
+;;;   If it's not, will print an error message and 'int 3' to trigger a
+;;;   break (or exit if no debugger is attached)
+fn_assert_stack_aligned:
+  sub rsp, 8 ; Make sure we're not un-aligning the stack ourselves.
+             ; 'call' pushes a pointer to the stack, so we only need
+             ; to sub 8 here.
+
+  ;; ((15 & rsp) == 0) -> stack aligned
+  mov rax, 15
+  and rax, rsp
+  cmp rax, 0
+  je aligned
+
+  ;; Not aligned
+  mov rdi, stack_unaligned_str
+  mov rsi, stack_unaligned_str_len
+  mov rdx, stderr_fd
+  call fn_print
+  int 3
+
+  aligned:
+
+  add rsp, 8
   ret

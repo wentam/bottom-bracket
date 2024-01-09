@@ -35,6 +35,7 @@ extern fn_realloc
 extern fn_free
 extern fn_write_as_base
 extern fn_read
+extern fn_assert_stack_aligned
 
 section .rodata
 
@@ -62,6 +63,10 @@ _start:
   ;;mov rsi, welcome_msg_len
   ;;mov rdx, stderr_fd
   ;;call fn_print
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call fn_assert_stack_aligned
+  %endif
 
   mov rdi, stdin_fd
   call fn_read

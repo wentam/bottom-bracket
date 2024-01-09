@@ -15,6 +15,7 @@ extern fn_malloc
 extern fn_free
 extern fn_realloc
 extern fn_error_exit
+extern fn_assert_stack_aligned
 
 section .rodata
 
@@ -53,7 +54,10 @@ section .text
 ;;;   Free with buffered_reader_free when done.
 fn_buffered_reader_new:
   push r12
-  sub rsp, 8
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call fn_assert_stack_aligned
+  %endif
 
   mov r12, rdi
 
@@ -76,13 +80,16 @@ fn_buffered_reader_new:
   mov qword [rax+BUFFERED_READER_READ_PTR_OFFSET], 0
   mov qword [rax+BUFFERED_READER_END_PTR_OFFSET], 0
 
-  add rsp, 8
   pop r12
   ret
 
 ;;; buffered_reader_free(*buffered_reader)
 ;;;   Frees a buffered reader.
 fn_buffered_reader_free:
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call fn_assert_stack_aligned
+  %endif
+
   call fn_free
   ret
 
@@ -91,8 +98,13 @@ fn_buffered_reader_free:
 fn_buffered_reader_read_byte:
   push r12
   push r13
+  sub rsp, 8
   mov r12, rdi                                   ; Struct pointer
   mov r13, qword [r12+BUFFERED_READER_FD_OFFSET] ; fd
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call fn_assert_stack_aligned
+  %endif
 
   ;; Decide if we need to refill the buffer
   mov rdi, qword [r12+BUFFERED_READER_READ_PTR_OFFSET]
@@ -125,12 +137,14 @@ fn_buffered_reader_read_byte:
   mov  al, byte [rsi]                                  ; Read at read pointer
   inc qword [r12+BUFFERED_READER_READ_PTR_OFFSET]      ; increment read pointer
 
+  add rsp, 8
   pop r13
   pop r12
   ret
 
   read_byte_eof:
   mov rax, BUFFERED_READER_EOF
+  add rsp, 8
   pop r13
   pop r12
   ret
@@ -139,8 +153,11 @@ fn_buffered_reader_read_byte:
 ;;;   Returns the next byte without consuming it.
 fn_buffered_reader_peek_byte:
   push r12
-  sub rsp, 8
   mov r12, rdi ; Preserve struct pointer
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call fn_assert_stack_aligned
+  %endif
 
   call fn_buffered_reader_read_byte
 
@@ -153,7 +170,6 @@ fn_buffered_reader_peek_byte:
 
   peek_byte_nodec:
 
-  add rsp, 8
   pop r12
   ret
 
@@ -164,8 +180,11 @@ fn_buffered_reader_peek_byte:
 ;;;   buffer.
 fn_buffered_reader_consume_leading_whitespace:
   push r12
-  sub rsp, 8
   mov r12, rdi ; Struct pointer
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call fn_assert_stack_aligned
+  %endif
 
   consume_loop:
   mov rdi, r12
@@ -177,7 +196,6 @@ fn_buffered_reader_consume_leading_whitespace:
   cmp rax, TAB
   je found_whitespace
 
-  add rsp, 8
   pop r12
   ret
 
