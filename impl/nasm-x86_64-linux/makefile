@@ -4,17 +4,17 @@ OBJS = $(SRCS:src/%.asm=build/%.o)
 
 .PHONY: release
 release: NASMFLAGS:= -Ox
-release: aarrp
+release: build/aarrp
 
 .PHONY: debug
 debug: NASMFLAGS := -DASSERT_STACK_ALIGNMENT -g
-debug: aarrp
+debug: build/aarrp
 
 build/%.o: src/%.asm
 	@mkdir -p build/
 	nasm ${NASMFLAGS} -f elf64 $< -o $@
 
-aarrp: ${OBJS}
+build/aarrp: ${OBJS}
 	ld -o build/aarrp $?
 
 .PHONY: clean
