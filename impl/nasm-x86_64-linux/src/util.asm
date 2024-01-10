@@ -35,6 +35,7 @@ global fn_free
 global fn_write_as_base
 global fn_digit_to_ascii
 global fn_assert_stack_aligned
+global fn_bindump
 
 ;;; TODO: if sys_write doesn't return our full length, call it again
 ;;        (it's not gauranteed to write the whole string in one go)
@@ -215,27 +216,34 @@ fn_digit_to_ascii:
     add rsp, 8
     ret
 
-;;; write_as_base(int, base, fd)
+;;; write_as_base(int64, base, fd, pad-to)
 ;;;   Writes a number to fd as a string in a specified base.
 ;;;   Works up to base 36 using 0-9 A-Z.
 ;;;
+;;;   Pad-to specifies the minimum number of digits. Will be padded
+;;;   by prefixing with zeros. 0 to disable padding.
+;;;
 ;;;   Doesn't clobber rdi (handy for debugging)
 fn_write_as_base:
-  push r13 ; Preserve
-  push r12 ; Preserve
-  push rdi ; Preserve
+  push r13
+  push r12
+  push rdi
+  push r14
+  sub rsp, 8
+
+  mov r13, rdx ; Preserve output fd as we need rdx for other things
+  mov r12, rsp ; Preserve stack ptr
+  mov r14, rcx
 
   %ifdef ASSERT_STACK_ALIGNMENT
   call fn_assert_stack_aligned
   %endif
 
-  mov r13, rdx ; Preserve output fd as we need rdx for other things
-  mov r12, rsp ; Preserve stack ptr
   mov rax, rdi ; Division happens via rax so move to there
   mov r9, 0    ; loop index
   not_0:
     mov rdx, 0   ; Needed for single-register divide below
-    div rsi      ; divide rdx:rax by rcx, rax: quotient, rdx: remainder
+    div rsi      ; divide rdx:rax by rsi, rax: quotient, rdx: remainder
 
     ;; Convert to ASCII
     push rax     ; Preserve
@@ -251,6 +259,19 @@ fn_write_as_base:
     cmp rax, 0
     jg not_0
 
+  sub r14, r9 ; pad-to - current length
+  pad:
+    cmp r14, 0
+    jle done_padding
+
+    dec rsp
+    mov byte[rsp], '0'
+    dec r14
+    inc r9
+    jmp pad
+
+  done_padding:
+
   ;; Print result
   mov rdi, rsp
   mov rsi, r9
@@ -259,9 +280,182 @@ fn_write_as_base:
 
   mov rsp, r12; Restore stack ptr
 
+  add rsp, 8
+  pop r14
   pop rdi ; Restore
   pop r12 ; Restore
   pop r13 ; Restore
+  ret
+
+;;; bindump(*data, len, fd, base)
+;;;   Arbitrary-base hexdump-like function.
+fn_bindump:
+  push rbp
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+  mov rbp, rsp
+  push rcx ; base. not enough registers, using stack.
+
+  mov r12, rdi ; data
+  mov r13, rsi ; len
+  mov r14, rdx ; fd
+
+  ;; Work out how much number padding we need without using 'log'
+  ;; (because we don't have a log function currently)
+  mov rax, 255
+  mov rbx, 0
+  mov rsi, qword[rbp-8] ; base
+  mov r9, 0
+  pad_calc_not_0:
+    mov rdx, 0
+    div rsi
+    inc r9
+    cmp rax, 0
+    jg pad_calc_not_0
+
+  push r9 ; padding needed
+
+  ;; Work out how much padding we need to represent 2^(4*8) addresses
+  mov rax, 4294967295
+  mov rbx, 0
+  mov rsi, qword[rbp-8] ; base
+  mov r9, 0
+  address_pad_calc_not_0:
+    mov rdx, 0
+    div rsi
+    inc r9
+    cmp rax, 0
+    jg address_pad_calc_not_0
+
+  push r9 ; address padding needed
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call fn_assert_stack_aligned
+  %endif
+
+  mov rbx, 0
+  row_loop:
+    cmp r13, 0
+    je row_loop_break
+
+    mov rdi, rbx
+    mov rsi, qword[rbp-8]
+    mov rdx, r14
+    mov rcx, qword[rbp-24]
+    call fn_write_as_base
+
+    mov rdi, ' '
+    mov rsi, r14
+    call fn_write_char
+
+    mov rdi, ' '
+    mov rsi, r14
+    call fn_write_char
+
+    push r13
+    push r12
+    mov r15, 16
+    byte_loop:
+      cmp r13, 0
+      je byte_loop_break
+      cmp r15, 0
+      je byte_loop_break
+
+      mov rdi, 0
+      mov dil, byte[r12]
+      mov rsi, qword[rbp-8]
+      mov rdx, r14
+      mov rcx, qword[rbp-16]
+      call fn_write_as_base
+
+      cmp r15, 9
+      jne no_extra_space
+
+      mov rdi, ' '
+      mov rsi, r14
+      call fn_write_char
+
+      no_extra_space:
+
+
+      mov rdi, ' '
+      mov rsi, r14
+      call fn_write_char
+
+      dec r13
+      dec r15
+      inc r12
+      jmp byte_loop
+    byte_loop_break:
+
+    pop r12
+    pop r13
+
+    mov rdi, ' '
+    mov rsi, r14
+    call fn_write_char
+
+    mov rdi, '|'
+    mov rsi, r14
+    call fn_write_char
+
+    mov r15, 16
+    char_loop:
+      cmp r13, 0
+      je char_loop_break
+      cmp r15, 0
+      je char_loop_break
+
+      mov rdi, 0
+      mov dil, byte[r12]
+      sub rdi, 32
+      cmp rdi, 94
+      jbe is_ascii
+
+      mov rdi, '.'
+      mov rsi, r14
+      call fn_write_char
+      jmp after_is_ascii
+
+      is_ascii:
+      mov rdi, 0
+      mov dil, byte[r12]
+      mov rsi, r14
+      call fn_write_char
+
+      after_is_ascii:
+
+      dec r13
+      dec r15
+      inc r12
+      jmp char_loop
+    char_loop_break:
+
+  add rbx, 16
+
+  mov rdi, '|'
+  mov rsi, r14
+  call fn_write_char
+
+  mov rdi, 10
+  mov rsi, r14
+  call fn_write_char
+
+  jmp row_loop
+  row_loop_break:
+
+  pop r9
+  pop r9
+  pop rcx
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  pop rbp
   ret
 
 ;;; assert_stack_aligned()

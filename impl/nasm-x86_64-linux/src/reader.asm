@@ -105,9 +105,9 @@ fn_read:
 
   ;; TODO tmp dump the output buffer
   ;; TODO probably provide a function we can call from top-level for this
-  mov rdi, r14
-  mov rsi, stdout_fd
-  call fn_byte_buffer_dump_buffer
+  ;;mov rdi, r14
+  ;;mov rsi, stdout_fd
+  ;;call fn_byte_buffer_dump_buffer
 
   pop r12 ; Restore
   pop r13 ; Restore
@@ -179,7 +179,7 @@ fn__read:
 ;;;   Reads an array from the buffered reader
 ;;;   Writes the array to the output buffer
 ;;;
-;;;   The first character in the buffer must be '(' TODO: assert?
+;;;   The first character in the buffer must be '('
 ;;;
 ;;;   Returns a pointer to the array.
 fn__read_array:
@@ -196,7 +196,7 @@ fn__read_array:
   mov r12, rdi ; Preserve buffered reader
   mov r14, rsi ; Preserve output buffer
 
-  ;; Consume the leading '(' TODO assert that it is actually (
+  ;; Consume the leading '(' TODO assert that it is actually '('
   mov rdi, r12
   call fn_buffered_reader_read_byte
 

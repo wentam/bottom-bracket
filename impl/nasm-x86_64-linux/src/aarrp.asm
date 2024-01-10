@@ -36,6 +36,7 @@ extern fn_free
 extern fn_write_as_base
 extern fn_read
 extern fn_assert_stack_aligned
+extern fn_bindump
 
 section .rodata
 
@@ -72,9 +73,21 @@ _start:
   call fn_assert_stack_aligned
   %endif
 
+  ;;mov rdi, 27
+  ;;mov rsi, 16
+  ;;mov rdx, stdout_fd
+  ;;mov rcx, 3
+  ;;call fn_write_as_base
+
   mov rdi, stdin_fd
   call fn_read
   mov r12, rax
+
+  mov rdi, r12
+  mov rsi, 256
+  mov rdx, stdout_fd
+  mov rcx, 2
+  call fn_bindump
 
   ;; Dump read result to STDOUT
   ;; TODO implement dump func for testing?
