@@ -39,6 +39,7 @@ extern fn_assert_stack_aligned
 extern fn_bindump
 extern fn_free_read_result
 extern fn_dump_read_result_buffer
+extern fn_dump_read_result
 
 section .rodata
 
@@ -48,6 +49,12 @@ stderr_fd: equ 2
 
 welcome_msg:      db  "Welcome!",10
 welcome_msg_len:  equ $ - welcome_msg
+
+buffer_msg: db 10,"Read result backing buffer",10,"--------",10
+buffer_msg_len: equ $ - buffer_msg
+
+result_msg: db 10,"Read result:",10,"--------",10
+result_msg_len: equ $ - result_msg
 
 section .text
 
@@ -85,10 +92,25 @@ _start:
   call fn_read
   mov r12, rax
 
+  mov rdi, buffer_msg
+  mov rsi, buffer_msg_len
+  mov rdx, stdout_fd
+  call fn_print
+
   mov rdi, r12
   mov rsi, stdout_fd
   mov rdx, 16
   call fn_dump_read_result_buffer
+
+  mov rdi, result_msg
+  mov rsi, result_msg_len
+  mov rdx, stdout_fd
+  call fn_print
+
+  mov rdi, r12
+  mov rsi, stdout_fd
+  mov rdx, 16
+  call fn_dump_read_result
 
   ;;mov rdi, r12
   ;;mov rsi, 128

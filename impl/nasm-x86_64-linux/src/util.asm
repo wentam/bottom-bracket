@@ -287,6 +287,7 @@ fn_write_as_base:
   pop r13 ; Restore
   ret
 
+;;; TODO: this really needs to be broken apart and documented better
 ;;; bindump(*data, len, fd, base)
 ;;;   Arbitrary-base hexdump-like function.
 fn_bindump:
@@ -359,10 +360,45 @@ fn_bindump:
     push r12
     mov r15, 16
     byte_loop:
-      cmp r13, 0
-      je byte_loop_break
       cmp r15, 0
       je byte_loop_break
+      cmp r13, 0
+      jne byte_loop_is_data
+
+      byte_loop_is_not_data:
+      mov rdi, qword[rbp-16]
+      fill_space_loop:
+        cmp rdi, 0
+        jle break_fill_space_loop
+        push rdi
+        sub rsp, 8
+        mov rdi, ' '
+        mov rsi, r14
+        call fn_write_char
+        add rsp, 8
+        pop rdi
+        dec rdi
+        jmp fill_space_loop
+
+      break_fill_space_loop:
+
+      mov rdi, ' '
+      mov rsi, r14
+      call fn_write_char
+
+      cmp r15, 9
+      jne _no_extra_space
+
+      mov rdi, ' '
+      mov rsi, r14
+      call fn_write_char
+
+      _no_extra_space:
+
+      dec r15
+      jmp byte_loop
+
+      byte_loop_is_data:
 
       mov rdi, 0
       mov dil, byte[r12]

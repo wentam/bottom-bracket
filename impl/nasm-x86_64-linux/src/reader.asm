@@ -2,6 +2,7 @@ section .text
 global fn_read
 global fn_free_read_result
 global fn_dump_read_result_buffer
+global fn_dump_read_result
 extern fn_read_char
 extern fn_malloc
 extern fn_realloc
@@ -138,9 +139,11 @@ fn_read:
 ;;; free_read_result(*read_result)
 ;;;   Frees all memory associated with a call to read().
 fn_free_read_result:
+  sub rsp, 8
   call fn__get_byte_buf_from_read_result
   mov rdi, rax
   call fn_byte_buffer_free
+  add rsp, 8
   ret
 
 ;;; _read(*buffered_reader, *output_buffer) -> ptr
@@ -421,6 +424,57 @@ fn_dump_read_result_buffer:
   pop r13
   pop r12
   ret
+
+;; dump_read_result(*reader_result, fd, base)
+;;   bindumps a read result
+fn_dump_read_result:
+  push r12
+  push r13
+  push r14
+  push r15
+  sub rsp, 8
+  mov r12, rdi ; reader result
+  mov r13, rsi ; fd
+  mov r14, rdx ; base
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call fn_assert_stack_aligned
+  %endif
+
+  ;; Work out how many bytes to dump
+  mov r15, 0 ; length in bytes
+  mov rax, qword[r12]
+  cmp rax, 0
+  jl _atom_buf
+
+  _array_buf:
+  add r15, 8 ; the length itself
+  imul rax, 8
+  add r15, rax
+  jmp _length_calculated
+
+  _atom_buf:
+  dec rax
+  not rax ; rax is now positive length
+  add r15, 8 ; the length itself
+  add r15, rax ; each char is one byte, so just add it
+  ;jmp _length_calculated
+
+  _length_calculated:
+
+  mov rdi, r12
+  mov rsi, r15
+  mov rdx, r13
+  mov rcx, r14
+  call fn_bindump
+
+  add rsp, 8
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  ret
+
 
 ;;; _get_byte_buf_from_read_result(*reader_result) -> *byte_buffer
 ;;;   Given a result turned by read(), returns a pointer to it's original
