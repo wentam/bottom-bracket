@@ -112,12 +112,6 @@ _start:
   mov rdx, 16
   call fn_dump_read_result
 
-  ;;mov rdi, r12
-  ;;mov rsi, 128
-  ;;mov rdx, stdout_fd
-  ;;mov rcx, 16
-  ;;call fn_bindump
-
   mov rdi, r12
   call fn_free_read_result
 
