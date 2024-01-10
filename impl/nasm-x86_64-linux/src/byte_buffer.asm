@@ -32,16 +32,15 @@ realloc_failed_error_str_len: equ $ - realloc_failed_error_str
 section .text
 
 ;;; struct byte_buffer {
-;;;   char* write_ptr;     // a pointer to the next place to write
 ;;;   int64_t data_length; // length of written data in the buffer
 ;;;   int64_t buf_length;  // length of the backing buffer
 ;;;   char* buf;           // pointer to variable-length backing buffer
 ;;; }
 
-%define BYTE_BUFFER_WRITE_PTR_OFFSET 0
-%define BYTE_BUFFER_DATA_LENGTH_OFFSET 8
-%define BYTE_BUFFER_BUF_LENGTH_OFFSET 16
-%define BYTE_BUFFER_BUF_OFFSET 24
+;;%define BYTE_BUFFER_WRITE_PTR_OFFSET 0
+%define BYTE_BUFFER_DATA_LENGTH_OFFSET 0
+%define BYTE_BUFFER_BUF_LENGTH_OFFSET 8
+%define BYTE_BUFFER_BUF_OFFSET 16
 
 %define BYTE_BUFFER_START_SIZE 16 ; Must be a power of 2
 
@@ -86,7 +85,6 @@ fn_byte_buffer_new:
   new_struct_good_malloc:
 
   ;; Initialize struct members
-  mov qword [rax+BYTE_BUFFER_WRITE_PTR_OFFSET], r12
   mov qword [rax+BYTE_BUFFER_DATA_LENGTH_OFFSET], 0
   mov qword [rax+BYTE_BUFFER_BUF_LENGTH_OFFSET], BYTE_BUFFER_START_SIZE
   mov qword [rax+BYTE_BUFFER_BUF_OFFSET], r12
@@ -116,7 +114,8 @@ fn_byte_buffer_free:
 ;;; byte_buffer_get_write_ptr(*byte_buffer)
 ;;;   Returns a byte buffer's write ptr
 fn_byte_buffer_get_write_ptr:
-  mov rax, qword[rdi+BYTE_BUFFER_WRITE_PTR_OFFSET]
+  mov rax, qword[rdi+BYTE_BUFFER_BUF_OFFSET]
+  add rax, qword[rdi+BYTE_BUFFER_DATA_LENGTH_OFFSET]
   ret
 
 ;;; byte_buffer_get_data_length(*byte_buffer)
@@ -139,10 +138,6 @@ fn_byte_buffer_get_buf:
 
 ;;; byte_buffer_write_byte(*byte_buffer, byte)
 ;;;   Writes a byte to the byte buffer
-;;;
-;;;   TODO realloc could invalidate our write pointer, we need to
-;;;   recreate it based in it's position in the previous - or just
-;;;   use data_len for everything
 fn_byte_buffer_write_byte:
   push r12
   push r13
@@ -155,10 +150,15 @@ fn_byte_buffer_write_byte:
   call fn_assert_stack_aligned
   %endif
 
+  ;; Work out pointer to the first unwritten byte in buffer
+  mov rsi, qword[r13+BYTE_BUFFER_BUF_OFFSET]
+  add rsi, qword[r13+BYTE_BUFFER_DATA_LENGTH_OFFSET]
+
   ;; Check if we need to expand the buffer
+
   mov rax, qword[r13+BYTE_BUFFER_BUF_OFFSET]        ; rax = ptr to byte buffer
   add rax, qword[r13+BYTE_BUFFER_BUF_LENGTH_OFFSET] ; rax += buf length
-  cmp rax, qword[r13+BYTE_BUFFER_WRITE_PTR_OFFSET]  ; cmp buf end to write ptr
+  cmp rax, rsi                                      ; cmp buf end to write ptr
   jne after_expand
 
   ;; Expand the buffer
@@ -182,10 +182,10 @@ fn_byte_buffer_write_byte:
 
   after_expand:
   ;; Write the new byte, increment written length
-  mov rax, qword[r13+BYTE_BUFFER_WRITE_PTR_OFFSET] ; grab write ptr
-  mov byte[rax], r12b                              ; write
-  inc qword[r13+BYTE_BUFFER_WRITE_PTR_OFFSET]      ; increment write pointer
-  inc qword[r13+BYTE_BUFFER_DATA_LENGTH_OFFSET]    ; increment data length
+  mov rax, qword[r13+BYTE_BUFFER_BUF_OFFSET]         ; backing buf
+  add rax, qword[r13+BYTE_BUFFER_DATA_LENGTH_OFFSET] ; + existing data
+  mov byte[rax], r12b                                ; write
+  inc qword[r13+BYTE_BUFFER_DATA_LENGTH_OFFSET]      ; increment data length
 
   add rsp, 8
   pop r13
@@ -217,8 +217,9 @@ fn_byte_buffer_write_int64:
   jne write_int64_space
 
   ;; Replace the zeros with our int64
-  mov rax, qword[r14+BYTE_BUFFER_WRITE_PTR_OFFSET] ; get write ptr
-  mov qword[rax-8], r13                            ; Write our int64
+  mov rax, qword[r14+BYTE_BUFFER_BUF_OFFSET]         ; backing buf
+  add rax, qword[r14+BYTE_BUFFER_DATA_LENGTH_OFFSET] ; + existing data
+  mov qword[rax-8], r13                              ; Write our int64
 
   pop r14
   pop r13

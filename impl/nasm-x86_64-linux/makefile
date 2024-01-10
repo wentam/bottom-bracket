@@ -15,7 +15,7 @@ build/%.o: src/%.asm
 	nasm ${NASMFLAGS} -f elf64 $< -o $@
 
 build/aarrp: ${OBJS}
-	ld -o build/aarrp $?
+	ld -o build/aarrp $^
 
 .PHONY: clean
 clean:

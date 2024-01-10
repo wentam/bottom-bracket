@@ -27,6 +27,8 @@ extern fn_byte_buffer_write_int64
 extern fn_byte_buffer_write_byte
 extern fn_byte_buffer_dump_buffer
 extern fn_byte_buffer_get_write_ptr
+extern fn_byte_buffer_get_data_length
+extern fn_byte_buffer_get_buf
 extern fn_byte_buffer_bindump_buffer
 
 section .rodata
@@ -57,22 +59,6 @@ unexpected_eof_atom_str: db "ERROR: Unexpected EOF while reading atom",10
 unexpected_eof_atom_str_len: equ $ - unexpected_eof_atom_str
 
 section .text
-
-;;; Structs:
-;;;
-;;; read_buffer {
-;;;   char* read_ptr;              // Pointer to next byte to read
-;;;   char* end_ptr;               // Pointer to end of valid data in buffer
-;;;                                // (points to the first invalid byte)
-;;;   char  buf[READ_BUFFER_SIZE]; // Buffer (flat in struct, not pointer)
-;;; }
-;;;
-;;; output_buffer {
-;;;   char*   write_ptr; // pointer to the next place to write
-;;;   int64_t buflen;    // current length of the buffer. Must be power of 2
-;;;   char buf[];        // Variable length, must be power of 2
-;;;                      // (flat in struct, not pointer)
-;;; }
 
 ;;; read(fd) -> ptr
 ;;;   Reads one expression from the file descriptor into internal representation
@@ -112,24 +98,46 @@ fn_read:
   ;; Append a pointer to the byte buffer struct at the end of the data.
   ;; This is needed to free the buffer later (and useful for any other function
   ;; that wants to go from read result back to byte buffer struct)
-  ;;
-  ;; TODO: unsafe. __read should return a relative pointer so we
-  ;; can write to the byte buffer without fear of realloc invalidating
-  ;; the pointer in rax. We then translate that relative pointer to
-  ;; an absolute pointer at return time.
   mov rdi, r14
-  mov rsi, r14
+  mov rsi, 0
   call fn_byte_buffer_write_int64
+
+  ;; TODO: lock writes in the byte buffer so nothing can invalidate any
+  ;; pointers from here forward?
+
+  ;; Overwrite the int64 we just wrote with the actual pointer
+  ;; now that it's done resizing (so we don't invalidate our own pointer by
+  ;; writing)
+  mov rdi, r14
+  call fn_byte_buffer_get_data_length
+  mov rdi, rax
+
+  push rdi
+  push rdi
+  mov rdi, r14
+  call fn_byte_buffer_get_buf
+  pop rdi
+  pop rdi
+  mov qword[rax+rdi-8], r14
 
   add rsp, 8
 
   pop rax
+  mov r12, rax
 
-  ;; TODO tmp dump the output buffer
-  ;; TODO probably provide a function we can call from top-level for this
-  ;;mov rdi, r14
-  ;;mov rsi, stdout_fd
-  ;;call fn_byte_buffer_dump_buffer
+  ;; r12 contains a relative pointer, we need to return absolute.
+  mov rdi, r14
+  call fn_byte_buffer_get_buf
+  add rax, r12
+
+  ;; Convert relative pointers to absolute
+  push rax
+  sub rsp, 8
+  mov rdi, rax
+  mov rsi, r14
+  call fn__relative_to_abs
+  add rsp, 8
+  pop rax
 
   pop r12 ; Restore
   pop r13 ; Restore
@@ -146,8 +154,69 @@ fn_free_read_result:
   add rsp, 8
   ret
 
+;;; _relative_to_abs(*read_result, *byte_buffer)
+;;;   Recursively modifies pointers in a read result that uses relative
+;;;   pointers (like from _read) to convert them to absolute.
+;;;
+;;;   We need this because if _read was to use absolute pointers, further
+;;;   writes would invalidate the pointers. _read produces relative pointers
+;;;   and we convert them to absolute right before we return to the user.
+fn__relative_to_abs:
+  push r12
+  push r13
+  push r14
+  push r15
+  sub rsp, 8
+
+  mov r12, rdi ; read result ptr
+  mov r13, rsi ; byte buffer
+
+  ;; Start of actual buffer -> r14
+  mov rdi, r13
+  call fn_byte_buffer_get_buf
+  mov r14, rax
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call fn_assert_stack_aligned
+  %endif
+
+  mov r15, qword[r12] ; Length of array/atom -> r15
+
+  ;; If this is an atom, do nothing
+  cmp r15, 0
+  jl _relative_to_abs_epilogue
+
+  ;; If this is an array, recursively convert
+  add r12, 8 ; move past array length
+
+  _relative_to_abs_convert_loop:
+    cmp r15, 0
+    je _relative_to_abs_convert_loop_break
+
+    add qword[r12], r14
+
+    mov rdi, qword[r12]
+    mov rsi, r13
+    call fn__relative_to_abs
+
+    add r12, 8
+    dec r15
+    jmp _relative_to_abs_convert_loop
+
+
+  _relative_to_abs_convert_loop_break:
+
+  _relative_to_abs_epilogue:
+  add rsp, 8
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  ret
+
 ;;; _read(*buffered_reader, *output_buffer) -> ptr
-;;;   Recursive implementation of read()
+;;;   Recursive implementation of read(). Return a pointer to the result
+;;;   *relative to the output buffer*
 fn__read:
   push r12
   push r13
@@ -257,7 +326,7 @@ fn__read_array:
   mov rsi, r14
   call fn__read
 
-  ;; Push a pointer to this child onto the stack
+  ;; Push a (relative) pointer to this child onto the stack
   sub rsp, 8
   push rax
 
@@ -297,9 +366,9 @@ fn__read_array:
 
   _output_array_break:
 
-  ;; Set rax to the start of the array
+  ;; Set rax to a relative pointer to the start of the array
   mov rdi, r14
-  call fn_byte_buffer_get_write_ptr
+  call fn_byte_buffer_get_data_length
   sub rax, rbx
 
   add rsp, 8
@@ -319,7 +388,7 @@ fn__read_atom:
   push r14
   push r15
   push rbx
-  sub rsp, 8
+  push r13
 
   %ifdef ASSERT_STACK_ALIGNMENT
   call fn_assert_stack_aligned
@@ -383,16 +452,25 @@ fn__read_atom:
 
   __read_atom_finish:
   ;; Update atom length placeholder
+
   mov rdi, r14
-  call fn_byte_buffer_get_write_ptr ; Get write pointer
+  call fn_byte_buffer_get_data_length ; Get data length
+  mov r12, rax
+
+  mov rdi, r14
+  call fn_byte_buffer_get_buf         ; Get data
+  mov r13, rax
+  add rax, r12                        ; Buffer pointer forward to write pos
+
   sub rax, rbx                      ; Subtract whatever we just wrote
   sub rax, 8                        ; Subtract our placeholder length
   not rbx                           ; Negate rbx as atoms should use -length
   inc rbx                           ; ^^^^^^^^
   mov qword[rax], rbx               ; Write our length
-  ; rax should now contain a pointer to the start of our data, return
 
-  add rsp, 8
+  sub rax, r13 ; We want to return a relative pointer
+
+  pop r13
   pop rbx
   pop r15
   pop r14
