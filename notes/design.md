@@ -4,7 +4,7 @@
 * symbol macros
 * sections?
 * array data type option 3: pointery. Probably doing it this way.
-* need a way to define helper functions available to macros at macroexpand time
+* need a way to define functions available to macros at macroexpand/compile time
 
 TODO: we've been assuming the array deliminators are '(' and ')'. Could we
 instead allow the user to choose what chars they want at compile time?

@@ -11,12 +11,17 @@ extern fn_error_exit
 extern BUFFERED_READER_EOF
 extern fn_assert_stack_aligned
 
-
 extern fn_buffered_reader_new
 extern fn_buffered_reader_free
 extern fn_buffered_reader_read_byte
 extern fn_buffered_reader_peek_byte
 extern fn_buffered_reader_consume_leading_whitespace
+
+extern fn_byte_buffer_new
+extern fn_byte_buffer_write_int64
+extern fn_byte_buffer_write_byte
+extern fn_byte_buffer_dump_buffer
+extern fn_byte_buffer_get_write_ptr
 
 section .rodata
 ;;; Syscall numbers
@@ -83,15 +88,9 @@ fn_read:
   call fn_buffered_reader_new
   mov r13, rax ; r13 = new buffered reader
 
-  ;; Allocate output buffer
-  mov rdi, (OUTPUT_BUFFER_START_SIZE + 16)
-  call fn_malloc
-  ;; TODO: check for malloc NULL, error
+  ;; Allocate output byte buffer
+  call fn_byte_buffer_new
   mov r14, rax
-  mov rdi, rax
-  add rdi, 16
-  mov qword [r14], rdi                        ; initialize write ptr
-  mov qword [r14+8], OUTPUT_BUFFER_START_SIZE ; initialize length
 
   ;; Call recursive implementation
   mov rdi, r13
@@ -104,24 +103,11 @@ fn_read:
   call fn_buffered_reader_free
   pop rax
 
-  ;; TODO TMP dump the output buffer
-  ;; TODO debug func that does this?
-  mov r13, qword[r14+8] ; Grab buffer len
-  add r14, 16           ; Bump buffer pointer to actual buffer
-  dump:
-    cmp r13, 0
-    je breakdump
-
-    mov dil, byte[r14]
-    mov rsi, stdout_fd
-    call fn_write_char
-
-    inc r14
-
-    dec r13
-    jmp dump
-
-  breakdump:
+  ;; TODO tmp dump the output buffer
+  ;; TODO probably provide a function we can call from top-level for this
+  mov rdi, r14
+  mov rsi, stdout_fd
+  call fn_byte_buffer_dump_buffer
 
   pop r12 ; Restore
   pop r13 ; Restore
@@ -257,9 +243,9 @@ fn__read_array:
   xor rbx, rbx
 
   ;; Write the array length
-  mov rdi, r15
-  mov rsi, r14
-  call fn_write_int64_to_output_buffer
+  mov rdi, r14
+  mov rsi, r15
+  call fn_byte_buffer_write_int64
 
   add rbx, 8 ; 8 bytes for array length
 
@@ -267,10 +253,10 @@ fn__read_array:
   _output_array:
   cmp r15, 0
   je _output_array_break
-  pop rdi
+  pop rsi
   add rsp, 8
-  mov rsi, r14
-  call fn_write_int64_to_output_buffer
+  mov rdi, r14
+  call fn_byte_buffer_write_int64
 
   add rbx, 8 ; 8 bytes for pointer
 
@@ -280,7 +266,8 @@ fn__read_array:
   _output_array_break:
 
   ;; Set rax to the start of the array
-  mov rax, qword[r14]
+  mov rdi, r14
+  call fn_byte_buffer_get_write_ptr
   sub rax, rbx
 
   add rsp, 8
@@ -323,9 +310,9 @@ fn__read_atom:
   __read_atom_no_eof:
 
   ;; Write length placeholder
-  mov rdi, 0
-  mov rsi, r14
-  call fn_write_int64_to_output_buffer
+  mov rdi, r14
+  mov rsi, 0
+  call fn_byte_buffer_write_int64
 
   ;; Read characters until the end of the atom
   mov rbx, 0 ;; char counter
@@ -353,9 +340,9 @@ fn__read_atom:
   mov r15, rax
 
   ;; Output this char to the buffer
-  mov rdi, r15
-  mov rsi, r14
-  call fn_write_to_output_buffer
+  mov rdi, r14
+  mov rsi, r15
+  call fn_byte_buffer_write_byte
 
   inc rbx
 
@@ -364,12 +351,13 @@ fn__read_atom:
 
   __read_atom_finish:
   ;; Update atom length placeholder
-  mov rax, qword[r14]   ; Get write pointer
-  sub rax, rbx          ; Subtract whatever we just wrote
-  sub rax, 8            ; Subtract our placeholder length
-  not rbx               ; Negate rbx as atoms should use -length
-  inc rbx               ; ^^^^^^^^
-  mov qword[rax], rbx ; Write our length
+  mov rdi, r14
+  call fn_byte_buffer_get_write_ptr ; Get write pointer
+  sub rax, rbx                      ; Subtract whatever we just wrote
+  sub rax, 8                        ; Subtract our placeholder length
+  not rbx                           ; Negate rbx as atoms should use -length
+  inc rbx                           ; ^^^^^^^^
+  mov qword[rax], rbx               ; Write our length
   ; rax should now contain a pointer to the start of our data, return
 
   add rsp, 8
@@ -377,77 +365,4 @@ fn__read_atom:
   pop r15
   pop r14
   pop r12
-  ret
-
-;;; write_int64_to_output_buffer(int64, *output_buffer)
-;;;   Writes an int64 to the output buffer
-fn_write_int64_to_output_buffer:
-  push r12
-  push r13
-  push r14
-  mov r13, rdi ; int64 to write
-  mov r14, rsi ; output buffer
-
-  %ifdef ASSERT_STACK_ALIGNMENT
-  call fn_assert_stack_aligned
-  %endif
-
-  ;; Make the space with zero bytes
-  mov r12, 8
-  __write_int64_space:
-  mov rdi, 0
-  mov rsi, r14
-  call fn_write_to_output_buffer
-  dec r12
-  cmp r12, 0
-  jne __write_int64_space
-
-  ;; Write to the space
-  mov rax, qword[r14] ; Get write pointer
-  mov qword[rax-8], r13
-
-  pop r14
-  pop r13
-  pop r12
-  ret
-
-;;; write_to_output_buffer(byte,*output_buffer)
-;;;   Writes a byte to the output buffer
-fn_write_to_output_buffer:
-  push r12     ; Preserve
-  push r13     ; Preserve
-  sub rsp, 8
-
-  mov r12, rdi ; Preserve rdi (byte)
-  mov r13, rsi ; Preserve rsi (output buffer)
-
-  %ifdef ASSERT_STACK_ALIGNMENT
-  call fn_assert_stack_aligned
-  %endif
-
-  ;; Check if we need to expand the buffer
-  mov rax, r13           ; rax  = start of struct
-  add rax, qword [r13+8] ; rax += length of buffer
-  add rax, 16            ; rax += struct overhead
-  cmp rax, qword [r13]   ; Compare end of struct to write pointer
-  jne after_expand       ; Skip expand if we haven't reached length
-
-  ;; Expand the buffer
-  mov rdi, r13           ; Output buffer struct
-  mov rsi, qword [r13+8] ; New size = length of old buffer (for now)
-  shl rsi, 1             ; * 2
-  mov qword[r13+8], rsi  ; Write the new size to struct
-  add rsi, 16            ; + struct overhead
-  call fn_realloc        ; Reallocate
-  ;; TODO: check for NULL and error if realloc fails
-
-  after_expand:
-  ;; Write the new byte
-  mov rax, qword[r13] ; Grab write pointer
-  mov qword[rax], r12 ; Write our byte at the write pointer
-  inc qword[r13]      ; Increment write pointer
-  
-  add rsp, 8
-  pop r13 ; Restore
-  pop r12 ; Restore
   ret

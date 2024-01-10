@@ -51,12 +51,16 @@ section .text
 ;; TODO: count allocations and warn if not everything has been freed at the end
 ;; TODO: utility to push all registers and utility to pop all registers,
 ;;       to make it easy to inject debugging functions in the middle of something
-;; TODO: we should probably split out the buffered char reader from the reader
 ;; TODO: we should probably split out the reader's output buffer to be a byte vector
 ;; TODO: make sure we're handling all errors that could occur from syscalls
 ;; TODO fn_write_as_base isn't keeping the stack 16-aligned while making function calls
 ;; TODO: rather than error outright, the reader should generate error codes for things like unexpected EOF for us to handle here
-;; TODO: figure out 16-alignment stack thing, we might not be following that rule
+;; TODO: free read result. Reader probably needs to return a pointer to the
+;; output buffer after the array/atom so it knows where to free it. Said pointer
+;; could also be helpful to implemented a 'dump buffer' function.
+;; TODO: rename reader/buffered_reader to something clearer. Just calling it
+;; reader confuses the AARRP expression reader with something like the buffered
+;; reader (a reader of bytes from an fd).
 _start:
   ;; Output welcome string to stderr
   ;;mov rdi, welcome_msg

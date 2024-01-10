@@ -198,10 +198,6 @@ fn_realloc:
 fn_digit_to_ascii:
   sub rsp, 8
 
-  %ifdef ASSERT_STACK_ALIGNMENT
-  call fn_assert_stack_aligned
-  %endif
-
   mov rax, rdi
   cmp rax, 9
   jle as_digit
