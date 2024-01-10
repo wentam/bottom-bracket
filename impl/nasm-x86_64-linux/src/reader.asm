@@ -158,7 +158,7 @@ fn_free_read_result:
 ;;;   Recursively modifies pointers in a read result that uses relative
 ;;;   pointers (like from _read) to convert them to absolute.
 ;;;
-;;;   We need this because if _read was to use absolute pointers, further
+;;;   We need this because if _read was to use absolute pointers further
 ;;;   writes would invalidate the pointers. _read produces relative pointers
 ;;;   and we convert them to absolute right before we return to the user.
 fn__relative_to_abs:
@@ -215,8 +215,8 @@ fn__relative_to_abs:
   ret
 
 ;;; _read(*buffered_reader, *output_buffer) -> ptr
-;;;   Recursive implementation of read(). Return a pointer to the result
-;;;   *relative to the output buffer*
+;;;   Recursive implementation of read(). Return a *buffer-relative* pointer to
+;;;   the result.
 fn__read:
   push r12
   push r13
@@ -282,7 +282,7 @@ fn__read:
 ;;;
 ;;;   The first character in the buffer must be '('
 ;;;
-;;;   Returns a pointer to the array.
+;;;   Returns a buffer-relative pointer to the array.
 fn__read_array:
   push r12
   push r14
@@ -382,7 +382,7 @@ fn__read_array:
 ;;;   Reads an atom from the buffered reader.
 ;;;   Writes the atom to the output buffer.
 ;;;
-;;;   Returns a pointer to the atom.
+;;;   Returns a buffer-relative pointer to the atom.
 fn__read_atom:
   push r12
   push r14
