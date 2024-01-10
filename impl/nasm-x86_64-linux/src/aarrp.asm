@@ -40,6 +40,7 @@ extern fn_bindump
 extern fn_free_read_result
 extern fn_dump_read_result_buffer
 extern fn_dump_read_result
+extern fn_aprint
 
 section .rodata
 
@@ -53,8 +54,11 @@ welcome_msg_len:  equ $ - welcome_msg
 buffer_msg: db 10,"Read result backing buffer",10,"--------",10
 buffer_msg_len: equ $ - buffer_msg
 
-result_msg: db 10,"Read result:",10,"--------",10
+result_msg: db 10,"Read result",10,"--------",10
 result_msg_len: equ $ - result_msg
+
+print_msg: db 10,"Fed back into aarrp printer",10,"--------",10
+print_msg_len: equ $ - print_msg
 
 section .text
 
@@ -110,13 +114,22 @@ _start:
   mov rdx, 16
   call fn_dump_read_result
 
+  mov rdi, print_msg
+  mov rsi, print_msg_len
+  mov rdx, stdout_fd
+  call fn_print
+
+  mov rdi, r12
+  mov rsi, stdout_fd
+  call fn_aprint
+
   mov rdi, r12
   call fn_free_read_result
 
   ;; Newline
-  ;;mov rdi, 10
-  ;;mov rsi, stdout_fd
-  ;;call fn_write_char
+  mov rdi, 10
+  mov rsi, stdout_fd
+  call fn_write_char
 
   mov rdi, 0
   call fn_exit

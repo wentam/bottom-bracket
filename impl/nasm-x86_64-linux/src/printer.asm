@@ -1,0 +1,84 @@
+section .text
+global fn_aprint ; TODO conflict with fn_print in util.asm
+extern fn_assert_stack_aligned
+extern fn_write_char
+
+section .rodata
+
+section .text
+
+;; aprint(*aarrp_expression, fd)
+fn_aprint:
+  push r12
+  push r13
+  push r15
+  mov r12, rdi ; aarrp expression data
+  mov r13, rsi ; fd
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call fn_assert_stack_aligned
+  %endif
+
+  mov r15, qword[r12] ; r15 = length of array/atom
+
+  cmp r15, 0
+  jl aprint_atom
+
+  add r12, 8 ; Move past array length
+
+  mov rdi, '('
+  mov rsi, r13
+  call fn_write_char
+
+  aprint_array_loop:
+    cmp r15, 0
+    je aprint_array_done
+
+    mov rdi, qword[r12]
+    mov rsi, r13
+    call fn_aprint
+
+    cmp r15, 1
+    je nospace
+
+    mov rdi, ' '
+    mov rsi, r13
+    call fn_write_char
+
+    nospace:
+
+    add r12, 8
+    dec r15
+    jmp aprint_array_loop
+
+  aprint_array_done:
+
+  mov rdi, ')'
+  mov rsi, r13
+  call fn_write_char
+  jmp aprint_epilogue
+
+  aprint_atom:
+  dec r15 ; vvv
+  not r15 ; make r15 positive
+
+  add r12, 8 ; Move past length
+
+  aprint_atom_loop:
+    cmp r15, 0
+    je aprint_epilogue
+
+    xor rdi, rdi
+    mov dil, byte[r12]
+    mov rsi, r13
+    call fn_write_char
+
+    inc r12
+    dec r15
+    jmp aprint_atom_loop
+
+  aprint_epilogue:
+  pop r15
+  pop r13
+  pop r12
+  ret
