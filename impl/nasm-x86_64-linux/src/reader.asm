@@ -155,7 +155,7 @@ fn_free_read_result:
   ret
 
 ;;; _relative_to_abs(*read_result, *byte_buffer)
-;;;   Recursively modifies pointers in a read result that uses relative
+;;;   Recursively modifies pointers in a read result that uses buffer-relative
 ;;;   pointers (like from _read) to convert them to absolute.
 ;;;
 ;;;   We need this because if _read was to use absolute pointers further

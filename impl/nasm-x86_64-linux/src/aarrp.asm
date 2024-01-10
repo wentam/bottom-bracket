@@ -68,9 +68,6 @@ section .text
 ;; TODO: rename reader/buffered_reader to something clearer. Just calling it
 ;; reader confuses the AARRP expression reader with something like the buffered
 ;; reader (a reader of bytes from an fd).
-;; TODO: factor out write ptr from byte buffer to fix memory management issues.
-;; TODO: the reader needs to have __read use relative pointers to avoid
-;; pointer corruption -- see comments in reader.asm
 ;; TODO: should byte buffer 'writes' be called 'pushes?'
 _start:
   ;; Output welcome string to stderr
