@@ -11,7 +11,7 @@ global fn_byte_buffer_get_buf
 global fn_byte_buffer_write_byte
 global fn_byte_buffer_write_int64
 global fn_byte_buffer_dump_buffer
-global fn_byte_buffer_hexdump_buffer ; TODO
+global fn_byte_buffer_bindump_buffer
 
 extern fn_malloc
 extern fn_realloc
@@ -19,6 +19,7 @@ extern fn_free
 extern fn_write_char
 extern fn_error_exit
 extern fn_assert_stack_aligned
+extern fn_bindump
 
 section .rodata
 
@@ -138,6 +139,10 @@ fn_byte_buffer_get_buf:
 
 ;;; byte_buffer_write_byte(*byte_buffer, byte)
 ;;;   Writes a byte to the byte buffer
+;;;
+;;;   TODO realloc could invalidate our write pointer, we need to
+;;;   recreate it based in it's position in the previous - or just
+;;;   use data_len for everything
 fn_byte_buffer_write_byte:
   push r12
   push r13
@@ -258,3 +263,22 @@ fn_byte_buffer_dump_buffer:
   pop r13
   pop r12
   ret
+
+;; byte_buffer_bindump_buffer(*byte_buffer, fd, base)
+;;   bindumps a byte buffer's backing buffer to fd with base.
+fn_byte_buffer_bindump_buffer:
+  push r12
+  mov r12, rdi
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call fn_assert_stack_aligned
+  %endif
+
+  mov rcx, rdx
+  mov rdx, rsi ; fd
+  mov rdi, qword[r12+BYTE_BUFFER_BUF_OFFSET] ; buffer
+  mov rsi, qword[r12+BYTE_BUFFER_DATA_LENGTH_OFFSET] ; length
+  call fn_bindump
+  pop r12
+  ret
+

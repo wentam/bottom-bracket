@@ -86,11 +86,13 @@ fn_buffered_reader_new:
 ;;; buffered_reader_free(*buffered_reader)
 ;;;   Frees a buffered reader.
 fn_buffered_reader_free:
+  sub rsp, 8
   %ifdef ASSERT_STACK_ALIGNMENT
   call fn_assert_stack_aligned
   %endif
 
   call fn_free
+  add rsp, 8
   ret
 
 ;;; buffered_reader_read_byte(*buffered_reader)

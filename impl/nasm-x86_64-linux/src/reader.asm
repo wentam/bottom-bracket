@@ -1,5 +1,7 @@
 section .text
 global fn_read
+global fn_free_read_result
+global fn_dump_read_result_buffer
 extern fn_read_char
 extern fn_malloc
 extern fn_realloc
@@ -10,6 +12,7 @@ extern fn_exit
 extern fn_error_exit
 extern BUFFERED_READER_EOF
 extern fn_assert_stack_aligned
+extern fn_bindump
 
 extern fn_buffered_reader_new
 extern fn_buffered_reader_free
@@ -18,10 +21,12 @@ extern fn_buffered_reader_peek_byte
 extern fn_buffered_reader_consume_leading_whitespace
 
 extern fn_byte_buffer_new
+extern fn_byte_buffer_free
 extern fn_byte_buffer_write_int64
 extern fn_byte_buffer_write_byte
 extern fn_byte_buffer_dump_buffer
 extern fn_byte_buffer_get_write_ptr
+extern fn_byte_buffer_bindump_buffer
 
 section .rodata
 ;;; Syscall numbers
@@ -71,7 +76,7 @@ section .text
 ;;; read(fd) -> ptr
 ;;;   Reads one expression from the file descriptor into internal representation
 ;;;
-;;;   Caller owns the memory and must free it when done. TODO: provide function for this
+;;;   You must free the result with free_read_result when done.
 fn_read:
   push r14 ; Preserve
   push r13 ; Preserve
@@ -96,11 +101,27 @@ fn_read:
   mov rdi, r13
   mov rsi, r14
   call fn__read
+  push rax
+  sub rsp, 8
 
   ;; Free buffered reader
-  push rax
   mov rdi, r13
   call fn_buffered_reader_free
+
+  ;; Append a pointer to the byte buffer struct at the end of the data.
+  ;; This is needed to free the buffer later (and useful for any other function
+  ;; that wants to go from read result back to byte buffer struct)
+  ;;
+  ;; TODO: unsafe. __read should return a relative pointer so we
+  ;; can write to the byte buffer without fear of realloc invalidating
+  ;; the pointer in rax. We then translate that relative pointer to
+  ;; an absolute pointer at return time.
+  mov rdi, r14
+  mov rsi, r14
+  call fn_byte_buffer_write_int64
+
+  add rsp, 8
+
   pop rax
 
   ;; TODO tmp dump the output buffer
@@ -112,6 +133,14 @@ fn_read:
   pop r12 ; Restore
   pop r13 ; Restore
   pop r14 ; Restore
+  ret
+
+;;; free_read_result(*read_result)
+;;;   Frees all memory associated with a call to read().
+fn_free_read_result:
+  call fn__get_byte_buf_from_read_result
+  mov rdi, rax
+  call fn_byte_buffer_free
   ret
 
 ;;; _read(*buffered_reader, *output_buffer) -> ptr
@@ -364,5 +393,63 @@ fn__read_atom:
   pop rbx
   pop r15
   pop r14
+  pop r12
+  ret
+
+;;; dump_read_result_buffer(*reader_result, fd, base)
+;;;   bindumps a read result's backing buffer to fd with base.
+fn_dump_read_result_buffer:
+  push r12
+  push r13
+  sub rsp, 8
+
+  mov r12, rsi ; fd
+  mov r13, rdx ; base
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call fn_assert_stack_aligned
+  %endif
+
+  ;mov rdi, rdi
+  call fn__get_byte_buf_from_read_result
+  mov rdi, rax
+  mov rsi, r12
+  mov rdx, r13
+  call fn_byte_buffer_bindump_buffer
+
+  add rsp, 8
+  pop r13
+  pop r12
+  ret
+
+;;; _get_byte_buf_from_read_result(*reader_result) -> *byte_buffer
+;;;   Given a result turned by read(), returns a pointer to it's original
+;;;   backing buffer.
+fn__get_byte_buf_from_read_result:
+  push r12
+  mov r12, rdi ; reader result
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call fn_assert_stack_aligned
+  %endif
+
+  mov rax, qword[r12]
+  cmp rax, 0
+  jl atom_buf
+
+  array_buf:
+  add r12, 8 ; move past the length
+  imul rax, 8
+  mov rax, qword[r12+rax]
+  jmp get_byte_buf_epilogue
+
+  atom_buf:
+  dec rax
+  not rax ; rax is now positive length
+  add r12, 8   ; move past the length
+  mov rax, qword[r12+rax]
+  ;jmp get_byte_buf_epilogue
+
+  get_byte_buf_epilogue:
   pop r12
   ret

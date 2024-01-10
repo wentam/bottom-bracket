@@ -37,6 +37,8 @@ extern fn_write_as_base
 extern fn_read
 extern fn_assert_stack_aligned
 extern fn_bindump
+extern fn_free_read_result
+extern fn_dump_read_result_buffer
 
 section .rodata
 
@@ -56,12 +58,12 @@ section .text
 ;; TODO: make sure we're handling all errors that could occur from syscalls
 ;; TODO fn_write_as_base isn't keeping the stack 16-aligned while making function calls
 ;; TODO: rather than error outright, the reader should generate error codes for things like unexpected EOF for us to handle here
-;; TODO: free read result. Reader probably needs to return a pointer to the
-;; output buffer after the array/atom so it knows where to free it. Said pointer
-;; could also be helpful to implemented a 'dump buffer' function.
 ;; TODO: rename reader/buffered_reader to something clearer. Just calling it
 ;; reader confuses the AARRP expression reader with something like the buffered
 ;; reader (a reader of bytes from an fd).
+;; TODO: factor out write ptr from byte buffer to fix memory management issues.
+;; TODO: the reader needs to have __read use relative pointers to avoid
+;; pointer corruption -- see comments in reader.asm
 _start:
   ;; Output welcome string to stderr
   ;;mov rdi, welcome_msg
@@ -84,32 +86,18 @@ _start:
   mov r12, rax
 
   mov rdi, r12
-  mov rsi, 256
-  mov rdx, stdout_fd
-  mov rcx, 2
-  call fn_bindump
+  mov rsi, stdout_fd
+  mov rdx, 16
+  call fn_dump_read_result_buffer
 
-  ;; Dump read result to STDOUT
-  ;; TODO implement dump func for testing?
-  mov r14, 256
+  ;;mov rdi, r12
+  ;;mov rsi, 128
+  ;;mov rdx, stdout_fd
+  ;;mov rcx, 16
+  ;;call fn_bindump
 
-  mov r13, r12
-  dump:
-  cmp r14, 0
-  je break
-  ;; Dump the byte
-  ;;mov dil, byte [r13]
-  ;;mov rsi, stdout_fd
-  ;;call fn_write_char
-
-  inc r13
-  dec r14
-  jmp dump
-  break:
-
-  ;; TODO: free the read result. We'll need to implement a function
-  ;; in the reader for this as our return result is not the start of
-  ;; the struct
+  mov rdi, r12
+  call fn_free_read_result
 
   ;; Newline
   ;;mov rdi, 10
