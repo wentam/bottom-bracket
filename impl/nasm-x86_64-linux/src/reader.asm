@@ -14,6 +14,7 @@ extern fn_error_exit
 extern BUFFERED_READER_EOF
 extern fn_assert_stack_aligned
 extern fn_bindump
+extern fn_write_as_base
 
 extern fn_buffered_reader_new
 extern fn_buffered_reader_free
@@ -288,7 +289,8 @@ fn__read_array:
   push r14
   push r15
   push rbx
-  sub rsp, 8
+  push rbp
+  mov rbp, rsp
 
   %ifdef ASSERT_STACK_ALIGNMENT
   call fn_assert_stack_aligned
@@ -351,11 +353,20 @@ fn__read_array:
   add rbx, 8 ; 8 bytes for array length
 
   ;; Output array pointers
+
   _output_array:
   cmp r15, 0
   je _output_array_break
-  pop rsi
-  add rsp, 8
+
+  mov rdi, r15
+  imul rdi, 16
+  sub rdi, 16
+
+  mov rcx, rsp
+  add rcx, rdi
+
+  mov rsi, qword[rcx]
+
   mov rdi, r14
   call fn_byte_buffer_write_int64
 
@@ -366,12 +377,14 @@ fn__read_array:
 
   _output_array_break:
 
+  mov rsp, rbp
+
   ;; Set rax to a relative pointer to the start of the array
   mov rdi, r14
   call fn_byte_buffer_get_data_length
   sub rax, rbx
 
-  add rsp, 8
+  pop rbp
   pop rbx
   pop r15
   pop r14
