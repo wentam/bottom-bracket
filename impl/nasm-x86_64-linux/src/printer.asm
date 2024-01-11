@@ -2,6 +2,7 @@ section .text
 global fn_aprint ; TODO conflict with fn_print in util.asm
 extern fn_assert_stack_aligned
 extern fn_write_char
+extern fn_print
 
 section .rodata
 
@@ -64,18 +65,10 @@ fn_aprint:
 
   add r12, 8 ; Move past length
 
-  aprint_atom_loop:
-    cmp r15, 0
-    je aprint_epilogue
-
-    xor rdi, rdi
-    mov dil, byte[r12]
-    mov rsi, r13
-    call fn_write_char
-
-    inc r12
-    dec r15
-    jmp aprint_atom_loop
+  mov rdi, r12
+  mov rsi, r15
+  mov rdx, r13
+  call fn_print
 
   aprint_epilogue:
   pop r15
