@@ -24,7 +24,7 @@ stderr_fd: equ 2
 %define MREMAP_MAYMOVE 0x1
 
 section .text
-global fn_print
+global fn_write
 global fn_error_exit
 global fn_exit
 global fn_read_char
@@ -44,7 +44,7 @@ extern fn_byte_buffer_write_contents
 
 ;;; print(*string, len, fd)
 ;;;   Writes the string of bytes to fd. Returns 0 on error.
-fn_print:
+fn_write:
   push r12
   push r13
   push r14
@@ -52,7 +52,7 @@ fn_print:
   mov r12, rsi ; string length
   mov r14, rdx ; fd
 
-  fn_print_again:
+  fn_write_again:
   mov rdx, r12       ; String length
   mov rsi, r13       ; String
   mov rdi, r14       ; Output fd
@@ -60,22 +60,22 @@ fn_print:
   syscall
 
   cmp rax, 0
-  jl fn_print_err
+  jl fn_write_err
 
   sub r12, rax
   add r13, rax
   cmp r12, 0
-  jg fn_print_again
+  jg fn_write_again
 
-  fn_print_epilogue:
+  fn_write_epilogue:
   pop r14
   pop r13
   pop r12
   ret
 
-  fn_print_err:
+  fn_write_err:
   mov rax, 0
-  jmp fn_print_epilogue
+  jmp fn_write_epilogue
 
 ;;; error_exit(*string, len)
 ;;;   prints an error to stderr and exits
@@ -83,7 +83,7 @@ fn_error_exit:
   ;mov rdi, rdi
   ;mov rsi, rsi
   mov rdx, stderr_fd
-  call fn_print
+  call fn_write
 
   mov rdi, 1
   call fn_exit
@@ -119,7 +119,7 @@ fn_write_char:
   mov rdi, rsp
   mov rdx, rsi
   mov rsi, 1
-  call fn_print
+  call fn_write
   pop rdi
   ret
 
@@ -305,7 +305,7 @@ fn_write_as_base:
   mov rdi, rsp
   mov rsi, r9
   mov rdx, r13
-  call fn_print
+  call fn_write
 
   mov rsp, r12; Restore stack ptr
 
@@ -645,7 +645,7 @@ fn_assert_stack_aligned:
   mov rdi, stack_unaligned_str
   mov rsi, stack_unaligned_str_len
   mov rdx, stderr_fd
-  call fn_print
+  call fn_write
   int 3
 
   aligned:

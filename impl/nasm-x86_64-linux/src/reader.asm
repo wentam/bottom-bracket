@@ -8,7 +8,7 @@ extern fn_malloc
 extern fn_realloc
 extern fn_free
 extern fn_write_char
-extern fn_print
+extern fn_write
 extern fn_exit
 extern fn_error_exit
 extern BUFFERED_READER_EOF

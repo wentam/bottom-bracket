@@ -1,8 +1,8 @@
 section .text
-global fn_aprint ; TODO conflict with fn_print in util.asm
+global fn_aprint
 extern fn_assert_stack_aligned
 extern fn_write_char
-extern fn_print
+extern fn_write
 
 section .rodata
 
@@ -68,7 +68,7 @@ fn_aprint:
   mov rdi, r12
   mov rsi, r15
   mov rdx, r13
-  call fn_print
+  call fn_write
 
   aprint_epilogue:
   pop r15

@@ -26,7 +26,7 @@
 
 section .text
 global _start
-extern fn_print
+extern fn_write
 extern fn_exit
 extern fn_write_char
 extern fn_read_char
@@ -71,13 +71,12 @@ section .text
 ;; TODO: rename reader/buffered_reader to something clearer. Just calling it
 ;; reader confuses the AARRP expression reader with something like the buffered
 ;; reader (a reader of bytes from an fd).
-;; TODO: should byte buffer 'writes' be called 'pushes?'
 _start:
   ;; Output welcome string to stderr
   ;;mov rdi, welcome_msg
   ;;mov rsi, welcome_msg_len
   ;;mov rdx, stderr_fd
-  ;;call fn_print
+  ;;call fn_write
 
   %ifdef ASSERT_STACK_ALIGNMENT
   call fn_assert_stack_aligned
@@ -90,7 +89,7 @@ _start:
   mov rdi, buffer_msg
   mov rsi, buffer_msg_len
   mov rdx, stdout_fd
-  call fn_print
+  call fn_write
 
   mov rdi, r12
   mov rsi, stdout_fd
@@ -100,7 +99,7 @@ _start:
   mov rdi, result_msg
   mov rsi, result_msg_len
   mov rdx, stdout_fd
-  call fn_print
+  call fn_write
 
   mov rdi, r12
   mov rsi, stdout_fd
@@ -110,7 +109,7 @@ _start:
   mov rdi, print_msg
   mov rsi, print_msg_len
   mov rdx, stdout_fd
-  call fn_print
+  call fn_write
 
   mov rdi, r12
   mov rsi, stdout_fd

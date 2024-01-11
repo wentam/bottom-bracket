@@ -21,7 +21,7 @@ extern fn_write_char
 extern fn_error_exit
 extern fn_assert_stack_aligned
 extern fn_bindump
-extern fn_print
+extern fn_write
 
 section .rodata
 
@@ -151,7 +151,7 @@ fn_byte_buffer_write_contents:
   mov rdi, qword[r13+BYTE_BUFFER_BUF_OFFSET]
   mov rsi, qword[r13+BYTE_BUFFER_DATA_LENGTH_OFFSET]
   mov rdx, r12
-  call fn_print
+  call fn_write
 
   add rsp, 8
   pop r13
