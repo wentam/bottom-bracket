@@ -37,6 +37,11 @@ global fn_digit_to_ascii
 global fn_assert_stack_aligned
 global fn_bindump
 
+extern fn_byte_buffer_new
+extern fn_byte_buffer_free
+extern fn_byte_buffer_write_byte
+extern fn_byte_buffer_write_contents
+
 ;;; print(*string, len, fd)
 ;;;   Writes the string of bytes to fd. Returns 0 on error.
 fn_print:
@@ -311,6 +316,89 @@ fn_write_as_base:
   pop r13 ; Restore
   ret
 
+;;; TODO remove code duplication with the above
+;;; write_as_base_bb(int64, base, *byte_buffer, pad-to)
+;;;   Writes a number to byte buffer as a string in a specified base.
+;;;   Works up to base 36 using 0-9 A-Z.
+;;;
+;;;   Pad-to specifies the minimum number of digits. Will be padded
+;;;   by prefixing with zeros. 0 to disable padding.
+;;;
+;;;   Doesn't clobber rdi (handy for debugging)
+fn_write_as_base_bb:
+  push r13
+  push r12
+  push rdi
+  push r14
+  sub rsp, 8
+
+  mov r13, rdx ; Byte buffer
+  mov r12, rsp ; Preserve stack ptr
+  mov r14, rcx
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call fn_assert_stack_aligned
+  %endif
+
+  mov rax, rdi ; Division happens via rax so move to there
+  mov r9, 0    ; loop index
+  bb_not_0:
+    mov rdx, 0   ; Needed for single-register divide below
+    div rsi      ; divide rdx:rax by rsi, rax: quotient, rdx: remainder
+
+    ;; Convert to ASCII
+    push rax     ; Preserve
+    mov rdi, rdx ; Set our number as first arg to function call
+    call fn_digit_to_ascii
+    mov rdx, rax ; Assign return value as our number
+    pop rax      ; Restore
+
+    push rdx
+    sub rsp, 8
+
+    inc r9 ; increment loop index
+    cmp rax, 0
+    jg bb_not_0
+
+  sub r14, r9 ; pad-to - current length
+  bb_pad:
+    cmp r14, 0
+    jle bb_done_padding
+
+    push '0'
+    sub rsp, 8
+
+    dec r14
+    inc r9
+    jmp bb_pad
+
+  bb_done_padding:
+
+  write_to_bb_loop:
+  cmp r9, 0
+  je write_to_bb_loop_break
+
+  add rsp, 8
+  pop rcx
+
+  mov rdi, r13
+  mov rsi, rcx
+  call fn_byte_buffer_write_byte
+
+  dec r9
+  jmp write_to_bb_loop
+
+  write_to_bb_loop_break:
+
+  mov rsp, r12; Restore stack ptr
+
+  add rsp, 8
+  pop r14
+  pop rdi ; Restore
+  pop r12 ; Restore
+  pop r13 ; Restore
+  ret
+
 ;;; TODO: this really needs to be broken apart and documented better
 ;;; bindump(*data, len, fd, base)
 ;;;   Arbitrary-base hexdump-like function.
@@ -323,10 +411,14 @@ fn_bindump:
   push rbx
   mov rbp, rsp
   push rcx ; base. not enough registers, using stack.
+  push rdx
+  sub rsp, 8
 
   mov r12, rdi ; data
   mov r13, rsi ; len
-  mov r14, rdx ; fd
+
+  call fn_byte_buffer_new
+  mov r14, rax ; byte buffer
 
   ;; Work out how much number padding we need without using 'log'
   ;; (because we don't have a log function currently)
@@ -367,18 +459,18 @@ fn_bindump:
     je row_loop_break
 
     mov rdi, rbx
-    mov rsi, qword[rbp-8]
-    mov rdx, r14
-    mov rcx, qword[rbp-24]
-    call fn_write_as_base
+    mov rsi, qword[rbp-8]  ; base
+    mov rdx, r14           ; byte buffer
+    mov rcx, qword[rbp-40] ; padding
+    call fn_write_as_base_bb
 
-    mov rdi, ' '
-    mov rsi, r14
-    call fn_write_char
+    mov rdi, r14 ; byte buffer
+    mov rsi, ' '
+    call fn_byte_buffer_write_byte
 
-    mov rdi, ' '
-    mov rsi, r14
-    call fn_write_char
+    mov rdi, r14 ; byte buffer
+    mov rsi, ' '
+    call fn_byte_buffer_write_byte
 
     push r13
     push r12
@@ -390,15 +482,17 @@ fn_bindump:
       jne byte_loop_is_data
 
       byte_loop_is_not_data:
-      mov rdi, qword[rbp-16]
+      mov rdi, qword[rbp-32]
       fill_space_loop:
         cmp rdi, 0
         jle break_fill_space_loop
         push rdi
         sub rsp, 8
-        mov rdi, ' '
-        mov rsi, r14
-        call fn_write_char
+
+        mov rdi, r14 ; byte buffer
+        mov rsi, ' '
+        call fn_byte_buffer_write_byte
+
         add rsp, 8
         pop rdi
         dec rdi
@@ -406,16 +500,16 @@ fn_bindump:
 
       break_fill_space_loop:
 
-      mov rdi, ' '
-      mov rsi, r14
-      call fn_write_char
+      mov rdi, r14 ; byte buffer
+      mov rsi, ' '
+      call fn_byte_buffer_write_byte
 
       cmp r15, 9
       jne _no_extra_space
 
-      mov rdi, ' '
-      mov rsi, r14
-      call fn_write_char
+      mov rdi, r14 ; byte buffer
+      mov rsi, ' '
+      call fn_byte_buffer_write_byte
 
       _no_extra_space:
 
@@ -428,22 +522,21 @@ fn_bindump:
       mov dil, byte[r12]
       mov rsi, qword[rbp-8]
       mov rdx, r14
-      mov rcx, qword[rbp-16]
-      call fn_write_as_base
+      mov rcx, qword[rbp-32]
+      call fn_write_as_base_bb
 
       cmp r15, 9
       jne no_extra_space
 
-      mov rdi, ' '
-      mov rsi, r14
-      call fn_write_char
+      mov rdi, r14 ; byte buffer
+      mov rsi, ' '
+      call fn_byte_buffer_write_byte
 
       no_extra_space:
 
-
-      mov rdi, ' '
-      mov rsi, r14
-      call fn_write_char
+      mov rdi, r14 ; byte buffer
+      mov rsi, ' '
+      call fn_byte_buffer_write_byte
 
       dec r13
       dec r15
@@ -454,13 +547,14 @@ fn_bindump:
     pop r12
     pop r13
 
-    mov rdi, ' '
-    mov rsi, r14
-    call fn_write_char
+    mov rdi, r14 ; byte buffer
+    mov rsi, ' '
+    call fn_byte_buffer_write_byte
 
-    mov rdi, '|'
-    mov rsi, r14
-    call fn_write_char
+
+    mov rdi, r14 ; byte buffer
+    mov rsi, '|'
+    call fn_byte_buffer_write_byte
 
     mov r15, 16
     char_loop:
@@ -475,16 +569,17 @@ fn_bindump:
       cmp rdi, 94
       jbe is_ascii
 
-      mov rdi, '.'
-      mov rsi, r14
-      call fn_write_char
+      mov rdi, r14 ; byte buffer
+      mov rsi, '.'
+      call fn_byte_buffer_write_byte
+
       jmp after_is_ascii
 
       is_ascii:
-      mov rdi, 0
-      mov dil, byte[r12]
-      mov rsi, r14
-      call fn_write_char
+      mov rdi, r14 ; byte buffer
+      xor rsi, rsi
+      mov sil, byte[r12]
+      call fn_byte_buffer_write_byte
 
       after_is_ascii:
 
@@ -496,19 +591,31 @@ fn_bindump:
 
   add rbx, 16
 
-  mov rdi, '|'
-  mov rsi, r14
-  call fn_write_char
 
-  mov rdi, 10
-  mov rsi, r14
-  call fn_write_char
+  mov rdi, r14 ; byte buffer
+  mov rsi, '|'
+  call fn_byte_buffer_write_byte
+
+  mov rdi, r14 ; byte buffer
+  mov rsi, 10
+  call fn_byte_buffer_write_byte
 
   jmp row_loop
   row_loop_break:
 
+  ;; Print out byte buffer contents
+  mov rdi, r14
+  mov rsi, qword[rbp-16]
+  call fn_byte_buffer_write_contents
+
+  ;; Free the byte buffer
+  mov rdi, r14
+  call fn_byte_buffer_free
+
   pop r9
   pop r9
+  add rsp, 8
+  pop rdx
   pop rcx
   pop rbx
   pop r15

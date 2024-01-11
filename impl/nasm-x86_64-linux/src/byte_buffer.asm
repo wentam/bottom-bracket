@@ -12,6 +12,7 @@ global fn_byte_buffer_write_byte
 global fn_byte_buffer_write_int64
 global fn_byte_buffer_dump_buffer
 global fn_byte_buffer_bindump_buffer
+global fn_byte_buffer_write_contents
 
 extern fn_malloc
 extern fn_realloc
@@ -20,6 +21,7 @@ extern fn_write_char
 extern fn_error_exit
 extern fn_assert_stack_aligned
 extern fn_bindump
+extern fn_print
 
 section .rodata
 
@@ -135,6 +137,27 @@ fn_byte_buffer_get_buf_length:
 fn_byte_buffer_get_buf:
   mov rax, qword[rdi+BYTE_BUFFER_BUF_OFFSET]
   ret
+
+;;; byte_buffer_write_contents(*byte_buffer, fd)
+;;;   Writes the contents of this buffer to fd
+fn_byte_buffer_write_contents:
+  push r12
+  push r13
+  sub rsp, 8
+
+  mov r13, rdi ; byte buffer
+  mov r12, rsi ; fd
+
+  mov rdi, qword[r13+BYTE_BUFFER_BUF_OFFSET]
+  mov rsi, qword[r13+BYTE_BUFFER_DATA_LENGTH_OFFSET]
+  mov rdx, r12
+  call fn_print
+
+  add rsp, 8
+  pop r13
+  pop r12
+  ret
+
 
 ;;; byte_buffer_write_byte(*byte_buffer, byte)
 ;;;   Writes a byte to the byte buffer
