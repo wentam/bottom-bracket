@@ -68,9 +68,6 @@ section .text
 ;; TODO: make sure we're handling all errors that could occur from syscalls
 ;; TODO fn_write_as_base isn't keeping the stack 16-aligned while making function calls
 ;; TODO: rather than error outright, the reader should generate error codes for things like unexpected EOF for us to handle here
-;; TODO: rename reader/buffered_reader to something clearer. Just calling it
-;; reader confuses the AARRP expression reader with something like the buffered
-;; reader (a reader of bytes from an fd).
 _start:
   ;; Output welcome string to stderr
   ;;mov rdi, welcome_msg

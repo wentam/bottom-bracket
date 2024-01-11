@@ -4,11 +4,11 @@
 ;;;; char.
 
 section .text
-global fn_buffered_reader_new
-global fn_buffered_reader_free
-global fn_buffered_reader_read_byte
-global fn_buffered_reader_peek_byte
-global fn_buffered_reader_consume_leading_whitespace
+global fn_buffered_fd_reader_new
+global fn_buffered_fd_reader_free
+global fn_buffered_fd_reader_read_byte
+global fn_buffered_fd_reader_peek_byte
+global fn_buffered_fd_reader_consume_leading_whitespace
 global BUFFERED_READER_EOF
 
 extern fn_malloc
@@ -26,7 +26,7 @@ malloc_failed_error_str_len: equ $ - malloc_failed_error_str
 
 section .text
 
-;;; struct buffered_reader {
+;;; struct buffered_fd_reader {
 ;;;   int64_t fd;     // File descriptor to read data from
 ;;;   char* read_ptr; // Pointer to the next byte to read
 ;;;   char* end_ptr;  // Pointer to the end of valid data + 1
@@ -48,11 +48,11 @@ section .text
 %define NEWLINE 10
 %define TAB 9
 
-;;; buffered_reader_new(fd)
+;;; buffered_fd_reader_new(fd)
 ;;;   Creates a new buffered reader.
 ;;;
-;;;   Free with buffered_reader_free when done.
-fn_buffered_reader_new:
+;;;   Free with buffered_fd_reader_free when done.
+fn_buffered_fd_reader_new:
   push r12
 
   %ifdef ASSERT_STACK_ALIGNMENT
@@ -83,9 +83,9 @@ fn_buffered_reader_new:
   pop r12
   ret
 
-;;; buffered_reader_free(*buffered_reader)
+;;; buffered_fd_reader_free(*buffered_fd_reader)
 ;;;   Frees a buffered reader.
-fn_buffered_reader_free:
+fn_buffered_fd_reader_free:
   sub rsp, 8
   %ifdef ASSERT_STACK_ALIGNMENT
   call fn_assert_stack_aligned
@@ -95,9 +95,9 @@ fn_buffered_reader_free:
   add rsp, 8
   ret
 
-;;; buffered_reader_read_byte(*buffered_reader)
+;;; buffered_fd_reader_read_byte(*buffered_fd_reader)
 ;;;   Reads a byte.
-fn_buffered_reader_read_byte:
+fn_buffered_fd_reader_read_byte:
   push r12
   push r13
   sub rsp, 8
@@ -151,9 +151,9 @@ fn_buffered_reader_read_byte:
   pop r12
   ret
 
-;;; buffered_reader_peek_byte(*buffered_reader)
+;;; buffered_fd_reader_peek_byte(*buffered_fd_reader)
 ;;;   Returns the next byte without consuming it.
-fn_buffered_reader_peek_byte:
+fn_buffered_fd_reader_peek_byte:
   push r12
   mov r12, rdi ; Preserve struct pointer
 
@@ -161,7 +161,7 @@ fn_buffered_reader_peek_byte:
   call fn_assert_stack_aligned
   %endif
 
-  call fn_buffered_reader_read_byte
+  call fn_buffered_fd_reader_read_byte
 
   ;; EOF is handled specially by read_byte and doesn't add anything to the
   ;; buffer or move the pointer. Hence skip decrement if it's EOF.
@@ -175,12 +175,12 @@ fn_buffered_reader_peek_byte:
   pop r12
   ret
 
-;;; buffered_reader_consume_leading_whitespace(*buffered_reader)
+;;; buffered_fd_reader_consume_leading_whitespace(*buffered_fd_reader)
 ;;;   Consumes all of the whitespace at the front of the read buffer.
 ;;;
 ;;;   Returns the next (non-whitespace) char without consuming it from the read
 ;;;   buffer.
-fn_buffered_reader_consume_leading_whitespace:
+fn_buffered_fd_reader_consume_leading_whitespace:
   push r12
   mov r12, rdi ; Struct pointer
 
@@ -190,7 +190,7 @@ fn_buffered_reader_consume_leading_whitespace:
 
   consume_loop:
   mov rdi, r12
-  call fn_buffered_reader_peek_byte
+  call fn_buffered_fd_reader_peek_byte
   cmp rax, ' '
   je found_whitespace
   cmp rax, NEWLINE
@@ -203,6 +203,6 @@ fn_buffered_reader_consume_leading_whitespace:
 
   found_whitespace:
   mov rdi, r12
-  call fn_buffered_reader_read_byte ; consume
+  call fn_buffered_fd_reader_read_byte ; consume
   jmp consume_loop
 

@@ -16,11 +16,11 @@ extern fn_assert_stack_aligned
 extern fn_bindump
 extern fn_write_as_base
 
-extern fn_buffered_reader_new
-extern fn_buffered_reader_free
-extern fn_buffered_reader_read_byte
-extern fn_buffered_reader_peek_byte
-extern fn_buffered_reader_consume_leading_whitespace
+extern fn_buffered_fd_reader_new
+extern fn_buffered_fd_reader_free
+extern fn_buffered_fd_reader_read_byte
+extern fn_buffered_fd_reader_peek_byte
+extern fn_buffered_fd_reader_consume_leading_whitespace
 
 extern fn_byte_buffer_new
 extern fn_byte_buffer_free
@@ -78,7 +78,7 @@ fn_read:
 
   ;; Create new buffered reader
   mov rdi, r12
-  call fn_buffered_reader_new
+  call fn_buffered_fd_reader_new
   mov r13, rax ; r13 = new buffered reader
 
   ;; Allocate output byte buffer
@@ -94,7 +94,7 @@ fn_read:
 
   ;; Free buffered reader
   mov rdi, r13
-  call fn_buffered_reader_free
+  call fn_buffered_fd_reader_free
 
   ;; Append a pointer to the byte buffer struct at the end of the data.
   ;; This is needed to free the buffer later (and useful for any other function
@@ -215,7 +215,7 @@ fn__relative_to_abs:
   pop r12
   ret
 
-;;; _read(*buffered_reader, *output_buffer) -> ptr
+;;; _read(*buffered_fd_reader, *output_buffer) -> ptr
 ;;;   Recursive implementation of read(). Return a *buffer-relative* pointer to
 ;;;   the result.
 fn__read:
@@ -233,7 +233,7 @@ fn__read:
 
   ;; Consume all the leading whitespace (this also peeks)
   mov rdi, r12
-  call fn_buffered_reader_consume_leading_whitespace
+  call fn_buffered_fd_reader_consume_leading_whitespace
 
   ;; If we got EOF, Error
   cmp rax, BUFFERED_READER_EOF
@@ -277,7 +277,7 @@ fn__read:
   pop r12
   ret
 
-;;; _read_array(*buffered_reader, *output_buffer) -> ptr
+;;; _read_array(*buffered_fd_reader, *output_buffer) -> ptr
 ;;;   Reads an array from the buffered reader
 ;;;   Writes the array to the output buffer
 ;;;
@@ -301,13 +301,13 @@ fn__read_array:
 
   ;; Consume the leading '(' TODO assert that it is actually '('
   mov rdi, r12
-  call fn_buffered_reader_read_byte
+  call fn_buffered_fd_reader_read_byte
 
   mov r15, 0 ; child counter
   __read_array_children:
   ;; Consume all whitespace
   mov rdi, r12
-  call fn_buffered_reader_consume_leading_whitespace
+  call fn_buffered_fd_reader_consume_leading_whitespace
 
   ;; Peek the next char (consume whitespace also peeks). If it's ')' we're done.
   cmp rax, ')'
@@ -340,7 +340,7 @@ fn__read_array:
 
   ;; Consume the trailing ')'
   mov rdi, r12
-  call fn_buffered_reader_read_byte
+  call fn_buffered_fd_reader_read_byte
 
   ;; Zero rbx to start tracking array size in bytes
   xor rbx, rbx
@@ -391,7 +391,7 @@ fn__read_array:
   pop r12
   ret
 
-;;; _read_atom(*buffered_reader, *output_buffer) -> ptr
+;;; _read_atom(*buffered_fd_reader, *output_buffer) -> ptr
 ;;;   Reads an atom from the buffered reader.
 ;;;   Writes the atom to the output buffer.
 ;;;
@@ -412,7 +412,7 @@ fn__read_atom:
 
   ;; Consume all the leading whitespace
   mov rdi, r12
-  call fn_buffered_reader_consume_leading_whitespace
+  call fn_buffered_fd_reader_consume_leading_whitespace
 
   cmp rax, BUFFERED_READER_EOF
   jne __read_atom_no_eof
@@ -434,7 +434,7 @@ fn__read_atom:
   ;; Peek the next char - if it's '(', ')' or whitespace, we're done.
   ;; We cannot consume because consuming '(' or ')' would be damaging.
   mov rdi, r12 ; buffered reader
-  call fn_buffered_reader_peek_byte
+  call fn_buffered_fd_reader_peek_byte
   cmp rax, ')'
   je __read_atom_finish
   cmp rax, '('
@@ -450,7 +450,7 @@ fn__read_atom:
 
   ;; Read the next char
   mov rdi, r12
-  call fn_buffered_reader_read_byte
+  call fn_buffered_fd_reader_read_byte
   mov r15, rax
 
   ;; Output this char to the buffer
