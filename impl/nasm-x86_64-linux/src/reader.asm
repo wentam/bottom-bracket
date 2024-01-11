@@ -24,7 +24,7 @@ extern fn_buffered_reader_consume_leading_whitespace
 
 extern fn_byte_buffer_new
 extern fn_byte_buffer_free
-extern fn_byte_buffer_write_int64
+extern fn_byte_buffer_push_int64
 extern fn_byte_buffer_push_byte
 extern fn_byte_buffer_dump_buffer
 extern fn_byte_buffer_get_write_ptr
@@ -101,7 +101,7 @@ fn_read:
   ;; that wants to go from read result back to byte buffer struct)
   mov rdi, r14
   mov rsi, 0
-  call fn_byte_buffer_write_int64
+  call fn_byte_buffer_push_int64
 
   ;; TODO: lock writes in the byte buffer so nothing can invalidate any
   ;; pointers from here forward?
@@ -348,7 +348,7 @@ fn__read_array:
   ;; Write the array length
   mov rdi, r14
   mov rsi, r15
-  call fn_byte_buffer_write_int64
+  call fn_byte_buffer_push_int64
 
   add rbx, 8 ; 8 bytes for array length
 
@@ -368,7 +368,7 @@ fn__read_array:
   mov rsi, qword[rcx]
 
   mov rdi, r14
-  call fn_byte_buffer_write_int64
+  call fn_byte_buffer_push_int64
 
   add rbx, 8 ; 8 bytes for pointer
 
@@ -426,7 +426,7 @@ fn__read_atom:
   ;; Write length placeholder
   mov rdi, r14
   mov rsi, 0
-  call fn_byte_buffer_write_int64
+  call fn_byte_buffer_push_int64
 
   ;; Read characters until the end of the atom
   mov rbx, 0 ;; char counter
