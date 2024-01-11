@@ -166,6 +166,7 @@ fn_realloc:
   %endif
 
   ;; remap mmap region
+  add rsi, 8
   sub rdi, 8              ; Walk back to the start of the mmap region
   mov rdx, rsi            ; New length from function argument
   mov rsi, qword [rdi]    ; Length from our metadata

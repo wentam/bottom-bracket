@@ -65,7 +65,6 @@ section .text
 ;; TODO: count allocations and warn if not everything has been freed at the end
 ;; TODO: utility to push all registers and utility to pop all registers,
 ;;       to make it easy to inject debugging functions in the middle of something
-;; TODO: we should probably split out the reader's output buffer to be a byte vector
 ;; TODO: make sure we're handling all errors that could occur from syscalls
 ;; TODO fn_write_as_base isn't keeping the stack 16-aligned while making function calls
 ;; TODO: rather than error outright, the reader should generate error codes for things like unexpected EOF for us to handle here
@@ -83,12 +82,6 @@ _start:
   %ifdef ASSERT_STACK_ALIGNMENT
   call fn_assert_stack_aligned
   %endif
-
-  ;;mov rdi, 27
-  ;;mov rsi, 16
-  ;;mov rdx, stdout_fd
-  ;;mov rcx, 3
-  ;;call fn_write_as_base
 
   mov rdi, stdin_fd
   call fn_read
