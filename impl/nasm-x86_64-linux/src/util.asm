@@ -37,17 +37,40 @@ global fn_digit_to_ascii
 global fn_assert_stack_aligned
 global fn_bindump
 
-;;; TODO: if sys_write doesn't return our full length, call it again
-;;        (it's not gauranteed to write the whole string in one go)
-;;; print(*string, len, fd) - Outputs given string to fd
+;;; print(*string, len, fd)
+;;;   Writes the string of bytes to fd. Returns 0 on error.
 fn_print:
-  mov r10, rdx       ; We're about to clobber rdx, move to r10
-  mov rdx, rsi       ; String length
-  mov rsi, rdi       ; String
-  mov rdi, r10       ; Output fd
+  push r12
+  push r13
+  push r14
+  mov r13, rdi ; string
+  mov r12, rsi ; string length
+  mov r14, rdx ; fd
+
+  fn_print_again:
+  mov rdx, r12       ; String length
+  mov rsi, r13       ; String
+  mov rdi, r14       ; Output fd
   mov rax, sys_write ; syscall number
   syscall
+
+  cmp rax, 0
+  jl fn_print_err
+
+  sub r12, rax
+  add r13, rax
+  cmp r12, 0
+  jg fn_print_again
+
+  fn_print_epilogue:
+  pop r14
+  pop r13
+  pop r12
   ret
+
+  fn_print_err:
+  mov rax, 0
+  jmp fn_print_epilogue
 
 ;;; error_exit(*string, len)
 ;;;   prints an error to stderr and exits
