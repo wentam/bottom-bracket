@@ -8,7 +8,7 @@ global fn_byte_buffer_get_write_ptr
 global fn_byte_buffer_get_data_length
 global fn_byte_buffer_get_buf_length
 global fn_byte_buffer_get_buf
-global fn_byte_buffer_write_byte
+global fn_byte_buffer_push_byte
 global fn_byte_buffer_write_int64
 global fn_byte_buffer_dump_buffer
 global fn_byte_buffer_bindump_buffer
@@ -159,9 +159,9 @@ fn_byte_buffer_write_contents:
   ret
 
 
-;;; byte_buffer_write_byte(*byte_buffer, byte)
+;;; byte_buffer_push_byte(*byte_buffer, byte)
 ;;;   Writes a byte to the byte buffer
-fn_byte_buffer_write_byte:
+fn_byte_buffer_push_byte:
   push r12
   push r13
   sub rsp, 8
@@ -234,7 +234,7 @@ fn_byte_buffer_write_int64:
   write_int64_space:
   mov rdi, r14
   mov rsi, 0
-  call fn_byte_buffer_write_byte
+  call fn_byte_buffer_push_byte
   dec r12
   cmp r12, 0
   jne write_int64_space

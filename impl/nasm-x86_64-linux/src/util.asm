@@ -39,7 +39,7 @@ global fn_bindump
 
 extern fn_byte_buffer_new
 extern fn_byte_buffer_free
-extern fn_byte_buffer_write_byte
+extern fn_byte_buffer_push_byte
 extern fn_byte_buffer_write_contents
 
 ;;; print(*string, len, fd)
@@ -383,7 +383,7 @@ fn_write_as_base_bb:
 
   mov rdi, r13
   mov rsi, rcx
-  call fn_byte_buffer_write_byte
+  call fn_byte_buffer_push_byte
 
   dec r9
   jmp write_to_bb_loop
@@ -466,11 +466,11 @@ fn_bindump:
 
     mov rdi, r14 ; byte buffer
     mov rsi, ' '
-    call fn_byte_buffer_write_byte
+    call fn_byte_buffer_push_byte
 
     mov rdi, r14 ; byte buffer
     mov rsi, ' '
-    call fn_byte_buffer_write_byte
+    call fn_byte_buffer_push_byte
 
     push r13
     push r12
@@ -491,7 +491,7 @@ fn_bindump:
 
         mov rdi, r14 ; byte buffer
         mov rsi, ' '
-        call fn_byte_buffer_write_byte
+        call fn_byte_buffer_push_byte
 
         add rsp, 8
         pop rdi
@@ -502,14 +502,14 @@ fn_bindump:
 
       mov rdi, r14 ; byte buffer
       mov rsi, ' '
-      call fn_byte_buffer_write_byte
+      call fn_byte_buffer_push_byte
 
       cmp r15, 9
       jne _no_extra_space
 
       mov rdi, r14 ; byte buffer
       mov rsi, ' '
-      call fn_byte_buffer_write_byte
+      call fn_byte_buffer_push_byte
 
       _no_extra_space:
 
@@ -530,13 +530,13 @@ fn_bindump:
 
       mov rdi, r14 ; byte buffer
       mov rsi, ' '
-      call fn_byte_buffer_write_byte
+      call fn_byte_buffer_push_byte
 
       no_extra_space:
 
       mov rdi, r14 ; byte buffer
       mov rsi, ' '
-      call fn_byte_buffer_write_byte
+      call fn_byte_buffer_push_byte
 
       dec r13
       dec r15
@@ -549,12 +549,12 @@ fn_bindump:
 
     mov rdi, r14 ; byte buffer
     mov rsi, ' '
-    call fn_byte_buffer_write_byte
+    call fn_byte_buffer_push_byte
 
 
     mov rdi, r14 ; byte buffer
     mov rsi, '|'
-    call fn_byte_buffer_write_byte
+    call fn_byte_buffer_push_byte
 
     mov r15, 16
     char_loop:
@@ -571,7 +571,7 @@ fn_bindump:
 
       mov rdi, r14 ; byte buffer
       mov rsi, '.'
-      call fn_byte_buffer_write_byte
+      call fn_byte_buffer_push_byte
 
       jmp after_is_ascii
 
@@ -579,7 +579,7 @@ fn_bindump:
       mov rdi, r14 ; byte buffer
       xor rsi, rsi
       mov sil, byte[r12]
-      call fn_byte_buffer_write_byte
+      call fn_byte_buffer_push_byte
 
       after_is_ascii:
 
@@ -594,11 +594,11 @@ fn_bindump:
 
   mov rdi, r14 ; byte buffer
   mov rsi, '|'
-  call fn_byte_buffer_write_byte
+  call fn_byte_buffer_push_byte
 
   mov rdi, r14 ; byte buffer
   mov rsi, 10
-  call fn_byte_buffer_write_byte
+  call fn_byte_buffer_push_byte
 
   jmp row_loop
   row_loop_break:

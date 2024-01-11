@@ -25,7 +25,7 @@ extern fn_buffered_reader_consume_leading_whitespace
 extern fn_byte_buffer_new
 extern fn_byte_buffer_free
 extern fn_byte_buffer_write_int64
-extern fn_byte_buffer_write_byte
+extern fn_byte_buffer_push_byte
 extern fn_byte_buffer_dump_buffer
 extern fn_byte_buffer_get_write_ptr
 extern fn_byte_buffer_get_data_length
@@ -456,7 +456,7 @@ fn__read_atom:
   ;; Output this char to the buffer
   mov rdi, r14
   mov rsi, r15
-  call fn_byte_buffer_write_byte
+  call fn_byte_buffer_push_byte
 
   inc rbx
 
