@@ -1,5 +1,5 @@
 section .text
-global fn_aprint
+global fn_print
 extern fn_assert_stack_aligned
 extern fn_write_char
 extern fn_write
@@ -9,7 +9,7 @@ section .rodata
 section .text
 
 ;; aprint(*aarrp_expression, fd)
-fn_aprint:
+fn_print:
   push r12
   push r13
   push r15
@@ -37,7 +37,7 @@ fn_aprint:
 
     mov rdi, qword[r12]
     mov rsi, r13
-    call fn_aprint
+    call fn_print
 
     cmp r15, 1
     je nospace

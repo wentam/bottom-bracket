@@ -40,7 +40,7 @@ extern fn_bindump
 extern fn_free_read_result
 extern fn_dump_read_result_buffer
 extern fn_dump_read_result
-extern fn_aprint
+extern fn_print
 
 section .rodata
 
@@ -113,7 +113,7 @@ _start:
 
   mov rdi, r12
   mov rsi, stdout_fd
-  call fn_aprint
+  call fn_print
 
   mov rdi, r12
   call fn_free_read_result
