@@ -1,164 +1,58 @@
-# TODO
 
-* reader macros
-* symbol macros
-* sections?
-* array data type option 3: pointery. Probably doing it this way.
-* need a way to define functions available to macros at macroexpand/compile time
-
-TODO: we've been assuming the array deliminators are '(' and ')'. Could we
-instead allow the user to choose what chars they want at compile time?
-('[' and ']' if they so please.)
-
-# Array data type option 1
+# Data types
 
 ## Semantics
 
-The base data type is an array whose elements are either another array or a
-single character.
+AARRP has two data types, both arrays: point-arrays and byte-arrays.
 
-TODO: define character: is it ASCII? 8-byte unicode? Defined by user at build
-time? Note: we really only care about the integer size backing the character and
-which integers represent '(' and ')' or whatever our array deliminators are.
+* Point arrays are arrays that point to either other point arrays or byte arrays.
+* Byte arrays are arrays of untyped bytes.
 
-* Characters placed side-by-side are simple a shorthand for an array contains
-  those chars.
+## Syntax
 
-  hence:
-  (foo bar baz) is equivelent to ((f o o) (b a r) (b a z))
+* Characters placed side-by-side are a byte array. Hence `foo` represents an
+  array of the bytes `102 111 111`.
 
-* Double quotes or numbers at this level would have no special meaning.
+* Point arrays are deliminated by ( and ). Hence `(foo bar baz)` represents
+  an array of pointers to the byte arrays `['f','o','o']` `['b','a','r']` and
+  `['b','a','z']`.
 
-  hence:
-  "foo" == (" f o o ").
-  5 is just the character 5 (ASCII code 53)
+These types can be nested as much as you'd like to produce a tree-like structure:
+`(foo bar (biz boz) (((thing))) () blah)` is a valid structure.
 
-  The only characters with special meaning are ( and ).
+Because AARRP arrays can contain binary data, you can't textually represent
+everything that the data type can contain by default. This is fixable by
+introducing your own hex literals with macros (macros can produce byte arrays
+with arbitrary bytes without limitation).
 
-## Memory structure
-
-Arrays are represented without any pointers as follows:
-
-(f o o): [3, -1, 'f', -1, 'o', -1, 'o']
-((a b c) (d e f)): [2, 3, -1, 'a', -1, 'b', -1, 'c', 3, -1, 'd', -1, 'e', -1, 'f']
-
-Where 'a' is the character encoded number for the letter 'a' (97 in ASCII).
-
-A positive number represents the length of the following array while -1
-represents that the following item is a character.
-
-Optimization that may or may not be worth the extra confusion: -2 could
-represent that the next two things are characters.
-
-TODO: how large can the array length be? fixed? leb128? If fixed size, we
-      should used INT-MAX instead of -1 to represent that the following is a
-      character as this is more efficient than a signed integer.
-
-# Array data type option 2
-
-## Semantics
-
-The base data type is an array whose elements are either another array or an
-atom.
-
-TODO: define character: is it ASCII? 8-byte unicode? Defined by user at build
-time? Note: we really only care about the integer size backing the character and
-which integers represent '(' and ')' or whatever our array deliminators are.
-
-* Characters placed side-by-side are an atom.
-
-  hence:
-  (foo bar baz) != ((f o o) (b a r) (b a z))
-
-* double quotes or numbers at this level would have no special meaning.
-
-  hence:
-  "foo" is the literal string "\"foo\""
-  5 is the string "5"
-
-  The only characters with special meaning are ( and )
+You're welcome to include binary bytes in your text file directly, though
+without macros there's still no way to represent the bytes 40 and 41 as
+these are the ( and ) ascii characters.
 
 ## Memory structure
 
-Arrays are represented without any pointers as follows:
+Byte arrays are represented with a size\_t positive length of the array,
+followed by a byte for each element, hence the byte array `foo` is
+`[3,'f','o','o']` in memory.
 
-(foo): [1, -3, 'f', 'o', 'o']
-(foo four): [2, -3, 'f', 'o', 'o', -4, 'f', 'o', 'u', 'r']
-(foo (bar baz)): [2, -3, 'f', 'o', 'o', 2, -3, 'b', 'a', 'r', -3, 'b', 'a', 'z']
-
-Where 'a' is the character encoded number for the letter 'a' (97 in ASCII).
-
-A positive number represents the length of the following array while negative
-lengths represent the length of the string.
-
-# Array data type option 3
-
-## Semantics
-
-The base data type is an array whose elements are either another array or an
-atom.
-
-TODO: define character: is it ASCII? 8-byte unicode? Defined by user at build
-time? Note: we really only care about the integer size backing the character and
-which integers represent '(' and ')' or whatever our array deliminators are.
-
-* Characters placed side-by-side are an atom (the smallest type of object with
-  no other type composing it)
-
-  hence:
-  (foo bar baz) != ((f o o) (b a r) (b a z))
-
-* double quotes or numbers at this level would have no special meaning.
-
-  hence:
-  "foo" is the literal string "\"foo\""
-  5 is the string "5"
-
-  The only characters with special meaning are ( and )
-
-## Memory structure
-
-Arrays are represented without any pointers as follows:
-
-(foo): [1, -3, 'f', 'o', 'o']
-(foo four): [2, -3, 'f', 'o', 'o', -4, 'f', 'o', 'u', 'r']
-(foo (bar baz)): [2, -3, 'f', 'o', 'o', 2, -3, 'b', 'a', 'r', -3, 'b', 'a', 'z']
+Point arrays are represented with a size\_t negative length of the array,
+followed by size\_t pointers for each element, hence the point array
+`(foo bar baz)` is `[-3,*ptr,*ptr,*ptr]` in memory.
 
 Where 'a' is the character encoded number for the letter 'a' (97 in ASCII).
 
-A positive number represents the length of the following array while negative
-lengths represent the length of the string.
-
-## TODO: how large can the array and atom lengths be? fixed? leb128?
-
-* leb128 would require macro-writers to have the tools available to decode
-  leb128, probably in the form of a function available at compile-time in the
-  macro. If you have such a function, what does that function output? In the
-  end, it always needs to live in a register, and 8-bit might be the largest
-  register you have.
-* using anything larger than an 8-bit integer for these values starts to make
-  things more difficult on different architectures. Consider 8-bit AVR.
-* an 8-bit integer is definitely too limiting for this. (example: you could
-  only have 255 lines of code at the top level)
-* This distinction only matters at compile time, so it's probably safe to
-  assume you have access to at least a 32-bit register even if you're
-  compiling for AVR (I don't see a need to run the compiler on AVR :P)
-* We could completely dodge this issue by instead making all strings and arrays
-  NULL-terminated.
-* We could dodge this issue by having lengths specified as 1-byte integers
-  where if the length is 255 you must read the next and add it together.
+Take note of how the type is defined: A positive length represents a byte-array
+while a negative length represents a point-array. This allows you to nest them
+to build a tree and know what it is that you've got when it's time to traverse
+the tree.
 
 # General questions
 
-## Should the bootstrapping compiler be written in assembly? C?
-* Writing in C is more portable than writing in X86\_64-linux assembly. Writing
-  in assembly means you need to explicitly write the entire compiler for each
-  platform that you want to be able to bootstrap a compiler on.
-* When writing in C you could output to .asm files and keep them in-repo.
+* Should we invert the usage of sign bit for type? Because we can consider
+  'atoms' to by byte arrays - and because I want to support this array type
+  at runtime in my higher-level stuff - I think it makes sense.
 
-## Should calling conventions for macros follow the OS around, or should all x86\_64 macros use linux convention?
-
-## Should macros expand text<->text before the reader or array<->array after the reader?
+* Should calling conventions for macros follow the OS around, or should all x86\_64 macros use linux convention?
 
 # General notes/ideas
 
@@ -179,6 +73,19 @@ lengths represent the length of the string.
   hex opcodes at the top level? The 'mov' macro could then implement that
   behavior via the opcodes of the relevant platform.
 * macros need to be able to use macros
+* probably support something like nasm's local labels ('.' prefix)
+* macros can output arrays of not just text, but arbitrary binary
+* built-in macros implement the language and ultimately expand to a
+  single array of bytes to be outputted to the file/stdout/whatever
+* the above means that compiling an aarrp program doesn't need to actually
+  produce a compiled program, but any output you please
+  (text file?).
+* We may need a syntax that will cause the reader to error out - like lisp's
+  < and >. This would allow the printer to write out binary bytes as hex-literals.
+* because macros can output arbitrary bytes as array elements, macros can
+  implement hex literals
+* example programs to provide: hello world, macroexpansion html generator, writing
+  in machine language via hex literals
 
 # Problems to think about
 
@@ -221,3 +128,14 @@ it would be less confusing: (make-string "aoeu$)oeueo")
 Sure, the language could support string literals, but this isn't just about
 strings as it represents an inherent inflexibility in the metaprogramming
 design.
+
+# TODO
+
+* reader macros
+* symbol macros
+* sections?
+* need a way to define functions available to macros at macroexpand/compile time
+
+TODO: we've been assuming the array deliminators are '(' and ')'. Could we
+instead allow the user to choose what chars they want at compile time?
+('[' and ']' if they so please.)
