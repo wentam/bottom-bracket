@@ -23,7 +23,9 @@ fn_print:
   mov r15, qword[r12] ; r15 = length of array/atom
 
   cmp r15, 0
-  jl aprint_atom
+  jge aprint_atom
+
+  neg r15
 
   add r12, 8 ; Move past array length
 
@@ -60,9 +62,6 @@ fn_print:
   jmp aprint_epilogue
 
   aprint_atom:
-  dec r15 ; vvv
-  not r15 ; make r15 positive
-
   add r12, 8 ; Move past length
 
   mov rdi, r12

@@ -185,7 +185,9 @@ fn__relative_to_abs:
 
   ;; If this is an atom, do nothing
   cmp r15, 0
-  jl _relative_to_abs_epilogue
+  jge _relative_to_abs_epilogue
+
+  neg r15 ; Make array length positive
 
   ;; If this is an array, recursively convert
   add r12, 8 ; move past array length
@@ -348,6 +350,7 @@ fn__read_array:
   ;; Write the array length
   mov rdi, r14
   mov rsi, r15
+  neg rsi ; Negate rsi as arrays should use -length
   call fn_byte_buffer_push_int64
 
   add rbx, 8 ; 8 bytes for array length
@@ -477,8 +480,6 @@ fn__read_atom:
 
   sub rax, rbx                      ; Subtract whatever we just wrote
   sub rax, 8                        ; Subtract our placeholder length
-  not rbx                           ; Negate rbx as atoms should use -length
-  inc rbx                           ; ^^^^^^^^
   mov qword[rax], rbx               ; Write our length
 
   sub rax, r13 ; We want to return a relative pointer
@@ -536,19 +537,18 @@ fn_dump_read_result:
   mov r15, 0 ; length in bytes
   mov rax, qword[r12]
   cmp rax, 0
-  jl _atom_buf
+  jl _array_buf
+
+  _atom_buf:
+  add r15, 8 ; the length itself
+  add r15, rax ; each char is one byte, so just add it
+  jmp _length_calculated
 
   _array_buf:
+  neg rax ; array lengths are negative, make it positive
   add r15, 8 ; the length itself
   imul rax, 8
   add r15, rax
-  jmp _length_calculated
-
-  _atom_buf:
-  dec rax
-  not rax ; rax is now positive length
-  add r15, 8 ; the length itself
-  add r15, rax ; each char is one byte, so just add it
   ;jmp _length_calculated
 
   _length_calculated:
@@ -580,20 +580,20 @@ fn__get_byte_buf_from_read_result:
 
   mov rax, qword[r12]
   cmp rax, 0
-  jl atom_buf
+  jl array_buf
 
-  array_buf:
-  add r12, 8 ; move past the length
-  imul rax, 8
+  atom_buf:
+  add r12, 8   ; move past the length
   mov rax, qword[r12+rax]
   jmp get_byte_buf_epilogue
 
-  atom_buf:
-  dec rax
-  not rax ; rax is now positive length
-  add r12, 8   ; move past the length
+  array_buf:
+  neg rax ; array lengths are negative, invert
+  add r12, 8 ; move past the length
+  imul rax, 8
   mov rax, qword[r12+rax]
   ;jmp get_byte_buf_epilogue
+
 
   get_byte_buf_epilogue:
   pop r12
