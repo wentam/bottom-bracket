@@ -20,10 +20,10 @@ fn_print:
   call fn_assert_stack_aligned
   %endif
 
-  mov r15, qword[r12] ; r15 = length of parray/atom
+  mov r15, qword[r12] ; r15 = length of parray/barray
 
   cmp r15, 0
-  jge aprint_atom
+  jge aprint_barray
 
   neg r15
 
@@ -61,7 +61,7 @@ fn_print:
   call fn_write_char
   jmp aprint_epilogue
 
-  aprint_atom:
+  aprint_barray:
   add r12, 8 ; Move past length
 
   mov rdi, r12

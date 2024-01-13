@@ -56,8 +56,8 @@ unexpected_paren_str_len: equ $ - unexpected_paren_str
 unexpected_eof_parray_str: db "ERROR: Unexpected EOF while reading parray (are your parenthesis mismatched?)",10
 unexpected_eof_parray_str_len: equ $ - unexpected_eof_parray_str
 
-unexpected_eof_atom_str: db "ERROR: Unexpected EOF while reading atom",10
-unexpected_eof_atom_str_len: equ $ - unexpected_eof_atom_str
+unexpected_eof_barray_str: db "ERROR: Unexpected EOF while reading barray",10
+unexpected_eof_barray_str_len: equ $ - unexpected_eof_barray_str
 
 section .text
 
@@ -181,9 +181,9 @@ fn__relative_to_abs:
   call fn_assert_stack_aligned
   %endif
 
-  mov r15, qword[r12] ; Length of parray/atom -> r15
+  mov r15, qword[r12] ; Length of parray/barray -> r15
 
-  ;; If this is an atom, do nothing
+  ;; If this is a barray, do nothing
   cmp r15, 0
   jge _relative_to_abs_epilogue
 
@@ -245,17 +245,17 @@ fn__read:
   cmp rax, ')'
   je __read_unexpected_closing_paren
 
-  ;; Prepare arguments for _read_parray/_read_atom
+  ;; Prepare arguments for _read_parray/_read_barray
   mov rdi, r12
   mov rsi, r14
 
-  ;; If it looks like a parray take parray codepath, else atom codepath
+  ;; If it looks like a parray take parray codepath, else barray codepath
   cmp rax, '('
   je __read_parray
 
-  __read_atom:
-  call fn__read_atom
-  jmp __read_epilogue ; Return. rax is already a pointer to the atom.
+  __read_barray:
+  call fn__read_barray
+  jmp __read_epilogue ; Return. rax is already a pointer to the barray.
 
   __read_parray:
   call fn__read_parray
@@ -394,12 +394,12 @@ fn__read_parray:
   pop r12
   ret
 
-;;; _read_atom(*buffered_fd_reader, *output_buffer) -> ptr
-;;;   Reads an atom from the buffered reader.
-;;;   Writes the atom to the output buffer.
+;;; _read_barray(*buffered_fd_reader, *output_buffer) -> ptr
+;;;   Reads a barray from the buffered reader.
+;;;   Writes the barray to the output buffer.
 ;;;
-;;;   Returns a buffer-relative pointer to the atom.
-fn__read_atom:
+;;;   Returns a buffer-relative pointer to the barray.
+fn__read_barray:
   push r12
   push r14
   push r15
@@ -418,38 +418,38 @@ fn__read_atom:
   call fn_buffered_fd_reader_consume_leading_whitespace
 
   cmp rax, BUFFERED_READER_EOF
-  jne __read_atom_no_eof
+  jne __read_barray_no_eof
 
-  mov rdi, unexpected_eof_atom_str
-  mov rsi, unexpected_eof_atom_str_len
+  mov rdi, unexpected_eof_barray_str
+  mov rsi, unexpected_eof_barray_str_len
   call fn_error_exit
 
-  __read_atom_no_eof:
+  __read_barray_no_eof:
 
   ;; Write length placeholder
   mov rdi, r14
   mov rsi, 0
   call fn_byte_buffer_push_int64
 
-  ;; Read characters until the end of the atom
+  ;; Read characters until the end of the barray
   mov rbx, 0 ;; char counter
-  __read_atom_char:
+  __read_barray_char:
   ;; Peek the next char - if it's '(', ')' or whitespace, we're done.
   ;; We cannot consume because consuming '(' or ')' would be damaging.
   mov rdi, r12 ; buffered reader
   call fn_buffered_fd_reader_peek_byte
   cmp rax, ')'
-  je __read_atom_finish
+  je __read_barray_finish
   cmp rax, '('
-  je __read_atom_finish
+  je __read_barray_finish
   cmp rax, ' '
-  je __read_atom_finish
+  je __read_barray_finish
   cmp rax, BUFFERED_READER_EOF
-  je __read_atom_finish
+  je __read_barray_finish
   cmp rax, NEWLINE
-  je __read_atom_finish
+  je __read_barray_finish
   cmp rax, TAB
-  je __read_atom_finish
+  je __read_barray_finish
 
   ;; Read the next char
   mov rdi, r12
@@ -464,10 +464,10 @@ fn__read_atom:
   inc rbx
 
   ;; Repeat
-  jmp __read_atom_char
+  jmp __read_barray_char
 
-  __read_atom_finish:
-  ;; Update atom length placeholder
+  __read_barray_finish:
+  ;; Update barray length placeholder
 
   mov rdi, r14
   call fn_byte_buffer_get_data_length ; Get data length
@@ -539,7 +539,7 @@ fn_dump_read_result:
   cmp rax, 0
   jl _parray_buf
 
-  _atom_buf:
+  _barray_buf:
   add r15, 8 ; the length itself
   add r15, rax ; each char is one byte, so just add it
   jmp _length_calculated
@@ -582,7 +582,7 @@ fn__get_byte_buf_from_read_result:
   cmp rax, 0
   jl parray_buf
 
-  atom_buf:
+  barray_buf:
   add r12, 8   ; move past the length
   mov rax, qword[r12+rax]
   jmp get_byte_buf_epilogue
