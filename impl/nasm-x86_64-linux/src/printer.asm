@@ -8,7 +8,7 @@ section .rodata
 
 section .text
 
-;; aprint(*aarrp_expression, fd)
+;; print(*aarrp_expression, fd)
 fn_print:
   push r12
   push r13
@@ -20,22 +20,22 @@ fn_print:
   call fn_assert_stack_aligned
   %endif
 
-  mov r15, qword[r12] ; r15 = length of array/atom
+  mov r15, qword[r12] ; r15 = length of parray/atom
 
   cmp r15, 0
   jge aprint_atom
 
   neg r15
 
-  add r12, 8 ; Move past array length
+  add r12, 8 ; Move past parray length
 
   mov rdi, '('
   mov rsi, r13
   call fn_write_char
 
-  aprint_array_loop:
+  aprint_parray_loop:
     cmp r15, 0
-    je aprint_array_done
+    je aprint_parray_done
 
     mov rdi, qword[r12]
     mov rsi, r13
@@ -52,9 +52,9 @@ fn_print:
 
     add r12, 8
     dec r15
-    jmp aprint_array_loop
+    jmp aprint_parray_loop
 
-  aprint_array_done:
+  aprint_parray_done:
 
   mov rdi, ')'
   mov rsi, r13

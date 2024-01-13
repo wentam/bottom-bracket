@@ -53,8 +53,8 @@ unexpected_eof_str_len: equ $ - unexpected_eof_str
 unexpected_paren_str: db "ERROR: Unexpected ')' while reading",10
 unexpected_paren_str_len: equ $ - unexpected_paren_str
 
-unexpected_eof_array_str: db "ERROR: Unexpected EOF while reading array (are your parenthesis mismatched?)",10
-unexpected_eof_array_str_len: equ $ - unexpected_eof_array_str
+unexpected_eof_parray_str: db "ERROR: Unexpected EOF while reading parray (are your parenthesis mismatched?)",10
+unexpected_eof_parray_str_len: equ $ - unexpected_eof_parray_str
 
 unexpected_eof_atom_str: db "ERROR: Unexpected EOF while reading atom",10
 unexpected_eof_atom_str_len: equ $ - unexpected_eof_atom_str
@@ -181,16 +181,16 @@ fn__relative_to_abs:
   call fn_assert_stack_aligned
   %endif
 
-  mov r15, qword[r12] ; Length of array/atom -> r15
+  mov r15, qword[r12] ; Length of parray/atom -> r15
 
   ;; If this is an atom, do nothing
   cmp r15, 0
   jge _relative_to_abs_epilogue
 
-  neg r15 ; Make array length positive
+  neg r15 ; Make parray length positive
 
-  ;; If this is an array, recursively convert
-  add r12, 8 ; move past array length
+  ;; If this is an parray, recursively convert
+  add r12, 8 ; move past parray length
 
   _relative_to_abs_convert_loop:
     cmp r15, 0
@@ -241,25 +241,25 @@ fn__read:
   cmp rax, BUFFERED_READER_EOF
   je __read_unexpected_eof
 
-  ;; If we got an array end, error
+  ;; If we got a parray end, error
   cmp rax, ')'
   je __read_unexpected_closing_paren
 
-  ;; Prepare arguments for _read_array/_read_atom
+  ;; Prepare arguments for _read_parray/_read_atom
   mov rdi, r12
   mov rsi, r14
 
-  ;; If it looks like an array take array codepath, else atom codepath
+  ;; If it looks like a parray take parray codepath, else atom codepath
   cmp rax, '('
-  je __read_array
+  je __read_parray
 
   __read_atom:
   call fn__read_atom
   jmp __read_epilogue ; Return. rax is already a pointer to the atom.
 
-  __read_array:
-  call fn__read_array
-  jmp __read_epilogue ; Return; rax is already a pointer to the array
+  __read_parray:
+  call fn__read_parray
+  jmp __read_epilogue ; Return; rax is already a pointer to the parray
 
   __read_unexpected_eof:
   mov rdi, unexpected_eof_str
@@ -279,14 +279,14 @@ fn__read:
   pop r12
   ret
 
-;;; _read_array(*buffered_fd_reader, *output_buffer) -> ptr
-;;;   Reads an array from the buffered reader
-;;;   Writes the array to the output buffer
+;;; _read_parray(*buffered_fd_reader, *output_buffer) -> ptr
+;;;   Reads a parray from the buffered reader
+;;;   Writes the parray to the output buffer
 ;;;
 ;;;   The first character in the buffer must be '('
 ;;;
-;;;   Returns a buffer-relative pointer to the array.
-fn__read_array:
+;;;   Returns a buffer-relative pointer to the parray.
+fn__read_parray:
   push r12
   push r14
   push r15
@@ -306,24 +306,24 @@ fn__read_array:
   call fn_buffered_fd_reader_read_byte
 
   mov r15, 0 ; child counter
-  __read_array_children:
+  __read_parray_children:
   ;; Consume all whitespace
   mov rdi, r12
   call fn_buffered_fd_reader_consume_leading_whitespace
 
   ;; Peek the next char (consume whitespace also peeks). If it's ')' we're done.
   cmp rax, ')'
-  je __read_array_done
+  je __read_parray_done
 
   ;; Error if it's EOF here
   cmp rax, BUFFERED_READER_EOF
-  jne __read_array_no_eof
+  jne __read_parray_no_eof
 
-  mov rdi, unexpected_eof_array_str
-  mov rsi, unexpected_eof_array_str_len
+  mov rdi, unexpected_eof_parray_str
+  mov rsi, unexpected_eof_parray_str_len
   call fn_error_exit
 
-  __read_array_no_eof:
+  __read_parray_no_eof:
 
   ;; Read a child
   mov rdi, r12
@@ -336,30 +336,30 @@ fn__read_array:
 
   inc r15 ; increment child counter
 
-  jmp __read_array_children ; Next child
+  jmp __read_parray_children ; Next child
 
-  __read_array_done:
+  __read_parray_done:
 
   ;; Consume the trailing ')'
   mov rdi, r12
   call fn_buffered_fd_reader_read_byte
 
-  ;; Zero rbx to start tracking array size in bytes
+  ;; Zero rbx to start tracking parray size in bytes
   xor rbx, rbx
 
-  ;; Write the array length
+  ;; Write the parray length
   mov rdi, r14
   mov rsi, r15
-  neg rsi ; Negate rsi as arrays should use -length
+  neg rsi ; Negate rsi as parrays should use -length
   call fn_byte_buffer_push_int64
 
-  add rbx, 8 ; 8 bytes for array length
+  add rbx, 8 ; 8 bytes for parray length
 
-  ;; Output array pointers
+  ;; Output parray pointers
 
-  _output_array:
+  _output_parray:
   cmp r15, 0
-  je _output_array_break
+  je _output_parray_break
 
   mov rdi, r15
   imul rdi, 16
@@ -376,13 +376,13 @@ fn__read_array:
   add rbx, 8 ; 8 bytes for pointer
 
   dec r15
-  jmp _output_array
+  jmp _output_parray
 
-  _output_array_break:
+  _output_parray_break:
 
   mov rsp, rbp
 
-  ;; Set rax to a relative pointer to the start of the array
+  ;; Set rax to a relative pointer to the start of the parray
   mov rdi, r14
   call fn_byte_buffer_get_data_length
   sub rax, rbx
@@ -537,15 +537,15 @@ fn_dump_read_result:
   mov r15, 0 ; length in bytes
   mov rax, qword[r12]
   cmp rax, 0
-  jl _array_buf
+  jl _parray_buf
 
   _atom_buf:
   add r15, 8 ; the length itself
   add r15, rax ; each char is one byte, so just add it
   jmp _length_calculated
 
-  _array_buf:
-  neg rax ; array lengths are negative, make it positive
+  _parray_buf:
+  neg rax ; parray lengths are negative, make it positive
   add r15, 8 ; the length itself
   imul rax, 8
   add r15, rax
@@ -580,15 +580,15 @@ fn__get_byte_buf_from_read_result:
 
   mov rax, qword[r12]
   cmp rax, 0
-  jl array_buf
+  jl parray_buf
 
   atom_buf:
   add r12, 8   ; move past the length
   mov rax, qword[r12+rax]
   jmp get_byte_buf_epilogue
 
-  array_buf:
-  neg rax ; array lengths are negative, invert
+  parray_buf:
+  neg rax ; parray lengths are negative, invert
   add r12, 8 ; move past the length
   imul rax, 8
   mov rax, qword[r12+rax]

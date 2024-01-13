@@ -3,18 +3,18 @@
 
 ## Semantics
 
-AARRP has two data types, both arrays: point-arrays and byte-arrays.
+AARRP has two data types, both arrays: parrays (pointer arrays) and barrays (byte arrays).
 
-* Point arrays are arrays that point to either other point arrays or byte arrays.
-* Byte arrays are arrays of untyped bytes.
+* parrays are arrays that point to either other parrays or barrays.
+* barrays are arrays of untyped bytes.
 
 ## Syntax
 
-* Characters placed side-by-side are a byte array. Hence `foo` represents an
+* Characters placed side-by-side are a barray. Hence `foo` represents an
   array of the bytes `102 111 111`.
 
-* Point arrays are deliminated by ( and ). Hence `(foo bar baz)` represents
-  an array of pointers to the byte arrays `['f','o','o']` `['b','a','r']` and
+* parrays are deliminated by ( and ). Hence `(foo bar baz)` represents
+  an array of pointers to the barrays `['f','o','o']` `['b','a','r']` and
   `['b','a','z']`.
 
 These types can be nested as much as you'd like to produce a tree-like structure:
@@ -22,7 +22,7 @@ These types can be nested as much as you'd like to produce a tree-like structure
 
 Because AARRP arrays can contain binary data, you can't textually represent
 everything that the data type can contain by default. This is fixable by
-introducing your own hex literals with macros (macros can produce byte arrays
+introducing your own hex literals with macros (macros can produce barrays
 with arbitrary bytes without limitation).
 
 You're welcome to include binary bytes in your text file directly, though
@@ -31,26 +31,22 @@ these are the ( and ) ascii characters.
 
 ## Memory structure
 
-Byte arrays are represented with a size\_t positive length of the array,
-followed by a byte for each element, hence the byte array `foo` is
+barrays are represented with a size\_t positive length of the array,
+followed by a byte for each element, hence the barray `foo` is
 `[3,'f','o','o']` in memory.
 
-Point arrays are represented with a size\_t negative length of the array,
-followed by size\_t pointers for each element, hence the point array
+parrays are represented with a size\_t negative length of the array,
+followed by size\_t pointers for each element, hence the parray
 `(foo bar baz)` is `[-3,*ptr,*ptr,*ptr]` in memory.
 
 Where 'a' is the character encoded number for the letter 'a' (97 in ASCII).
 
-Take note of how the type is defined: A positive length represents a byte-array
-while a negative length represents a point-array. This allows you to nest them
+Take note of how the type is defined: A positive length represents a barray
+while a negative length represents a parray. This allows you to nest them
 to build a tree and know what it is that you've got when it's time to traverse
 the tree.
 
 # General questions
-
-* Should we invert the usage of sign bit for type? Because we can consider
-  'atoms' to by byte arrays - and because I want to support this array type
-  at runtime in my higher-level stuff - I think it makes sense.
 
 * Should calling conventions for macros follow the OS around, or should all x86\_64 macros use linux convention?
 
