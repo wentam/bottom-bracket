@@ -1,7 +1,11 @@
 # AARRP (Assembly ARRay Processing)
 
-AARRP is a homoiconic assembly language designed to express the compilation of anything
-to anything through bottom-up abstraction. This is done with compilation of code to machine language in mind, but it's open-ended.
+TODO: do we want to remove 'assembly' from the name?
+
+AARRP is a homoiconic language designed to express the compilation of anything
+to anything through bottom-up abstraction via macros written in anything.
+
+This is done with compilation of code to machine language in mind, but it's open-ended.
 
 * impl folder contains implementations of the language
 * notes folder contains general notes

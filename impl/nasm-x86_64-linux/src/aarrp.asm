@@ -42,6 +42,13 @@ extern fn_dump_read_result_buffer
 extern fn_dump_read_result
 extern fn_print
 
+extern macro_stack_new
+extern macro_stack_free
+extern macro_stack_push
+extern macro_stack_pop
+extern macro_stack_peek
+extern macro_stack_bindump_buffers
+
 section .rodata
 
 stdin_fd: equ 0
@@ -60,6 +67,12 @@ result_msg_len: equ $ - result_msg
 print_msg: db 10,"Fed back into aarrp printer",10,"--------",10
 print_msg_len: equ $ - print_msg
 
+test_macro_name: db 3,0,0,0,0,0,0,0,"foo"
+test_macro_code: db 11,0,0,0,0,0,0,0,"code-stuffs"
+
+test_macro_name_2: db 3,0,0,0,0,0,0,0,"bar"
+test_macro_code_2: db 11,0,0,0,0,0,0,0,"aaaaaaaaaaa"
+
 section .text
 
 ;; TODO: count allocations and warn if not everything has been freed at the end
@@ -69,6 +82,7 @@ section .text
 ;; TODO fn_write_as_base isn't keeping the stack 16-aligned while making function calls
 ;; TODO: rather than error outright, the reader should generate error codes for things like unexpected EOF for us to handle here
 ;; TODO: use nasm's local labels (leading .)
+;; TODO: remove fn_ function prefixes, see if there are any other namespacing tools available that don't mess with C interop in a weird way.
 _start:
   ;; Output welcome string to stderr
   ;;mov rdi, welcome_msg
@@ -80,41 +94,71 @@ _start:
   call fn_assert_stack_aligned
   %endif
 
-  mov rdi, stdin_fd
-  call fn_read
+  call macro_stack_new
   mov r12, rax
 
-  mov rdi, buffer_msg
-  mov rsi, buffer_msg_len
-  mov rdx, stdout_fd
-  call fn_write
+  mov rdi, r12
+  mov rsi, test_macro_name
+  mov rdx, test_macro_code
+  call macro_stack_push
 
   mov rdi, r12
-  mov rsi, stdout_fd
+  mov rsi, test_macro_name_2
+  mov rdx, test_macro_code_2
+  call macro_stack_push
+
+  mov rdi, r12
+  call macro_stack_peek
+
+  ;;mov rdi, rax
+  ;;mov rsi, 32
+  ;;mov rdx, stderr_fd
+  ;;mov rcx, 16
+  ;;call fn_bindump
+
+  mov rdi, r12
+  mov rsi, stderr_fd
   mov rdx, 16
-  call fn_dump_read_result_buffer
-
-  mov rdi, result_msg
-  mov rsi, result_msg_len
-  mov rdx, stdout_fd
-  call fn_write
+  call macro_stack_bindump_buffers
 
   mov rdi, r12
-  mov rsi, stdout_fd
-  mov rdx, 16
-  call fn_dump_read_result
+  call macro_stack_free
 
-  mov rdi, print_msg
-  mov rsi, print_msg_len
-  mov rdx, stdout_fd
-  call fn_write
+  ;;mov rdi, stdin_fd
+  ;;call fn_read
+  ;;mov r12, rax
 
-  mov rdi, r12
-  mov rsi, stdout_fd
-  call fn_print
+  ;;mov rdi, buffer_msg
+  ;;mov rsi, buffer_msg_len
+  ;;mov rdx, stdout_fd
+  ;;call fn_write
 
-  mov rdi, r12
-  call fn_free_read_result
+  ;;mov rdi, r12
+  ;;mov rsi, stdout_fd
+  ;;mov rdx, 16
+  ;;call fn_dump_read_result_buffer
+
+  ;;mov rdi, result_msg
+  ;;mov rsi, result_msg_len
+  ;;mov rdx, stdout_fd
+  ;;call fn_write
+
+  ;;mov rdi, r12
+  ;;mov rsi, stdout_fd
+  ;;mov rdx, 16
+  ;;call fn_dump_read_result
+
+  ;;mov rdi, print_msg
+  ;;mov rsi, print_msg_len
+  ;;mov rdx, stdout_fd
+  ;;call fn_write
+
+  ;;mov rdi, r12
+  ;;mov rsi, stdout_fd
+  ;;call fn_print
+
+  ;;mov rdi, r12
+  ;;call fn_free_read_result
 
   ;; Newline
   mov rdi, 10

@@ -10,12 +10,14 @@ AARRP has two data types, both arrays: parrays (pointer arrays) and barrays (byt
 
 ## Syntax
 
-* Characters placed side-by-side are a barray. Hence `foo` represents an
+* Characters placed side-by-side are a barray literal. Hence `foo` represents an
   array of the bytes `102 111 111`.
 
 * parrays are deliminated by ( and ). Hence `(foo bar baz)` represents
   an array of pointers to the barrays `['f','o','o']` `['b','a','r']` and
   `['b','a','z']`.
+
+* "fo(o \xFF \n" is a byte-string with escape codes that also represends a barray
 
 These types can be nested as much as you'd like to produce a tree-like structure:
 `(foo bar (biz boz) (((thing))) () blah)` is a valid structure.
@@ -81,7 +83,14 @@ the tree.
 * because macros can output arbitrary bytes as array elements, macros can
   implement hex literals
 * example programs to provide: hello world, macroexpansion html generator, writing
-  in machine language via hex literals
+  in machine language via hex literals, a macro who's output depends on user input at
+  build time (via stdin? gui?)
+* There is nothing special about 'asm'. Macros are not defined in terms of
+  assembly, but machine code. 'asm' is just a macro that resolves to a barray
+  of machine code.
+* 'asm' should probably be broken down into something more specific - such as
+  `(x86\_64-elf-asm (code))` - or ideally `(elf (section .text (x86\_64-asm (code))))` if
+  those concerns can be separated
 
 # Problems to think about
 
@@ -128,9 +137,15 @@ design.
 # TODO
 
 * reader macros
+* printer macros?
 * symbol macros
 * sections?
 * need a way to define functions available to macros at macroexpand/compile time
+* byte strings syntax
+* the reader and printer should be defined entirely through reader and printer
+  macros - such that the user can replace the behavior entirely should they choose.
+* remove the first 'a' from aarrp? the only way aarrp is assembly-aware is in
+  the 'asm' macro.
 
 TODO: we've been assuming the array deliminators are '(' and ')'. Could we
 instead allow the user to choose what chars they want at compile time?

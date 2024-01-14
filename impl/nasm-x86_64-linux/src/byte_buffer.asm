@@ -10,6 +10,10 @@ global fn_byte_buffer_get_buf_length
 global fn_byte_buffer_get_buf
 global fn_byte_buffer_push_byte
 global fn_byte_buffer_push_int64
+global fn_byte_buffer_pop_bytes
+global fn_byte_buffer_pop_int64
+global fn_byte_buffer_read_int64
+global fn_byte_buffer_peek_int64
 global fn_byte_buffer_dump_buffer
 global fn_byte_buffer_bindump_buffer
 global fn_byte_buffer_write_contents
@@ -161,6 +165,8 @@ fn_byte_buffer_write_contents:
 
 ;;; byte_buffer_push_byte(*byte_buffer, byte)
 ;;;   Pushes a byte to the byte buffer
+;;;
+;;;   Invalidates any pointers pointing to within the byte buffer.
 fn_byte_buffer_push_byte:
   push r12
   push r13
@@ -215,8 +221,23 @@ fn_byte_buffer_push_byte:
   pop r12
   ret
 
+;;; byte_buffer_read_int64(*byte_buffer, index)
+;;;   Reads an int64 start at the byte specified by index
+;;;
+;;;   The index is not specified in terms of int64s but in terms of bytes.
+fn_byte_buffer_read_int64:
+  ;; Obtain backing buffer pointer
+  mov rcx, qword[rdi+BYTE_BUFFER_BUF_OFFSET]
+
+  ;; Obtain int64 at index
+  mov rax, qword[rcx+rsi]
+  ret
+
+
 ;;; byte_buffer_push_int64(*byte_buffer, int64)
 ;;;   Pushes an int64 to the byte buffer
+;;;
+;;;   Invalidates any pointers pointing to within the byte buffer.
 fn_byte_buffer_push_int64:
   push r12
   push r13
@@ -249,6 +270,64 @@ fn_byte_buffer_push_int64:
   pop r12
   ret
 
+;;; byte_buffer_peek_int64(*byte_buffer) -> int64
+;;;   Returns an int64 composed of the last 8 bytes in the buffer without
+;;;   removing anything
+fn_byte_buffer_peek_int64:
+  push r12
+  mov r12, rdi
+
+  mov rdi, qword[r12+BYTE_BUFFER_DATA_LENGTH_OFFSET] ; Total data length
+  mov rcx, qword[r12+BYTE_BUFFER_BUF_OFFSET] ; pointer to backing buffer
+  mov rax, qword[rcx+rdi-8]
+  pop r12
+  ret
+
+;;; byte_buffer_pop_int64(*byte_buffer) -> int64
+;;;   Pops and returns an int64 from the end of the buffer
+fn_byte_buffer_pop_int64:
+  push r12
+  mov r12, rdi ; byte buffer
+
+  mov rdi, qword[r12+BYTE_BUFFER_DATA_LENGTH_OFFSET]
+  sub rdi, 8
+  mov qword[r12+BYTE_BUFFER_DATA_LENGTH_OFFSET], rdi
+
+  mov rcx, qword[r12+BYTE_BUFFER_BUF_OFFSET] ; pointer to backing buffer
+  mov rax, qword[rcx+rdi]
+  pop r12
+  ret
+
+;;; byte_buffer_pop_bytes(*byte_buffer, byte_count)
+;;;   Removes byte_count bytes off the end of the buffer.
+;;;
+;;;   Returns a pointer to the removed segment. Writing to
+;;;   the byte buffer invalidates the returned pointer (copy the data
+;;;   if you need to keep it).
+fn_byte_buffer_pop_bytes:
+  push r12
+  push r13
+  push r14
+  mov r12, rdi ; byte buffer
+  mov r13, rsi ; byte count
+  mov r14, rdx ; output buffer
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call fn_assert_stack_aligned
+  %endif
+
+  sub qword[r12+BYTE_BUFFER_DATA_LENGTH_OFFSET], r13
+
+  mov rax, qword[r12+BYTE_BUFFER_BUF_OFFSET] ; buffer pointer
+  add rax, qword[r12+BYTE_BUFFER_DATA_LENGTH_OFFSET]
+  pop r14
+  pop r13
+  pop r12
+  ret
+
+;;; TODO is this a duplicate of write-contents?
+;;; if not, document the differences more clearly.
+;;;
 ;;; byte_buffer_dump_buffer(*byte_buffer, fd)
 ;;;   Writes the contents of the buffer to fd
 fn_byte_buffer_dump_buffer:
