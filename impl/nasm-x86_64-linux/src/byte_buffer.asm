@@ -17,6 +17,7 @@ global fn_byte_buffer_peek_int64
 global fn_byte_buffer_dump_buffer
 global fn_byte_buffer_bindump_buffer
 global fn_byte_buffer_write_contents
+global fn_byte_buffer_delete_bytes
 
 extern fn_malloc
 extern fn_realloc
@@ -219,6 +220,38 @@ fn_byte_buffer_push_byte:
   add rsp, 8
   pop r13
   pop r12
+  ret
+
+;;; byte_buffer_delete_bytes(*byte_buffer, index, length)
+;;;   Deletes length bytes at index in the byte buffer.
+fn_byte_buffer_delete_bytes:
+  mov r8, qword[rdi+BYTE_BUFFER_DATA_LENGTH_OFFSET] ; r8 = data length
+  mov r9, qword[rdi+BYTE_BUFFER_BUF_OFFSET]         ; r9 = buf ptr
+
+  mov r10, rsi ; r10 = index
+  add r10, rdx ; + length
+  .shift:
+    cmp r10, r8
+    jge .shift_break ; done if index+length >= data length
+
+    mov cl, byte[r9+r10]
+    mov byte[r9+rsi], cl ; buf[index] = buf[index+length]
+
+    inc rsi
+    inc r10
+    jmp .shift
+
+  .shift_break:
+
+  sub r8, rdx ; subtract from total data length
+
+  ;; If that was less than zero, make it zero
+  cmp r8, 0
+  mov rcx, 0
+  cmovl r8, rcx
+
+  mov qword[rdi+BYTE_BUFFER_DATA_LENGTH_OFFSET], r8
+
   ret
 
 ;;; byte_buffer_read_int64(*byte_buffer, index)

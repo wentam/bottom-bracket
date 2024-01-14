@@ -84,7 +84,9 @@ the tree.
   implement hex literals
 * example programs to provide: hello world, macroexpansion html generator, writing
   in machine language via hex literals, a macro who's output depends on user input at
-  build time (via stdin? gui?)
+  build time (via stdin? gui?), producing a binary file with the printer by
+  disabling the byte-string syntax then reading it back in with the reader by
+  changing the reader rules
 * There is nothing special about 'asm'. Macros are not defined in terms of
   assembly, but machine code. 'asm' is just a macro that resolves to a barray
   of machine code.

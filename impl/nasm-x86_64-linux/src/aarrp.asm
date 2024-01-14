@@ -48,6 +48,7 @@ extern macro_stack_push
 extern macro_stack_pop
 extern macro_stack_peek
 extern macro_stack_bindump_buffers
+extern fn_byte_buffer_delete_bytes
 
 section .rodata
 
