@@ -222,6 +222,7 @@ fn_byte_buffer_push_byte:
   pop r12
   ret
 
+;;; TODO: if length hangs off RHS we subtract too much from data length
 ;;; byte_buffer_delete_bytes(*byte_buffer, index, length)
 ;;;   Deletes length bytes at index in the byte buffer.
 fn_byte_buffer_delete_bytes:

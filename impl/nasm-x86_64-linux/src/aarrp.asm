@@ -41,6 +41,7 @@ extern fn_free_read_result
 extern fn_dump_read_result_buffer
 extern fn_dump_read_result
 extern fn_print
+extern fn_barray_equalp
 
 extern macro_stack_new
 extern macro_stack_free
@@ -73,6 +74,8 @@ test_macro_code: db 11,0,0,0,0,0,0,0,"code-stuffs"
 
 test_macro_name_2: db 3,0,0,0,0,0,0,0,"bar"
 test_macro_code_2: db 11,0,0,0,0,0,0,0,"aaaaaaaaaaa"
+
+test_macro_name_3: db 3,0,0,0,0,0,0,0,"foo"
 
 section .text
 
