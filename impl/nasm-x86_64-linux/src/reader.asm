@@ -1,5 +1,6 @@
 section .text
 global fn_read
+global fn__read ; for reader macros
 global fn_free_read_result
 global fn_dump_read_result_buffer
 global fn_dump_read_result

@@ -45,9 +45,10 @@ extern fn_barray_equalp
 
 extern init_macro_stacks
 extern free_macro_stacks
-extern macro_stack_normal
 
 ;; TODO tmp
+extern macro_stack_normal
+extern macro_stack_reader
 extern macro_stack_new
 extern macro_stack_free
 extern macro_stack_push
@@ -107,7 +108,6 @@ _start:
 
   call init_macro_stacks
 
-
   mov rdi, qword[macro_stack_normal]
   mov rsi, test_macro_name
   mov rdx, test_macro_code
@@ -133,7 +133,7 @@ _start:
   mov rsi, stdout_fd
   call fn_write_char
 
-  mov rdi, qword[macro_stack_normal]
+  mov rdi, qword[macro_stack_reader]
   mov rsi, stderr_fd
   mov rdx, 16
   call macro_stack_bindump_buffers

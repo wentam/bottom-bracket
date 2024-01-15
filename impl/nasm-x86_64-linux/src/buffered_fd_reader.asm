@@ -3,6 +3,19 @@
 ;;;; Reads from an fd in a buffered fashion - and allows 'peeking' at the next
 ;;;; char.
 
+;;; TODO: maybe this should allow you to ask for a specific length
+;;; of lookahead/lookbehind providing a nice APi for that.
+;;;
+;;; Could ask for 1024 ahead/behind at construction time for
+;;; example.
+;;;
+;;; Would probably be best to implement as a circular buffer
+;;; with a single pointer.
+;;;
+;;; This matters because this is probably going to become a public
+;;; interface to reader macros.
+
+
 section .text
 global fn_buffered_fd_reader_new
 global fn_buffered_fd_reader_free
