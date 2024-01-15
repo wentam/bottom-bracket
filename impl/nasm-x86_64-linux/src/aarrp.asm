@@ -49,6 +49,8 @@ extern macro_stack_push
 extern macro_stack_pop
 extern macro_stack_peek
 extern macro_stack_bindump_buffers
+extern macro_stack_peek_by_name
+extern macro_stack_pop_by_name
 extern fn_byte_buffer_delete_bytes
 
 section .rodata
@@ -75,7 +77,7 @@ test_macro_code: db 11,0,0,0,0,0,0,0,"code-stuffs"
 test_macro_name_2: db 3,0,0,0,0,0,0,0,"bar"
 test_macro_code_2: db 11,0,0,0,0,0,0,0,"aaaaaaaaaaa"
 
-test_macro_name_3: db 3,0,0,0,0,0,0,0,"foo"
+test_macro_name_3: db 4,0,0,0,0,0,0,0,"fooo"
 
 section .text
 
@@ -112,13 +114,19 @@ _start:
   call macro_stack_push
 
   mov rdi, r12
-  call macro_stack_peek
+  mov rsi, test_macro_name
+  call macro_stack_pop_by_name
 
   ;;mov rdi, rax
   ;;mov rsi, 32
   ;;mov rdx, stderr_fd
   ;;mov rcx, 16
   ;;call fn_bindump
+
+  ;; Newline
+  mov rdi, 10
+  mov rsi, stdout_fd
+  call fn_write_char
 
   mov rdi, r12
   mov rsi, stderr_fd

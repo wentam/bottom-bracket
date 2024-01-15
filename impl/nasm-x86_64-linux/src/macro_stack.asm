@@ -3,9 +3,9 @@ global macro_stack_new
 global macro_stack_free
 global macro_stack_push
 global macro_stack_pop
-global macro_stack_pop_by_name ; TODO
+global macro_stack_pop_by_name
 global macro_stack_peek
-global macro_stack_peek_by_name ; TODO
+global macro_stack_peek_by_name
 global macro_stack_bindump_buffers
 
 extern fn_malloc
@@ -22,7 +22,9 @@ extern fn_byte_buffer_pop_bytes
 extern fn_byte_buffer_pop_int64
 extern fn_byte_buffer_read_int64
 extern fn_byte_buffer_peek_int64
+extern fn_byte_buffer_delete_bytes
 
+extern fn_barray_equalp
 extern fn_write_char
 extern fn_write_as_base
 extern fn_bindump
@@ -247,6 +249,108 @@ macro_stack_peek:
   call fn_byte_buffer_peek_int64
   add rax, r13
   add rsp, 8
+  pop r13
+  pop r12
+  ret
+
+;;; macro_stack_pop_by_name(*macro_stack,*name_barray)
+;;;   Removes the most recently pushed macro that matches the name barray.
+;;;
+;;;   Returns nothing.
+;;;
+;;;   If no macros are found by the given name, returns 0 (NULL)
+macro_stack_pop_by_name:
+  push r12
+  push r13
+  push r14
+  mov r13, rdi ; macro stack
+
+  ;mov rdi, rdi
+  ;mov rsi, rsi
+  call macro_stack_peek_by_name
+  mov r12, rax
+
+  mov rdi, qword[r13+MACRO_STACK_DBUFFER_OFFSET]
+  call fn_byte_buffer_get_buf
+  mov r14, rax
+
+  mov rdi, qword[r13+MACRO_STACK_DBUFFER_OFFSET]
+
+  mov rdx, qword[r12]
+  add rdx, qword[r12+rdx+8]
+  add rdx, 16
+
+  mov rsi, r12       ; index
+  sub rsi, r14
+  call fn_byte_buffer_delete_bytes
+  pop r14
+  pop r13
+  pop r12
+  ret
+
+;;; macro_stack_peek_by_name(*macro_stack,*name_barray) -> *macro_definition
+;;;   Finds the most recently pushed macro that matches the name barray.
+;;;
+;;;   Returns a pointer to the macro definition. Any push or pop_by_name
+;;;   to the macro stack invalidates the returned pointer.
+;;;
+;;;   If no macros are found by the given name, returns 0 (NULL)
+macro_stack_peek_by_name:
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+
+  mov r12, rdi ; macro stack struct
+  mov r13, rsi ; name barray
+
+  mov r14, qword[r12+MACRO_STACK_PBUFFER_OFFSET] ; pbuffer
+
+  ;; Get dbuffer buf
+  mov rdi, qword[r12+MACRO_STACK_DBUFFER_OFFSET]
+  call fn_byte_buffer_get_buf
+  mov rbx, rax
+
+  ;; Get pbuffer data length
+  mov rdi, r14
+  call fn_byte_buffer_get_data_length
+  mov r12, rax
+
+  ;; Work our way backwards through the pbuffer until we find a matching
+  ;; name
+  .find_name_loop:
+  cmp r12, 0
+  je .find_name_loop_nomatch
+
+  sub r12, 8
+
+  mov rdi, r14
+  mov rsi, r12
+  call fn_byte_buffer_read_int64
+  mov r15, rax
+  add r15, rbx
+
+  mov rdi, r15
+  mov rsi, r13
+  call fn_barray_equalp
+  cmp rax, 1
+  je .find_name_loop_match
+
+  jmp .find_name_loop
+
+  .find_name_loop_nomatch:
+  mov rax, 0
+  jmp .epilogue
+
+  .find_name_loop_match:
+  mov rax, r15
+  ;jmp .epilogue
+
+  .epilogue:
+  pop rbx
+  pop r15
+  pop r14
   pop r13
   pop r12
   ret
