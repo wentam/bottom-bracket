@@ -93,6 +93,9 @@ the tree.
 * 'asm' should probably be broken down into something more specific - such as
   `(x86\_64-elf-asm (code))` - or ideally `(elf (section .text (x86\_64-asm (code))))` if
   those concerns can be separated
+* [ and ] could be a 'flat array' (farray) where byte arrays are placed flat
+  in the array instead of as pointers
+* macroexpander macros?
 
 # Problems to think about
 

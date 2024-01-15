@@ -34,6 +34,14 @@ section .rodata
 
 section .text
 
+;;; TODO should you 'push' a macro definition struct instead?
+;;; Seems like that might be a more consistant interface,
+;;; but maybe harder to use. Needs to be thought about carefully as
+;;; this is a public interface.
+;;;
+;;; TODO should the macro definition code optionally be a pointer specified
+;;; as [-length, ptr]? Sometimes there's no reason to copy the macro
+
 ;;; struct macro_definition {
 ;;;   size_t  name_length
 ;;;   char    name[name_length] // flat in struct

@@ -43,6 +43,11 @@ extern fn_dump_read_result
 extern fn_print
 extern fn_barray_equalp
 
+extern init_macro_stacks
+extern free_macro_stacks
+extern macro_stack_normal
+
+;; TODO tmp
 extern macro_stack_new
 extern macro_stack_free
 extern macro_stack_push
@@ -100,22 +105,22 @@ _start:
   call fn_assert_stack_aligned
   %endif
 
-  call macro_stack_new
-  mov r12, rax
+  call init_macro_stacks
 
-  mov rdi, r12
+
+  mov rdi, qword[macro_stack_normal]
   mov rsi, test_macro_name
   mov rdx, test_macro_code
   call macro_stack_push
 
-  mov rdi, r12
+  mov rdi, qword[macro_stack_normal]
   mov rsi, test_macro_name_2
   mov rdx, test_macro_code_2
   call macro_stack_push
 
-  mov rdi, r12
-  mov rsi, test_macro_name
-  call macro_stack_pop_by_name
+  ;;mov rdi, qword[macro_stack_normal]
+  ;;mov rsi, test_macro_name
+  ;;call macro_stack_pop_by_name
 
   ;;mov rdi, rax
   ;;mov rsi, 32
@@ -128,13 +133,10 @@ _start:
   mov rsi, stdout_fd
   call fn_write_char
 
-  mov rdi, r12
+  mov rdi, qword[macro_stack_normal]
   mov rsi, stderr_fd
   mov rdx, 16
   call macro_stack_bindump_buffers
-
-  mov rdi, r12
-  call macro_stack_free
 
   ;;mov rdi, stdin_fd
   ;;call fn_read
@@ -176,6 +178,8 @@ _start:
   mov rdi, 10
   mov rsi, stdout_fd
   call fn_write_char
+
+  call free_macro_stacks
 
   mov rdi, 0
   call fn_exit
