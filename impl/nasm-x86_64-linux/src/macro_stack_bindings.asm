@@ -13,8 +13,6 @@ extern macro_stack_new
 extern macro_stack_free
 extern fn_assert_stack_aligned
 
-section .rodata
-
 section .bss
 
 macro_stack_normal: resq 1
@@ -22,13 +20,6 @@ macro_stack_reader: resq 1
 macro_stack_printer: resq 1
 
 section .text
-
-;;; struct macro_definition {
-;;;   size_t  name_length
-;;;   char    name[name_length] // flat in struct
-;;;   size_t  code_length;
-;;;   char    code[code_length] // flat in struct
-;;; }
 
 ;;; init_macro_stacks()
 ;;;   Initializes macro stacks. Do this before using any of the below bindings.
