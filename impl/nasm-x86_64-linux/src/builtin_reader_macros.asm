@@ -100,17 +100,6 @@ parray_literal:
   mov r12, rdi ; Preserve buffered reader
   mov r14, rsi ; Preserve output buffer
 
-  mov rdi, 'a'
-  mov rsi, 2
-  mov rax, fn_write_char
-  call rax
-  mov rdi, 10
-  mov rsi, 2
-  mov rax, fn_write_char
-  call rax
-
-
-
   ;; Consume the leading '(' TODO assert that it is actually '('
   mov rdi, r12
   mov rax, fn_buffered_fd_reader_read_byte

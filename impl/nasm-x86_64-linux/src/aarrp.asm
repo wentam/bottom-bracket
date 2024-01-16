@@ -70,6 +70,10 @@ stderr_fd: equ 2
 welcome_msg:      db  "Welcome!",10
 welcome_msg_len:  equ $ - welcome_msg
 
+
+readermac_msg: db 10,"Reader macro stack",10,"--------",10
+readermac_msg_len: equ $ - readermac_msg
+
 buffer_msg: db 10,"Read result backing buffer",10,"--------",10
 buffer_msg_len: equ $ - buffer_msg
 
@@ -97,6 +101,9 @@ section .text
 ;; TODO: rather than error outright, the reader should generate error codes for things like unexpected EOF for us to handle here
 ;; TODO: use nasm's local labels (leading .)
 ;; TODO: remove fn_ function prefixes, see if there are any other namespacing tools available that don't mess with C interop in a weird way.
+;; TODO: use enter/leave psuedo-instructions? This uses the base pointer,
+;; which may actually be more efficient as we don't need to pop one-by-one
+;; at the end of each function
 _start:
   ;; Output welcome string to stderr
   ;;mov rdi, welcome_msg
@@ -129,6 +136,11 @@ _start:
   ;;mov rsi, stdout_fd
   ;;call fn_write_char
 
+  mov rdi, readermac_msg
+  mov rsi, readermac_msg_len
+  mov rdx, stderr_fd
+  call fn_write
+
   mov rdi, qword[macro_stack_reader]
   mov rsi, stderr_fd
   mov rdx, 16
@@ -140,29 +152,28 @@ _start:
 
   mov rdi, buffer_msg
   mov rsi, buffer_msg_len
-  mov rdx, stdout_fd
+  mov rdx, stderr_fd
   call fn_write
 
   mov rdi, r12
-  mov rsi, stdout_fd
+  mov rsi, stderr_fd
   mov rdx, 16
   call fn_dump_read_result_buffer
 
   mov rdi, result_msg
   mov rsi, result_msg_len
-  mov rdx, stdout_fd
+  mov rdx, stderr_fd
   call fn_write
 
   mov rdi, r12
-  mov rsi, stdout_fd
+  mov rsi, stderr_fd
   mov rdx, 16
   call fn_dump_read_result
 
   mov rdi, print_msg
   mov rsi, print_msg_len
-  mov rdx, stdout_fd
+  mov rdx, stderr_fd
   call fn_write
-
 
   mov rdi, r12
   mov rsi, stdout_fd
@@ -173,7 +184,7 @@ _start:
 
   ;; Newline
   mov rdi, 10
-  mov rsi, stdout_fd
+  mov rsi, stderr_fd
   call fn_write_char
 
   call free_macro_stacks

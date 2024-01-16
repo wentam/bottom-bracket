@@ -49,7 +49,7 @@ section .text
 %define BYTE_BUFFER_BUF_LENGTH_OFFSET 8
 %define BYTE_BUFFER_BUF_OFFSET 16
 
-%define BYTE_BUFFER_START_SIZE 16 ; Must be a power of 2
+%define BYTE_BUFFER_START_SIZE 256 ; Must be a power of 2
 
 ;;; byte_buffer_new()
 ;;;   Creates a new byte buffer

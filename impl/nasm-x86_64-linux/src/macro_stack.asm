@@ -398,7 +398,7 @@ macro_stack_call_by_name:
   call rax
 
   mov rdx, 1
-  .epilogue
+  .epilogue:
   pop r14
   pop r13
   pop r12
