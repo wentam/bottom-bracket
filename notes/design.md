@@ -37,9 +37,9 @@ barrays are represented with a size\_t positive length of the array,
 followed by a byte for each element, hence the barray `foo` is
 `[3,'f','o','o']` in memory.
 
-parrays are represented with a size\_t negative length of the array,
-followed by size\_t pointers for each element, hence the parray
-`(foo bar baz)` is `[-3,*ptr,*ptr,*ptr]` in memory.
+parrays are represented with a size\_t one's complement length of the
+array, followed by size\_t pointers for each element, hence the parray
+`(foo bar baz)` is `[-4,*ptr,*ptr,*ptr]` in memory.
 
 Where 'a' is the character encoded number for the letter 'a' (97 in ASCII).
 

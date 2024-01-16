@@ -195,7 +195,7 @@ fn__relative_to_abs:
   cmp r15, 0
   jge _relative_to_abs_epilogue
 
-  neg r15 ; Make parray length positive
+  not r15 ; Make parray length positive
 
   ;; If this is an parray, recursively convert
   add r12, 8 ; move past parray length
@@ -251,6 +251,8 @@ fn__read:
 
   ;; Try to call a reader macro by this char's name
   ;; TODO support multi-char reader macros
+  ;; TODO if a catchall macro exists ahead of a named one, it should probably
+  ;; shadow all other macros
   push rax
   mov rcx, 1
   push rcx
@@ -350,7 +352,7 @@ fn_dump_read_result:
   jmp _length_calculated
 
   _parray_buf:
-  neg rax ; parray lengths are negative, make it positive
+  not rax ; parray lengths are negative one's complement, make it positive
   add r15, 8 ; the length itself
   imul rax, 8
   add r15, rax
@@ -393,7 +395,7 @@ fn__get_byte_buf_from_read_result:
   jmp get_byte_buf_epilogue
 
   parray_buf:
-  neg rax ; parray lengths are negative, invert
+  not rax ; parray lengths are negative one's complement, invert
   add r12, 8 ; move past the length
   imul rax, 8
   mov rax, qword[r12+rax]

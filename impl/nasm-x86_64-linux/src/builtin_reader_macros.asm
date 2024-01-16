@@ -170,7 +170,6 @@ parray_literal:
 
   .done:
 
-
   ;; Consume the trailing ')'
   mov rdi, r12
   mov rax, fn_buffered_fd_reader_read_byte
@@ -182,7 +181,7 @@ parray_literal:
   ;; Write the parray length
   mov rdi, r14
   mov rsi, r15
-  neg rsi ; Negate rsi as parrays should use -length
+  not rsi ; Negate rsi as parrays should use one's complement -length
   mov rax, fn_byte_buffer_push_int64
   call rax
 

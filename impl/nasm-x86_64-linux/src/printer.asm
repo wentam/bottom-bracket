@@ -25,7 +25,7 @@ fn_print:
   cmp r15, 0
   jge aprint_barray
 
-  neg r15
+  not r15
 
   add r12, 8 ; Move past parray length
 
