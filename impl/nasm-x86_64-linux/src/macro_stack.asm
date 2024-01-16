@@ -7,6 +7,7 @@ global macro_stack_pop_by_name
 global macro_stack_peek
 global macro_stack_peek_by_name
 global macro_stack_bindump_buffers
+global macro_stack_call_by_name ; TODO
 
 extern fn_malloc
 extern fn_free
@@ -266,7 +267,7 @@ macro_stack_peek:
 ;;;
 ;;;   Returns nothing.
 ;;;
-;;;   If no macros are found by the given name, returns 0 (NULL)
+;;;   TODO If no macros are found by the given name, returns 0 (NULL)
 macro_stack_pop_by_name:
   push r12
   push r13
@@ -313,6 +314,10 @@ macro_stack_peek_by_name:
   mov r12, rdi ; macro stack struct
   mov r13, rsi ; name barray
 
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call fn_assert_stack_aligned
+  %endif
+
   mov r14, qword[r12+MACRO_STACK_PBUFFER_OFFSET] ; pbuffer
 
   ;; Get dbuffer buf
@@ -358,6 +363,42 @@ macro_stack_peek_by_name:
   .epilogue:
   pop rbx
   pop r15
+  pop r14
+  pop r13
+  pop r12
+  ret
+
+;;; macro_stack_call_by_name(*macro_stack, *name_barray, arg1, arg2, arg3)
+;;;   Calls a macro in the macro stack by name. Returns the macro's
+;;;   return value.
+;;;
+;;;   If the macro existed and we called it, rdx will be 1 at return. Else 0.
+;;;
+;;;   TODO support more than 3 arguments via stack?
+macro_stack_call_by_name:
+  push r12
+  push r13
+  push r14
+  mov r12, rdx
+  mov r13, rcx
+  mov r14, r8
+
+  call macro_stack_peek_by_name
+  mov rdx, 0
+  cmp rax, 0
+  je .epilogue
+  mov rcx, qword[rax] ; rdi = name length
+
+  mov rdi, r12
+  mov rsi, r13
+  mov rdx, r14
+
+  add rax, rcx ; macro_definition+name length
+  add rax, 16  ; + width of both length integers
+  call rax
+
+  mov rdx, 1
+  .epilogue
   pop r14
   pop r13
   pop r12

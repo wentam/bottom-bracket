@@ -33,6 +33,9 @@ extern fn_byte_buffer_get_data_length
 extern fn_byte_buffer_get_buf
 extern fn_byte_buffer_bindump_buffer
 
+extern macro_stack_call_by_name
+extern macro_stack_reader
+
 section .rodata
 ;;; Syscall numbers
 sys_write: equ 0x01
@@ -243,24 +246,34 @@ fn__read:
   je __read_unexpected_eof
 
   ;; If we got a parray end, error
-  cmp rax, ')'
-  je __read_unexpected_closing_paren
+  ;;cmp rax, ')'
+  ;;je __read_unexpected_closing_paren
+  ;; TODO recreate this error in barray parser/reader macro?
+  ;; doesn't make sense here now that we're macro-based
 
-  ;; Prepare arguments for _read_parray/_read_barray
+  ;; Try to call a reader macro by this char's name
+  ;; TODO support multi-char reader macros
+  push rax
+  mov rcx, 1
+  push rcx
+  mov rdx, r12
+  mov rcx, r14
+  mov rdi, qword[macro_stack_reader]
+  mov rsi, rsp
+  call macro_stack_call_by_name
+  pop rcx
+  pop rcx
+
+  cmp rdx, 0
+  jne __read_epilogue
+
+  ;; Prepare arguments for _read_barray
   mov rdi, r12
   mov rsi, r14
-
-  ;; If it looks like a parray take parray codepath, else barray codepath
-  cmp rax, '('
-  je __read_parray
 
   __read_barray:
   call fn__read_barray
   jmp __read_epilogue ; Return. rax is already a pointer to the barray.
-
-  __read_parray:
-  call fn__read_parray
-  jmp __read_epilogue ; Return; rax is already a pointer to the parray
 
   __read_unexpected_eof:
   mov rdi, unexpected_eof_str
@@ -273,6 +286,7 @@ fn__read:
   call fn_error_exit
 
   __read_epilogue:
+
   add rsp, 8
   pop r15
   pop r14

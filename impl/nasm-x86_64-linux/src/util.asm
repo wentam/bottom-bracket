@@ -21,6 +21,7 @@ stderr_fd: equ 2
 %define MAP_PRIVATE    0x02
 %define PROT_READ      0x1
 %define PROT_WRITE     0x2
+%define PROT_EXEC     0x4
 %define MREMAP_MAYMOVE 0x1
 
 section .text
@@ -137,7 +138,9 @@ fn_malloc:
   add rdi, 8        ; Make room for our metadata
   mov rsi, rdi      ; length
   mov rdi, 0        ; addr (NULL)
-  mov rdx, (PROT_READ | PROT_WRITE)      ; protection flags
+  ;; TODO: don't exec by default, set up a path such that macro allocations
+  ;; can ask for executable
+  mov rdx, (PROT_READ | PROT_WRITE | PROT_EXEC) ; protection flags
   mov r10, (MAP_PRIVATE | MAP_ANONYMOUS) ; flags
   mov r8,  -1       ; fd. -1 for portability with MAP_ANONYMOUS
   mov r9,  0        ; offset

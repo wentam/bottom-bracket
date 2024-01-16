@@ -58,6 +58,8 @@ extern macro_stack_bindump_buffers
 extern macro_stack_peek_by_name
 extern macro_stack_pop_by_name
 extern fn_byte_buffer_delete_bytes
+extern barray_new
+extern parray_literal
 
 section .rodata
 
@@ -108,71 +110,66 @@ _start:
 
   call init_macro_stacks
 
-  mov rdi, qword[macro_stack_normal]
-  mov rsi, test_macro_name
-  mov rdx, test_macro_code
-  call macro_stack_push
+  ;;mov rdi, qword[macro_stack_normal]
+  ;;mov rsi, test_macro_name
+  ;;mov rdx, test_macro_code
+  ;;call macro_stack_push
 
-  mov rdi, qword[macro_stack_normal]
-  mov rsi, test_macro_name_2
-  mov rdx, test_macro_code_2
-  call macro_stack_push
+  ;;mov rdi, qword[macro_stack_normal]
+  ;;mov rsi, test_macro_name_2
+  ;;mov rdx, test_macro_code_2
+  ;;call macro_stack_push
 
   ;;mov rdi, qword[macro_stack_normal]
   ;;mov rsi, test_macro_name
   ;;call macro_stack_pop_by_name
 
-  ;;mov rdi, rax
-  ;;mov rsi, 32
-  ;;mov rdx, stderr_fd
-  ;;mov rcx, 16
-  ;;call fn_bindump
-
   ;; Newline
-  mov rdi, 10
-  mov rsi, stdout_fd
-  call fn_write_char
+  ;;mov rdi, 10
+  ;;mov rsi, stdout_fd
+  ;;call fn_write_char
 
   mov rdi, qword[macro_stack_reader]
   mov rsi, stderr_fd
   mov rdx, 16
   call macro_stack_bindump_buffers
 
-  ;;mov rdi, stdin_fd
-  ;;call fn_read
-  ;;mov r12, rax
+  mov rdi, stdin_fd
+  call fn_read
+  mov r12, rax
 
-  ;;mov rdi, buffer_msg
-  ;;mov rsi, buffer_msg_len
-  ;;mov rdx, stdout_fd
-  ;;call fn_write
+  mov rdi, buffer_msg
+  mov rsi, buffer_msg_len
+  mov rdx, stdout_fd
+  call fn_write
 
-  ;;mov rdi, r12
-  ;;mov rsi, stdout_fd
-  ;;mov rdx, 16
-  ;;call fn_dump_read_result_buffer
+  mov rdi, r12
+  mov rsi, stdout_fd
+  mov rdx, 16
+  call fn_dump_read_result_buffer
 
-  ;;mov rdi, result_msg
-  ;;mov rsi, result_msg_len
-  ;;mov rdx, stdout_fd
-  ;;call fn_write
+  mov rdi, result_msg
+  mov rsi, result_msg_len
+  mov rdx, stdout_fd
+  call fn_write
 
-  ;;mov rdi, r12
-  ;;mov rsi, stdout_fd
-  ;;mov rdx, 16
-  ;;call fn_dump_read_result
+  mov rdi, r12
+  mov rsi, stdout_fd
+  mov rdx, 16
+  call fn_dump_read_result
 
-  ;;mov rdi, print_msg
-  ;;mov rsi, print_msg_len
-  ;;mov rdx, stdout_fd
-  ;;call fn_write
+  mov rdi, print_msg
+  mov rsi, print_msg_len
+  mov rdx, stdout_fd
+  call fn_write
 
-  ;;mov rdi, r12
-  ;;mov rsi, stdout_fd
-  ;;call fn_print
 
-  ;;mov rdi, r12
-  ;;call fn_free_read_result
+  mov rdi, r12
+  mov rsi, stdout_fd
+  call fn_print
+
+  mov rdi, r12
+  call fn_free_read_result
 
   ;; Newline
   mov rdi, 10

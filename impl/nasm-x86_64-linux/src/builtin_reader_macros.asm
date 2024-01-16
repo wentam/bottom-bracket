@@ -41,6 +41,12 @@ extern barray_new
 extern fn_free
 extern fn_bindump
 
+extern fn_write_char
+extern fn_write_as_base
+
+;; TODO tmp
+global parray_literal
+
 section .rodata
 
 parray_literal_macro_name: db 1,0,0,0,0,0,0,0,"("
@@ -87,21 +93,35 @@ parray_literal:
   mov rbp, rsp
 
   %ifdef ASSERT_STACK_ALIGNMENT
-  call fn_assert_stack_aligned
+  mov rax, fn_assert_stack_aligned
+  call rax
   %endif
 
   mov r12, rdi ; Preserve buffered reader
   mov r14, rsi ; Preserve output buffer
 
+  mov rdi, 'a'
+  mov rsi, 2
+  mov rax, fn_write_char
+  call rax
+  mov rdi, 10
+  mov rsi, 2
+  mov rax, fn_write_char
+  call rax
+
+
+
   ;; Consume the leading '(' TODO assert that it is actually '('
   mov rdi, r12
-  call fn_buffered_fd_reader_read_byte
+  mov rax, fn_buffered_fd_reader_read_byte
+  call rax
 
   mov r15, 0 ; child counter
   .children:
   ;; Consume all whitespace
   mov rdi, r12
-  call fn_buffered_fd_reader_consume_leading_whitespace
+  mov rax, fn_buffered_fd_reader_consume_leading_whitespace
+  call rax
 
   ;; Peek the next char (consume whitespace also peeks). If it's ')' we're done.
   cmp rax, ')'
@@ -113,14 +133,16 @@ parray_literal:
 
   mov rdi, unexpected_eof_parray_str
   mov rsi, unexpected_eof_parray_str_len
-  call fn_error_exit
+  mov rax, fn_error_exit
+  call rax
 
   .no_eof:
 
   ;; Read a child
   mov rdi, r12
   mov rsi, r14
-  call fn__read
+  mov rax, fn__read
+  call rax
 
   ;; Push a (relative) pointer to this child onto the stack
   sub rsp, 8
@@ -132,9 +154,11 @@ parray_literal:
 
   .done:
 
+
   ;; Consume the trailing ')'
   mov rdi, r12
-  call fn_buffered_fd_reader_read_byte
+  mov rax, fn_buffered_fd_reader_read_byte
+  call rax
 
   ;; Zero rbx to start tracking parray size in bytes
   xor rbx, rbx
@@ -143,7 +167,8 @@ parray_literal:
   mov rdi, r14
   mov rsi, r15
   neg rsi ; Negate rsi as parrays should use -length
-  call fn_byte_buffer_push_int64
+  mov rax, fn_byte_buffer_push_int64
+  call rax
 
   add rbx, 8 ; 8 bytes for parray length
 
@@ -162,7 +187,8 @@ parray_literal:
   mov rsi, qword[rcx]
 
   mov rdi, r14
-  call fn_byte_buffer_push_int64
+  mov rax, fn_byte_buffer_push_int64
+  call rax
 
   add rbx, 8 ; 8 bytes for pointer
 
@@ -175,7 +201,8 @@ parray_literal:
 
   ;; Set rax to a relative pointer to the start of the parray
   mov rdi, r14
-  call fn_byte_buffer_get_data_length
+  mov rax, fn_byte_buffer_get_data_length
+  call rax
   sub rax, rbx
 
   pop rbp
