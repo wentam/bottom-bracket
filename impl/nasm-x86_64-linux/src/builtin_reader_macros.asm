@@ -40,19 +40,32 @@ extern fn_assert_stack_aligned
 extern barray_new
 extern fn_free
 extern fn_bindump
+extern fn_buffered_fd_reader_peek_byte
+extern fn_byte_buffer_push_byte
+extern fn_byte_buffer_get_buf
 
 extern fn_write_char
 extern fn_write_as_base
-
-;; TODO tmp
-global parray_literal
 
 section .rodata
 
 parray_literal_macro_name: db 1,0,0,0,0,0,0,0,"("
 
+;; TODO once we have multi-char reader macros
+;; this may cause name conflicts
+barray_literal_macro_name: db 8,0,0,0,0,0,0,0,"catchall"
+
 unexpected_eof_parray_str: db "ERROR: Unexpected EOF while reading parray (are your parenthesis mismatched?)",10
 unexpected_eof_parray_str_len: equ $ - unexpected_eof_parray_str
+
+unexpected_eof_barray_str: db "ERROR: Unexpected EOF while reading barray",10
+unexpected_eof_barray_str_len: equ $ - unexpected_eof_barray_str
+
+unexpected_paren_str: db "ERROR: Unexpected ')' while reading",10
+unexpected_paren_str_len: equ $ - unexpected_paren_str
+
+%define NEWLINE 10
+%define TAB 9
 
 section .text
 
@@ -73,6 +86,20 @@ push_builtin_reader_macros:
 
   mov rdi, qword[macro_stack_reader] ; macro stack
   mov rsi, parray_literal_macro_name ; macro name
+  mov rdx, r12                       ; code barray
+  call macro_stack_push
+
+  mov rdi, r12
+  call fn_free
+
+  ;; push barray literal macro
+  mov rdi, (barray_literal_end - barray_literal)
+  mov rsi, barray_literal
+  call barray_new
+  mov r12, rax
+
+  mov rdi, qword[macro_stack_reader] ; macro stack
+  mov rsi, barray_literal_macro_name ; macro name
   mov rdx, r12                       ; code barray
   call macro_stack_push
 
@@ -201,3 +228,117 @@ parray_literal:
   pop r12
   ret
 parray_literal_end: ;; Needed to calculate length for macro stack
+
+;;; barray_literal(*buffered_fd_reader, *output_byte_buffer) -> buf-relative-ptr
+;;;   Reader macro for barray literals.
+barray_literal:
+  push r12
+  push r14
+  push r15
+  push rbx
+  push r13
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  mov rax, fn_assert_stack_aligned
+  call rax
+  %endif
+
+  mov r12, rdi ; Preserve buffered reader
+  mov r14, rsi ; Preserve output buffer
+
+  ;; Consume all the leading whitespace
+  mov rdi, r12
+  mov rax, fn_buffered_fd_reader_consume_leading_whitespace
+  call rax
+
+  cmp rax, ')'
+  jne .no_closeparen
+
+  mov rdi, unexpected_paren_str
+  mov rsi, unexpected_paren_str_len
+  mov rax, fn_error_exit
+  call rax
+
+  .no_closeparen
+
+  cmp rax, BUFFERED_READER_EOF
+  jne __read_barray_no_eof
+
+  mov rdi, unexpected_eof_barray_str
+  mov rsi, unexpected_eof_barray_str_len
+  mov rax, fn_error_exit
+  call rax
+
+  __read_barray_no_eof:
+
+  ;; Write length placeholder
+  mov rdi, r14
+  mov rsi, 0
+  mov rax, fn_byte_buffer_push_int64
+  call rax
+
+  ;; Read characters until the end of the barray
+  mov rbx, 0 ;; char counter
+  __read_barray_char:
+  ;; Peek the next char - if it's '(', ')' or whitespace, we're done.
+  ;; We cannot consume because consuming '(' or ')' would be damaging.
+  mov rdi, r12 ; buffered reader
+  mov rax, fn_buffered_fd_reader_peek_byte
+  call rax
+  cmp rax, ')'
+  je __read_barray_finish
+  cmp rax, '('
+  je __read_barray_finish
+  cmp rax, ' '
+  je __read_barray_finish
+  cmp rax, BUFFERED_READER_EOF
+  je __read_barray_finish
+  cmp rax, NEWLINE
+  je __read_barray_finish
+  cmp rax, TAB
+  je __read_barray_finish
+
+  ;; Read the next char
+  mov rdi, r12
+  mov rax, fn_buffered_fd_reader_read_byte
+  call rax
+  mov r15, rax
+
+  ;; Output this char to the buffer
+  mov rdi, r14
+  mov rsi, r15
+  mov rax, fn_byte_buffer_push_byte
+  call rax
+
+  inc rbx
+
+  ;; Repeat
+  jmp __read_barray_char
+
+  __read_barray_finish:
+  ;; Update barray length placeholder
+
+  mov rdi, r14
+  mov rax, fn_byte_buffer_get_data_length ; Get data length
+  call rax
+  mov r12, rax
+
+  mov rdi, r14
+  mov rax, fn_byte_buffer_get_buf         ; Get data
+  call rax
+  mov r13, rax
+  add rax, r12                        ; Buffer pointer forward to write pos
+
+  sub rax, rbx                      ; Subtract whatever we just wrote
+  sub rax, 8                        ; Subtract our placeholder length
+  mov qword[rax], rbx               ; Write our length
+
+  sub rax, r13 ; We want to return a relative pointer
+
+  pop r13
+  pop rbx
+  pop r15
+  pop r14
+  pop r12
+  ret
+barray_literal_end:

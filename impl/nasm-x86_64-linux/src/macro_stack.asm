@@ -7,7 +7,7 @@ global macro_stack_pop_by_name
 global macro_stack_peek
 global macro_stack_peek_by_name
 global macro_stack_bindump_buffers
-global macro_stack_call_by_name ; TODO
+global macro_stack_call_by_name
 
 extern fn_malloc
 extern fn_free

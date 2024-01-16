@@ -1,9 +1,17 @@
+;;; TODO: should this move 'rsp' to a heap allocation with MAP_STACK?
+;;;
+;;; This is recursive and at time of writing overflows the stack at around
+;;; 60k array nestings. Moving rsp into the heap during the recursive
+;;; portion would increase this limit dramatically.
+
 section .text
 global fn_read
 global fn__read ; for reader macros
 global fn_free_read_result
 global fn_dump_read_result_buffer
 global fn_dump_read_result
+
+;; TODO cleanup unused
 extern fn_read_char
 extern fn_malloc
 extern fn_realloc
@@ -54,14 +62,10 @@ stderr_fd: equ 2
 unexpected_eof_str: db "ERROR: Unexpected EOF while reading (did you give me any input?)",10
 unexpected_eof_str_len: equ $ - unexpected_eof_str
 
-unexpected_paren_str: db "ERROR: Unexpected ')' while reading",10
-unexpected_paren_str_len: equ $ - unexpected_paren_str
+no_macro_str: db "ERROR: Reader found no macro to handle input (Hint: you can define a reader macro called 'catchall').",10
+no_macro_str_len: equ $ - no_macro_str
 
-unexpected_eof_parray_str: db "ERROR: Unexpected EOF while reading parray (are your parenthesis mismatched?)",10
-unexpected_eof_parray_str_len: equ $ - unexpected_eof_parray_str
-
-unexpected_eof_barray_str: db "ERROR: Unexpected EOF while reading barray",10
-unexpected_eof_barray_str_len: equ $ - unexpected_eof_barray_str
+catchall_macro_name: db 8,0,0,0,0,0,0,0,"catchall"
 
 section .text
 
@@ -245,12 +249,6 @@ fn__read:
   cmp rax, BUFFERED_READER_EOF
   je __read_unexpected_eof
 
-  ;; If we got a parray end, error
-  ;;cmp rax, ')'
-  ;;je __read_unexpected_closing_paren
-  ;; TODO recreate this error in barray parser/reader macro?
-  ;; doesn't make sense here now that we're macro-based
-
   ;; Try to call a reader macro by this char's name
   ;; TODO support multi-char reader macros
   push rax
@@ -267,22 +265,26 @@ fn__read:
   cmp rdx, 0
   jne __read_epilogue
 
-  ;; Prepare arguments for _read_barray
-  mov rdi, r12
-  mov rsi, r14
+  ;; No direct macro matches, try for the catchall macro
+  mov rdi, qword[macro_stack_reader]
+  mov rsi, catchall_macro_name
+  mov rdx, r12
+  mov rcx, r14
+  call macro_stack_call_by_name
 
-  __read_barray:
-  call fn__read_barray
+  cmp rdx, 0
+  je .no_macro
+
   jmp __read_epilogue ; Return. rax is already a pointer to the barray.
+
+  .no_macro:
+  mov rdi, no_macro_str
+  mov rsi, no_macro_str_len
+  call fn_error_exit
 
   __read_unexpected_eof:
   mov rdi, unexpected_eof_str
   mov rsi, unexpected_eof_str_len
-  call fn_error_exit
-
-  __read_unexpected_closing_paren:
-  mov rdi, unexpected_paren_str
-  mov rsi, unexpected_paren_str_len
   call fn_error_exit
 
   __read_epilogue:
@@ -291,103 +293,6 @@ fn__read:
   pop r15
   pop r14
   pop r13
-  pop r12
-  ret
-
-;;; _read_barray(*buffered_fd_reader, *output_buffer) -> ptr
-;;;   Reads a barray from the buffered reader.
-;;;   Writes the barray to the output buffer.
-;;;
-;;;   Returns a buffer-relative pointer to the barray.
-fn__read_barray:
-  push r12
-  push r14
-  push r15
-  push rbx
-  push r13
-
-  %ifdef ASSERT_STACK_ALIGNMENT
-  call fn_assert_stack_aligned
-  %endif
-
-  mov r12, rdi ; Preserve buffered reader
-  mov r14, rsi ; Preserve output buffer
-
-  ;; Consume all the leading whitespace
-  mov rdi, r12
-  call fn_buffered_fd_reader_consume_leading_whitespace
-
-  cmp rax, BUFFERED_READER_EOF
-  jne __read_barray_no_eof
-
-  mov rdi, unexpected_eof_barray_str
-  mov rsi, unexpected_eof_barray_str_len
-  call fn_error_exit
-
-  __read_barray_no_eof:
-
-  ;; Write length placeholder
-  mov rdi, r14
-  mov rsi, 0
-  call fn_byte_buffer_push_int64
-
-  ;; Read characters until the end of the barray
-  mov rbx, 0 ;; char counter
-  __read_barray_char:
-  ;; Peek the next char - if it's '(', ')' or whitespace, we're done.
-  ;; We cannot consume because consuming '(' or ')' would be damaging.
-  mov rdi, r12 ; buffered reader
-  call fn_buffered_fd_reader_peek_byte
-  cmp rax, ')'
-  je __read_barray_finish
-  cmp rax, '('
-  je __read_barray_finish
-  cmp rax, ' '
-  je __read_barray_finish
-  cmp rax, BUFFERED_READER_EOF
-  je __read_barray_finish
-  cmp rax, NEWLINE
-  je __read_barray_finish
-  cmp rax, TAB
-  je __read_barray_finish
-
-  ;; Read the next char
-  mov rdi, r12
-  call fn_buffered_fd_reader_read_byte
-  mov r15, rax
-
-  ;; Output this char to the buffer
-  mov rdi, r14
-  mov rsi, r15
-  call fn_byte_buffer_push_byte
-
-  inc rbx
-
-  ;; Repeat
-  jmp __read_barray_char
-
-  __read_barray_finish:
-  ;; Update barray length placeholder
-
-  mov rdi, r14
-  call fn_byte_buffer_get_data_length ; Get data length
-  mov r12, rax
-
-  mov rdi, r14
-  call fn_byte_buffer_get_buf         ; Get data
-  mov r13, rax
-  add rax, r12                        ; Buffer pointer forward to write pos
-
-  sub rax, rbx                      ; Subtract whatever we just wrote
-  sub rax, 8                        ; Subtract our placeholder length
-  mov qword[rax], rbx               ; Write our length
-
-  sub rax, r13 ; We want to return a relative pointer
-
-  pop r13
-  pop rbx
-  pop r15
-  pop r14
   pop r12
   ret
 
