@@ -78,20 +78,6 @@ push_builtin_reader_macros:
   call fn_assert_stack_aligned
   %endif
 
-  ;; push parray literal macro
-  mov rdi, (parray_literal_end - parray_literal)
-  mov rsi, parray_literal
-  call barray_new
-  mov r12, rax
-
-  mov rdi, qword[macro_stack_reader] ; macro stack
-  mov rsi, parray_literal_macro_name ; macro name
-  mov rdx, r12                       ; code barray
-  call macro_stack_push
-
-  mov rdi, r12
-  call fn_free
-
   ;; push barray literal macro
   mov rdi, (barray_literal_end - barray_literal)
   mov rsi, barray_literal
@@ -100,6 +86,20 @@ push_builtin_reader_macros:
 
   mov rdi, qword[macro_stack_reader] ; macro stack
   mov rsi, barray_literal_macro_name ; macro name
+  mov rdx, r12                       ; code barray
+  call macro_stack_push
+
+  mov rdi, r12
+  call fn_free
+
+  ;; push parray literal macro
+  mov rdi, (parray_literal_end - parray_literal)
+  mov rsi, parray_literal
+  call barray_new
+  mov r12, rax
+
+  mov rdi, qword[macro_stack_reader] ; macro stack
+  mov rsi, parray_literal_macro_name ; macro name
   mov rdx, r12                       ; code barray
   call macro_stack_push
 
