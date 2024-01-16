@@ -26,22 +26,22 @@
 
 section .text
 global _start
-extern fn_write
-extern fn_exit
-extern fn_write_char
-extern fn_read_char
-extern fn_malloc
-extern fn_realloc
-extern fn_free
-extern fn_write_as_base
-extern fn_read
-extern fn_assert_stack_aligned
-extern fn_bindump
-extern fn_free_read_result
-extern fn_dump_read_result_buffer
-extern fn_dump_read_result
-extern fn_print
-extern fn_barray_equalp
+extern write
+extern exit
+extern write_char
+extern read_char
+extern malloc
+extern realloc
+extern free
+extern write_as_base
+extern read
+extern assert_stack_aligned
+extern bindump
+extern free_read_result
+extern dump_read_result_buffer
+extern dump_read_result
+extern print
+extern barray_equalp
 
 extern init_macro_stacks
 extern free_macro_stacks
@@ -57,7 +57,7 @@ extern macro_stack_peek
 extern macro_stack_bindump_buffers
 extern macro_stack_peek_by_name
 extern macro_stack_pop_by_name
-extern fn_byte_buffer_delete_bytes
+extern byte_buffer_delete_bytes
 extern barray_new
 extern parray_literal
 
@@ -97,22 +97,17 @@ section .text
 ;; TODO: utility to push all registers and utility to pop all registers,
 ;;       to make it easy to inject debugging functions in the middle of something
 ;; TODO: make sure we're handling all errors that could occur from syscalls
-;; TODO fn_write_as_base isn't keeping the stack 16-aligned while making function calls
+;; TODO write_as_base isn't keeping the stack 16-aligned while making function calls
 ;; TODO: rather than error outright, the reader should generate error codes for things like unexpected EOF for us to handle here
-;; TODO: use nasm's local labels (leading .)
-;; TODO: remove fn_ function prefixes, see if there are any other namespacing tools available that don't mess with C interop in a weird way.
-;; TODO: use enter/leave psuedo-instructions? This uses the base pointer,
-;; which may actually be more efficient as we don't need to pop one-by-one
-;; at the end of each function
 _start:
   ;; Output welcome string to stderr
   ;;mov rdi, welcome_msg
   ;;mov rsi, welcome_msg_len
   ;;mov rdx, stderr_fd
-  ;;call fn_write
+  ;;call write
 
   %ifdef ASSERT_STACK_ALIGNMENT
-  call fn_assert_stack_aligned
+  call assert_stack_aligned
   %endif
 
   call init_macro_stacks
@@ -134,12 +129,12 @@ _start:
   ;; Newline
   ;;mov rdi, 10
   ;;mov rsi, stdout_fd
-  ;;call fn_write_char
+  ;;call write_char
 
   mov rdi, readermac_msg
   mov rsi, readermac_msg_len
   mov rdx, stderr_fd
-  call fn_write
+  call write
 
   mov rdi, qword[macro_stack_reader]
   mov rsi, stderr_fd
@@ -147,47 +142,47 @@ _start:
   call macro_stack_bindump_buffers
 
   mov rdi, stdin_fd
-  call fn_read
+  call read
   mov r12, rax
 
   mov rdi, buffer_msg
   mov rsi, buffer_msg_len
   mov rdx, stderr_fd
-  call fn_write
+  call write
 
   mov rdi, r12
   mov rsi, stderr_fd
   mov rdx, 16
-  call fn_dump_read_result_buffer
+  call dump_read_result_buffer
 
   mov rdi, result_msg
   mov rsi, result_msg_len
   mov rdx, stderr_fd
-  call fn_write
+  call write
 
   mov rdi, r12
   mov rsi, stderr_fd
   mov rdx, 16
-  call fn_dump_read_result
+  call dump_read_result
 
   mov rdi, print_msg
   mov rsi, print_msg_len
   mov rdx, stderr_fd
-  call fn_write
+  call write
 
   mov rdi, r12
   mov rsi, stdout_fd
-  call fn_print
+  call print
 
   mov rdi, r12
-  call fn_free_read_result
+  call free_read_result
 
   ;; Newline
   mov rdi, 10
   mov rsi, stderr_fd
-  call fn_write_char
+  call write_char
 
   call free_macro_stacks
 
   mov rdi, 0
-  call fn_exit
+  call exit

@@ -30,22 +30,22 @@ extern macro_stack_reader
 extern macro_stack_push
 
 extern BUFFERED_READER_EOF
-extern fn_error_exit
-extern fn__read
-extern fn_buffered_fd_reader_read_byte
-extern fn_byte_buffer_push_int64
-extern fn_byte_buffer_get_data_length
-extern fn_buffered_fd_reader_consume_leading_whitespace
-extern fn_assert_stack_aligned
+extern error_exit
+extern _read
+extern buffered_fd_reader_read_byte
+extern byte_buffer_push_int64
+extern byte_buffer_get_data_length
+extern buffered_fd_reader_consume_leading_whitespace
+extern assert_stack_aligned
 extern barray_new
-extern fn_free
-extern fn_bindump
-extern fn_buffered_fd_reader_peek_byte
-extern fn_byte_buffer_push_byte
-extern fn_byte_buffer_get_buf
+extern free
+extern bindump
+extern buffered_fd_reader_peek_byte
+extern byte_buffer_push_byte
+extern byte_buffer_get_buf
 
-extern fn_write_char
-extern fn_write_as_base
+extern write_char
+extern write_as_base
 
 section .rodata
 
@@ -75,7 +75,7 @@ push_builtin_reader_macros:
   push r12
 
   %ifdef ASSERT_STACK_ALIGNMENT
-  call fn_assert_stack_aligned
+  call assert_stack_aligned
   %endif
 
   ;; push barray literal macro
@@ -90,7 +90,7 @@ push_builtin_reader_macros:
   call macro_stack_push
 
   mov rdi, r12
-  call fn_free
+  call free
 
   ;; push parray literal macro
   mov rdi, (parray_literal_end - parray_literal)
@@ -104,7 +104,7 @@ push_builtin_reader_macros:
   call macro_stack_push
 
   mov rdi, r12
-  call fn_free
+  call free
 
   pop r12
   ret
@@ -120,7 +120,7 @@ parray_literal:
   mov rbp, rsp
 
   %ifdef ASSERT_STACK_ALIGNMENT
-  mov rax, fn_assert_stack_aligned
+  mov rax, assert_stack_aligned
   call rax
   %endif
 
@@ -129,14 +129,14 @@ parray_literal:
 
   ;; Consume the leading '(' TODO assert that it is actually '('
   mov rdi, r12
-  mov rax, fn_buffered_fd_reader_read_byte
+  mov rax, buffered_fd_reader_read_byte
   call rax
 
   mov r15, 0 ; child counter
   .children:
   ;; Consume all whitespace
   mov rdi, r12
-  mov rax, fn_buffered_fd_reader_consume_leading_whitespace
+  mov rax, buffered_fd_reader_consume_leading_whitespace
   call rax
 
   ;; Peek the next char (consume whitespace also peeks). If it's ')' we're done.
@@ -149,7 +149,7 @@ parray_literal:
 
   mov rdi, unexpected_eof_parray_str
   mov rsi, unexpected_eof_parray_str_len
-  mov rax, fn_error_exit
+  mov rax, error_exit
   call rax
 
   .no_eof:
@@ -157,7 +157,7 @@ parray_literal:
   ;; Read a child
   mov rdi, r12
   mov rsi, r14
-  mov rax, fn__read
+  mov rax, _read
   call rax
 
   ;; Push a (relative) pointer to this child onto the stack
@@ -172,7 +172,7 @@ parray_literal:
 
   ;; Consume the trailing ')'
   mov rdi, r12
-  mov rax, fn_buffered_fd_reader_read_byte
+  mov rax, buffered_fd_reader_read_byte
   call rax
 
   ;; Zero rbx to start tracking parray size in bytes
@@ -182,7 +182,7 @@ parray_literal:
   mov rdi, r14
   mov rsi, r15
   not rsi ; Negate rsi as parrays should use one's complement -length
-  mov rax, fn_byte_buffer_push_int64
+  mov rax, byte_buffer_push_int64
   call rax
 
   add rbx, 8 ; 8 bytes for parray length
@@ -202,7 +202,7 @@ parray_literal:
   mov rsi, qword[rcx]
 
   mov rdi, r14
-  mov rax, fn_byte_buffer_push_int64
+  mov rax, byte_buffer_push_int64
   call rax
 
   add rbx, 8 ; 8 bytes for pointer
@@ -216,7 +216,7 @@ parray_literal:
 
   ;; Set rax to a relative pointer to the start of the parray
   mov rdi, r14
-  mov rax, fn_byte_buffer_get_data_length
+  mov rax, byte_buffer_get_data_length
   call rax
   sub rax, rbx
 
@@ -238,7 +238,7 @@ barray_literal:
   push r13
 
   %ifdef ASSERT_STACK_ALIGNMENT
-  mov rax, fn_assert_stack_aligned
+  mov rax, assert_stack_aligned
   call rax
   %endif
 
@@ -247,7 +247,7 @@ barray_literal:
 
   ;; Consume all the leading whitespace
   mov rdi, r12
-  mov rax, fn_buffered_fd_reader_consume_leading_whitespace
+  mov rax, buffered_fd_reader_consume_leading_whitespace
   call rax
 
   cmp rax, ')'
@@ -255,75 +255,75 @@ barray_literal:
 
   mov rdi, unexpected_paren_str
   mov rsi, unexpected_paren_str_len
-  mov rax, fn_error_exit
+  mov rax, error_exit
   call rax
 
-  .no_closeparen
+  .no_closeparen:
 
   cmp rax, BUFFERED_READER_EOF
-  jne __read_barray_no_eof
+  jne .no_eof
 
   mov rdi, unexpected_eof_barray_str
   mov rsi, unexpected_eof_barray_str_len
-  mov rax, fn_error_exit
+  mov rax, error_exit
   call rax
 
-  __read_barray_no_eof:
+  .no_eof:
 
   ;; Write length placeholder
   mov rdi, r14
   mov rsi, 0
-  mov rax, fn_byte_buffer_push_int64
+  mov rax, byte_buffer_push_int64
   call rax
 
   ;; Read characters until the end of the barray
   mov rbx, 0 ;; char counter
-  __read_barray_char:
+  .char:
   ;; Peek the next char - if it's '(', ')' or whitespace, we're done.
   ;; We cannot consume because consuming '(' or ')' would be damaging.
   mov rdi, r12 ; buffered reader
-  mov rax, fn_buffered_fd_reader_peek_byte
+  mov rax, buffered_fd_reader_peek_byte
   call rax
   cmp rax, ')'
-  je __read_barray_finish
+  je .finish
   cmp rax, '('
-  je __read_barray_finish
+  je .finish
   cmp rax, ' '
-  je __read_barray_finish
+  je .finish
   cmp rax, BUFFERED_READER_EOF
-  je __read_barray_finish
+  je .finish
   cmp rax, NEWLINE
-  je __read_barray_finish
+  je .finish
   cmp rax, TAB
-  je __read_barray_finish
+  je .finish
 
   ;; Read the next char
   mov rdi, r12
-  mov rax, fn_buffered_fd_reader_read_byte
+  mov rax, buffered_fd_reader_read_byte
   call rax
   mov r15, rax
 
   ;; Output this char to the buffer
   mov rdi, r14
   mov rsi, r15
-  mov rax, fn_byte_buffer_push_byte
+  mov rax, byte_buffer_push_byte
   call rax
 
   inc rbx
 
   ;; Repeat
-  jmp __read_barray_char
+  jmp .char
 
-  __read_barray_finish:
+  .finish:
   ;; Update barray length placeholder
 
   mov rdi, r14
-  mov rax, fn_byte_buffer_get_data_length ; Get data length
+  mov rax, byte_buffer_get_data_length ; Get data length
   call rax
   mov r12, rax
 
   mov rdi, r14
-  mov rax, fn_byte_buffer_get_buf         ; Get data
+  mov rax, byte_buffer_get_buf         ; Get data
   call rax
   mov r13, rax
   add rax, r12                        ; Buffer pointer forward to write pos

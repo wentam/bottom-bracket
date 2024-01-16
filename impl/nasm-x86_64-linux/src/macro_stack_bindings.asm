@@ -11,7 +11,7 @@ global macro_stack_printer
 
 extern macro_stack_new
 extern macro_stack_free
-extern fn_assert_stack_aligned
+extern assert_stack_aligned
 extern push_builtin_reader_macros
 
 section .bss
@@ -30,7 +30,7 @@ init_macro_stacks:
   sub rsp, 8
 
   %ifdef ASSERT_STACK_ALIGNMENT
-  call fn_assert_stack_aligned
+  call assert_stack_aligned
   %endif
 
   ;; Create stacks
@@ -53,7 +53,7 @@ free_macro_stacks:
   sub rsp, 8
 
   %ifdef ASSERT_STACK_ALIGNMENT
-  call fn_assert_stack_aligned
+  call assert_stack_aligned
   %endif
 
   mov rdi, qword[macro_stack_normal]

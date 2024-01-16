@@ -25,28 +25,28 @@ stderr_fd: equ 2
 %define MREMAP_MAYMOVE 0x1
 
 section .text
-global fn_write
-global fn_error_exit
-global fn_exit
-global fn_read_char
-global fn_write_char
-global fn_malloc
-global fn_realloc
-global fn_free
-global fn_write_as_base
-global fn_digit_to_ascii
-global fn_assert_stack_aligned
-global fn_bindump
-global fn_barray_equalp
+global write
+global error_exit
+global exit
+global read_char
+global write_char
+global malloc
+global realloc
+global free
+global write_as_base
+global digit_to_ascii
+global assert_stack_aligned
+global bindump
+global barray_equalp
 
-extern fn_byte_buffer_new
-extern fn_byte_buffer_free
-extern fn_byte_buffer_push_byte
-extern fn_byte_buffer_write_contents
+extern byte_buffer_new
+extern byte_buffer_free
+extern byte_buffer_push_byte
+extern byte_buffer_write_contents
 
 ;;; print(*string, len, fd)
 ;;;   Writes the string of bytes to fd. Returns 0 on error.
-fn_write:
+write:
   push r12
   push r13
   push r14
@@ -54,7 +54,7 @@ fn_write:
   mov r12, rsi ; string length
   mov r14, rdx ; fd
 
-  fn_write_again:
+  .write_again:
   mov rdx, r12       ; String length
   mov rsi, r13       ; String
   mov rdi, r14       ; Output fd
@@ -62,37 +62,37 @@ fn_write:
   syscall
 
   cmp rax, 0
-  jl fn_write_err
+  jl .write_err
 
   sub r12, rax
   add r13, rax
   cmp r12, 0
-  jg fn_write_again
+  jg .write_again
 
-  fn_write_epilogue:
+  .epilogue:
   pop r14
   pop r13
   pop r12
   ret
 
-  fn_write_err:
+  .write_err:
   mov rax, 0
-  jmp fn_write_epilogue
+  jmp .epilogue
 
 ;;; error_exit(*string, len)
 ;;;   prints an error to stderr and exits
-fn_error_exit:
+error_exit:
   ;mov rdi, rdi
   ;mov rsi, rsi
   mov rdx, stderr_fd
-  call fn_write
+  call write
 
   mov rdi, 1
-  call fn_exit
+  call exit
   ret
 
 ;;; exit(exit_code) - Exits the program with the given exit code
-fn_exit:
+exit:
                     ; rdi is already exit code
   mov rax, sys_exit ; syscall number
   syscall
@@ -100,7 +100,7 @@ fn_exit:
 
 ;;; read_char(fd) -> char
 ;;;   Reads a single character from an FD and returns it
-fn_read_char:
+read_char:
   mov rsi, rsp
   dec rsi
   mov rdx, 1
@@ -110,27 +110,27 @@ fn_read_char:
   mov rax, [rsp-1]
   ret
 
-;;; fn_write_char(char, fd) - Writes a single character to an FD
-fn_write_char:
+;;; write_char(char, fd) - Writes a single character to an FD
+write_char:
   push rdi
 
   %ifdef ASSERT_STACK_ALIGNMENT
-  call fn_assert_stack_aligned
+  call assert_stack_aligned
   %endif
 
   mov rdi, rsp
   mov rdx, rsi
   mov rsi, 1
-  call fn_write
+  call write
   pop rdi
   ret
 
 ;;; malloc(size) -> ptr
 ;;;  Allocates memory. returns 0/NULL if allocation fails.
-fn_malloc:
+malloc:
   sub rsp, 8
   %ifdef ASSERT_STACK_ALIGNMENT
-  call fn_assert_stack_aligned
+  call assert_stack_aligned
   %endif
 
   ;; mmap in a chunk of memory at requested size+8
@@ -149,7 +149,7 @@ fn_malloc:
 
   ;; If mmap gave us an error, proceed to failed codepath
   test rax, rax
-  js   malloc_failed
+  js   .failed
 
   ;; Write the length of this allocation to the first 8 bytes.
   ;; The length will include the extra 8 bytes.
@@ -161,7 +161,7 @@ fn_malloc:
   add rsp, 8
   ret
 
-  malloc_failed:
+  .failed:
     mov rax, 0
 
     add rsp, 8
@@ -169,11 +169,11 @@ fn_malloc:
 
 ;;; free(ptr) -> int
 ;;;   Frees memory allocated with malloc. Returns 0 on success, -errno on error.
-fn_free:
+free:
   sub rsp, 8
 
   %ifdef ASSERT_STACK_ALIGNMENT
-  call fn_assert_stack_aligned
+  call assert_stack_aligned
   %endif
 
   sub rdi, 8           ; Walk back to the start of the mmap region
@@ -190,11 +190,11 @@ fn_free:
 ;;;   After the allocation the pointer to the previous allocation is invalid.
 ;;;
 ;;;   Returns 0 (NULL pointer) on failure.
-fn_realloc:
+realloc:
   sub rsp, 8
 
   %ifdef ASSERT_STACK_ALIGNMENT
-  call fn_assert_stack_aligned
+  call assert_stack_aligned
   %endif
 
   ;; remap mmap region
@@ -209,7 +209,7 @@ fn_realloc:
 
   ;; Failed codepath if realloc failed
   test rax, rax
-  js realloc_failed
+  js .failed
 
   ;; write new length to metadata
   mov qword [rax], rdx
@@ -220,7 +220,7 @@ fn_realloc:
   add rsp, 8
   ret
 
-  realloc_failed:
+  .failed:
     mov rax, 0
 
     add rsp, 8
@@ -229,7 +229,7 @@ fn_realloc:
 ;;; barray_equalp(*barray, *barray) -> 0 or 1
 ;;;   Compares two barrays. Returns 1 if they are identical in both
 ;;;   length and contents. 0 otherwise.
-fn_barray_equalp:
+barray_equalp:
   mov r8, qword[rdi] ; barray1 length
   mov r9, qword[rsi] ; barray2 length
 
@@ -266,21 +266,21 @@ fn_barray_equalp:
 ;;; digit_to_ascii(int) -> char
 ;;;   Converts any numeric value representing a digit (up to base 36) to ASCII
 ;;;   (0-9 A-Z)
-fn_digit_to_ascii:
+digit_to_ascii:
   sub rsp, 8
 
   mov rax, rdi
   cmp rax, 9
-  jle as_digit
+  jle .as_digit
 
-  as_letter:
+  .as_letter:
     sub rax, 10
     add rax, 'A'
 
     add rsp, 8
     ret
 
-  as_digit:
+  .as_digit:
     add rax, '0'
 
     add rsp, 8
@@ -294,7 +294,7 @@ fn_digit_to_ascii:
 ;;;   by prefixing with zeros. 0 to disable padding.
 ;;;
 ;;;   Doesn't clobber rdi (handy for debugging)
-fn_write_as_base:
+write_as_base:
   push r13
   push r12
   push rdi
@@ -306,19 +306,19 @@ fn_write_as_base:
   mov r14, rcx
 
   %ifdef ASSERT_STACK_ALIGNMENT
-  call fn_assert_stack_aligned
+  call assert_stack_aligned
   %endif
 
   mov rax, rdi ; Division happens via rax so move to there
   mov r9, 0    ; loop index
-  not_0:
+  .not_0:
     mov rdx, 0   ; Needed for single-register divide below
     div rsi      ; divide rdx:rax by rsi, rax: quotient, rdx: remainder
 
     ;; Convert to ASCII
     push rax     ; Preserve
     mov rdi, rdx ; Set our number as first arg to function call
-    call fn_digit_to_ascii
+    call digit_to_ascii
     mov rdx, rax ; Assign return value as our number
     pop rax      ; Restore
 
@@ -327,26 +327,26 @@ fn_write_as_base:
 
     inc r9 ; increment loop index
     cmp rax, 0
-    jg not_0
+    jg .not_0
 
   sub r14, r9 ; pad-to - current length
-  pad:
+  .pad:
     cmp r14, 0
-    jle done_padding
+    jle .done_padding
 
     dec rsp
     mov byte[rsp], '0'
     dec r14
     inc r9
-    jmp pad
+    jmp .pad
 
-  done_padding:
+  .done_padding:
 
   ;; Print result
   mov rdi, rsp
   mov rsi, r9
   mov rdx, r13
-  call fn_write
+  call write
 
   mov rsp, r12; Restore stack ptr
 
@@ -366,7 +366,7 @@ fn_write_as_base:
 ;;;   by prefixing with zeros. 0 to disable padding.
 ;;;
 ;;;   Doesn't clobber rdi (handy for debugging)
-fn_write_as_base_bb:
+write_as_base_bb:
   push r13
   push r12
   push rdi
@@ -378,19 +378,19 @@ fn_write_as_base_bb:
   mov r14, rcx
 
   %ifdef ASSERT_STACK_ALIGNMENT
-  call fn_assert_stack_aligned
+  call assert_stack_aligned
   %endif
 
   mov rax, rdi ; Division happens via rax so move to there
   mov r9, 0    ; loop index
-  bb_not_0:
+  .not_0:
     mov rdx, 0   ; Needed for single-register divide below
     div rsi      ; divide rdx:rax by rsi, rax: quotient, rdx: remainder
 
     ;; Convert to ASCII
     push rax     ; Preserve
     mov rdi, rdx ; Set our number as first arg to function call
-    call fn_digit_to_ascii
+    call digit_to_ascii
     mov rdx, rax ; Assign return value as our number
     pop rax      ; Restore
 
@@ -399,37 +399,37 @@ fn_write_as_base_bb:
 
     inc r9 ; increment loop index
     cmp rax, 0
-    jg bb_not_0
+    jg .not_0
 
   sub r14, r9 ; pad-to - current length
-  bb_pad:
+  .pad:
     cmp r14, 0
-    jle bb_done_padding
+    jle .done_padding
 
     push '0'
     sub rsp, 8
 
     dec r14
     inc r9
-    jmp bb_pad
+    jmp .pad
 
-  bb_done_padding:
+  .done_padding:
 
-  write_to_bb_loop:
+  .write_to_bb_loop:
   cmp r9, 0
-  je write_to_bb_loop_break
+  je .write_to_bb_loop_break
 
   add rsp, 8
   pop rcx
 
   mov rdi, r13
   mov rsi, rcx
-  call fn_byte_buffer_push_byte
+  call byte_buffer_push_byte
 
   dec r9
-  jmp write_to_bb_loop
+  jmp .write_to_bb_loop
 
-  write_to_bb_loop_break:
+  .write_to_bb_loop_break:
 
   mov rsp, r12; Restore stack ptr
 
@@ -443,7 +443,7 @@ fn_write_as_base_bb:
 ;;; TODO: this really needs to be broken apart and documented better
 ;;; bindump(*data, len, fd, base)
 ;;;   Arbitrary-base hexdump-like function.
-fn_bindump:
+bindump:
   push rbp
   push r12
   push r13
@@ -458,7 +458,7 @@ fn_bindump:
   mov r12, rdi ; data
   mov r13, rsi ; len
 
-  call fn_byte_buffer_new
+  call byte_buffer_new
   mov r14, rax ; byte buffer
 
   ;; Work out how much number padding we need without using 'log'
@@ -467,12 +467,12 @@ fn_bindump:
   mov rbx, 0
   mov rsi, qword[rbp-8] ; base
   mov r9, 0
-  pad_calc_not_0:
+  .pad_calc_not_0:
     mov rdx, 0
     div rsi
     inc r9
     cmp rax, 0
-    jg pad_calc_not_0
+    jg .pad_calc_not_0
 
   push r9 ; padding needed
 
@@ -481,177 +481,177 @@ fn_bindump:
   mov rbx, 0
   mov rsi, qword[rbp-8] ; base
   mov r9, 0
-  address_pad_calc_not_0:
+  .address_pad_calc_not_0:
     mov rdx, 0
     div rsi
     inc r9
     cmp rax, 0
-    jg address_pad_calc_not_0
+    jg .address_pad_calc_not_0
 
   push r9 ; address padding needed
 
   %ifdef ASSERT_STACK_ALIGNMENT
-  call fn_assert_stack_aligned
+  call assert_stack_aligned
   %endif
 
   mov rbx, 0
-  row_loop:
+  .row_loop:
     cmp r13, 0
-    je row_loop_break
+    je .row_loop_break
 
     mov rdi, rbx
     mov rsi, qword[rbp-8]  ; base
     mov rdx, r14           ; byte buffer
     mov rcx, qword[rbp-40] ; padding
-    call fn_write_as_base_bb
+    call write_as_base_bb
 
     mov rdi, r14 ; byte buffer
     mov rsi, ' '
-    call fn_byte_buffer_push_byte
+    call byte_buffer_push_byte
 
     mov rdi, r14 ; byte buffer
     mov rsi, ' '
-    call fn_byte_buffer_push_byte
+    call byte_buffer_push_byte
 
     push r13
     push r12
     mov r15, 16
-    byte_loop:
+    .byte_loop:
       cmp r15, 0
-      je byte_loop_break
+      je .byte_loop_break
       cmp r13, 0
-      jne byte_loop_is_data
+      jne .byte_loop_is_data
 
-      byte_loop_is_not_data:
+      .byte_loop_is_not_data:
       mov rdi, qword[rbp-32]
-      fill_space_loop:
+      .fill_space_loop:
         cmp rdi, 0
-        jle break_fill_space_loop
+        jle .break_fill_space_loop
         push rdi
         sub rsp, 8
 
         mov rdi, r14 ; byte buffer
         mov rsi, ' '
-        call fn_byte_buffer_push_byte
+        call byte_buffer_push_byte
 
         add rsp, 8
         pop rdi
         dec rdi
-        jmp fill_space_loop
+        jmp .fill_space_loop
 
-      break_fill_space_loop:
+      .break_fill_space_loop:
 
       mov rdi, r14 ; byte buffer
       mov rsi, ' '
-      call fn_byte_buffer_push_byte
+      call byte_buffer_push_byte
 
       cmp r15, 9
-      jne _no_extra_space
+      jne .no_extra_space
 
       mov rdi, r14 ; byte buffer
       mov rsi, ' '
-      call fn_byte_buffer_push_byte
+      call byte_buffer_push_byte
 
-      _no_extra_space:
+      .no_extra_space:
 
       dec r15
-      jmp byte_loop
+      jmp .byte_loop
 
-      byte_loop_is_data:
+      .byte_loop_is_data:
 
       mov rdi, 0
       mov dil, byte[r12]
       mov rsi, qword[rbp-8]
       mov rdx, r14
       mov rcx, qword[rbp-32]
-      call fn_write_as_base_bb
+      call write_as_base_bb
 
       cmp r15, 9
-      jne no_extra_space
+      jne ._no_extra_space
 
       mov rdi, r14 ; byte buffer
       mov rsi, ' '
-      call fn_byte_buffer_push_byte
+      call byte_buffer_push_byte
 
-      no_extra_space:
+      ._no_extra_space:
 
       mov rdi, r14 ; byte buffer
       mov rsi, ' '
-      call fn_byte_buffer_push_byte
+      call byte_buffer_push_byte
 
       dec r13
       dec r15
       inc r12
-      jmp byte_loop
-    byte_loop_break:
+      jmp .byte_loop
+    .byte_loop_break:
 
     pop r12
     pop r13
 
     mov rdi, r14 ; byte buffer
     mov rsi, ' '
-    call fn_byte_buffer_push_byte
+    call byte_buffer_push_byte
 
 
     mov rdi, r14 ; byte buffer
     mov rsi, '|'
-    call fn_byte_buffer_push_byte
+    call byte_buffer_push_byte
 
     mov r15, 16
-    char_loop:
+    .char_loop:
       cmp r13, 0
-      je char_loop_break
+      je .char_loop_break
       cmp r15, 0
-      je char_loop_break
+      je .char_loop_break
 
       mov rdi, 0
       mov dil, byte[r12]
       sub rdi, 32
       cmp rdi, 94
-      jbe is_ascii
+      jbe .is_ascii
 
       mov rdi, r14 ; byte buffer
       mov rsi, '.'
-      call fn_byte_buffer_push_byte
+      call byte_buffer_push_byte
 
-      jmp after_is_ascii
+      jmp .after_is_ascii
 
-      is_ascii:
+      .is_ascii:
       mov rdi, r14 ; byte buffer
       xor rsi, rsi
       mov sil, byte[r12]
-      call fn_byte_buffer_push_byte
+      call byte_buffer_push_byte
 
-      after_is_ascii:
+      .after_is_ascii:
 
       dec r13
       dec r15
       inc r12
-      jmp char_loop
-    char_loop_break:
+      jmp .char_loop
+    .char_loop_break:
 
   add rbx, 16
 
 
   mov rdi, r14 ; byte buffer
   mov rsi, '|'
-  call fn_byte_buffer_push_byte
+  call byte_buffer_push_byte
 
   mov rdi, r14 ; byte buffer
   mov rsi, 10
-  call fn_byte_buffer_push_byte
+  call byte_buffer_push_byte
 
-  jmp row_loop
-  row_loop_break:
+  jmp .row_loop
+  .row_loop_break:
 
   ;; Print out byte buffer contents
   mov rdi, r14
   mov rsi, qword[rbp-16]
-  call fn_byte_buffer_write_contents
+  call byte_buffer_write_contents
 
   ;; Free the byte buffer
   mov rdi, r14
-  call fn_byte_buffer_free
+  call byte_buffer_free
 
   pop r9
   pop r9
@@ -671,7 +671,7 @@ fn_bindump:
 ;;;
 ;;;   If it's not, will print an error message and 'int 3' to trigger a
 ;;;   break (or exit if no debugger is attached)
-fn_assert_stack_aligned:
+assert_stack_aligned:
   sub rsp, 8 ; Make sure we're not un-aligning the stack ourselves.
              ; 'call' pushes a pointer to the stack, so we only need
              ; to sub 8 here.
@@ -680,16 +680,16 @@ fn_assert_stack_aligned:
   mov rax, 15
   and rax, rsp
   cmp rax, 0
-  je aligned
+  je .aligned
 
   ;; Not aligned
   mov rdi, stack_unaligned_str
   mov rsi, stack_unaligned_str_len
   mov rdx, stderr_fd
-  call fn_write
+  call write
   int 3
 
-  aligned:
+  .aligned:
 
   add rsp, 8
   ret

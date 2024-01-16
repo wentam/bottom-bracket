@@ -9,27 +9,27 @@ global macro_stack_peek_by_name
 global macro_stack_bindump_buffers
 global macro_stack_call_by_name
 
-extern fn_malloc
-extern fn_free
+extern malloc
+extern free
 
-extern fn_byte_buffer_new
-extern fn_byte_buffer_free
-extern fn_byte_buffer_push_byte
-extern fn_byte_buffer_push_int64
-extern fn_byte_buffer_get_data_length
-extern fn_byte_buffer_bindump_buffer
-extern fn_byte_buffer_get_buf
-extern fn_byte_buffer_pop_bytes
-extern fn_byte_buffer_pop_int64
-extern fn_byte_buffer_read_int64
-extern fn_byte_buffer_peek_int64
-extern fn_byte_buffer_delete_bytes
+extern byte_buffer_new
+extern byte_buffer_free
+extern byte_buffer_push_byte
+extern byte_buffer_push_int64
+extern byte_buffer_get_data_length
+extern byte_buffer_bindump_buffer
+extern byte_buffer_get_buf
+extern byte_buffer_pop_bytes
+extern byte_buffer_pop_int64
+extern byte_buffer_read_int64
+extern byte_buffer_peek_int64
+extern byte_buffer_delete_bytes
 
-extern fn_barray_equalp
-extern fn_write_char
-extern fn_write_as_base
-extern fn_bindump
-extern fn_assert_stack_aligned
+extern barray_equalp
+extern write_char
+extern write_as_base
+extern bindump
+extern assert_stack_aligned
 
 section .rodata
 
@@ -67,13 +67,13 @@ section .text
 macro_stack_new:
   push r12
   mov rdi, MACRO_STACK_STRUCT_SIZE
-  call fn_malloc
+  call malloc
   mov r12, rax ; move new struct into r12
 
-  call fn_byte_buffer_new
+  call byte_buffer_new
   mov qword[r12+MACRO_STACK_PBUFFER_OFFSET], rax
 
-  call fn_byte_buffer_new
+  call byte_buffer_new
   mov qword[r12+MACRO_STACK_DBUFFER_OFFSET], rax
 
   mov rax, r12 ; Return new struct
@@ -87,17 +87,17 @@ macro_stack_free:
   mov r12, rdi ; the macro stack struct
 
   %ifdef ASSERT_STACK_ALIGNMENT
-  call fn_assert_stack_aligned
+  call assert_stack_aligned
   %endif
 
   mov rdi, qword[r12+MACRO_STACK_PBUFFER_OFFSET]
-  call fn_byte_buffer_free
+  call byte_buffer_free
 
   mov rdi, qword[r12+MACRO_STACK_DBUFFER_OFFSET]
-  call fn_byte_buffer_free
+  call byte_buffer_free
 
   mov rdi, r12
-  call fn_free
+  call free
   pop r12
   ret
 
@@ -121,14 +121,14 @@ macro_stack_push:
   mov r14, rdx ; Pointer to code barray
 
   %ifdef ASSERT_STACK_ALIGNMENT
-  call fn_assert_stack_aligned
+  call assert_stack_aligned
   %endif
 
 
   ;; Save the current data length in dbuffer to use as a relative pointer
   ;; to the macro definition
   mov rdi, qword[r15+MACRO_STACK_DBUFFER_OFFSET]
-  call fn_byte_buffer_get_data_length
+  call byte_buffer_get_data_length
   mov rbx, rax ; rbx = relative pointer to the code we're about to write
 
   ;; Copy the name barray into the dbuffer
@@ -143,7 +143,7 @@ macro_stack_push:
 
     mov rdi, qword[r15+MACRO_STACK_DBUFFER_OFFSET]
     mov sil, byte[r14]
-    call fn_byte_buffer_push_byte
+    call byte_buffer_push_byte
 
     dec r13
     inc r14
@@ -163,7 +163,7 @@ macro_stack_push:
 
     mov rdi, qword[r15+MACRO_STACK_DBUFFER_OFFSET]
     mov sil, byte[r14]
-    call fn_byte_buffer_push_byte
+    call byte_buffer_push_byte
 
     dec r13
     inc r14
@@ -174,7 +174,7 @@ macro_stack_push:
   ;; Write a relative pointer to this definition into the pbuffer
   mov rdi, qword[r15+MACRO_STACK_PBUFFER_OFFSET]
   mov rsi, rbx
-  call fn_byte_buffer_push_int64
+  call byte_buffer_push_int64
 
   pop rbx
   pop r15
@@ -199,18 +199,18 @@ macro_stack_pop:
   mov r12, rdi ; macro stack
 
   %ifdef ASSERT_STACK_ALIGNMENT
-  call fn_assert_stack_aligned
+  call assert_stack_aligned
   %endif
 
   ;; Pop pointer to this macro definition off pbuffer
   mov rdi, qword[r12+MACRO_STACK_PBUFFER_OFFSET]
-  call fn_byte_buffer_pop_int64
+  call byte_buffer_pop_int64
   mov rbx, rax ; rbx = pointer to definition
 
   ;; Obtain name length from dbuffer via the pointer
   mov rdi, qword[r12+MACRO_STACK_DBUFFER_OFFSET]
   mov rsi, rbx
-  call fn_byte_buffer_read_int64
+  call byte_buffer_read_int64
   mov r14, rax
 
   ;; Obtain macro length from dbuffer via the pointer+name length+8
@@ -219,7 +219,7 @@ macro_stack_pop:
   add rcx, 8
   mov rdi, qword[r12+MACRO_STACK_DBUFFER_OFFSET]
   mov rsi, rcx
-  call fn_byte_buffer_read_int64
+  call byte_buffer_read_int64
 
   ;; Calculate total byte length of this macro definition from the above
   add r14, rax
@@ -228,7 +228,7 @@ macro_stack_pop:
   ;; Pop the bytes off the dbuffer
   mov rdi, qword[r12+MACRO_STACK_DBUFFER_OFFSET]
   mov rsi, r14
-  call fn_byte_buffer_pop_bytes
+  call byte_buffer_pop_bytes
 
   ;; rax is already our return value via byte_buffer_pop_bytes
 
@@ -251,11 +251,11 @@ macro_stack_peek:
   mov r12, rdi ; macro stack
 
   mov rdi, qword[r12+MACRO_STACK_DBUFFER_OFFSET]
-  call fn_byte_buffer_get_buf
+  call byte_buffer_get_buf
   mov r13, rax ; rax = pbuffer raw buffer pointer
 
   mov rdi, qword[r12+MACRO_STACK_PBUFFER_OFFSET]
-  call fn_byte_buffer_peek_int64
+  call byte_buffer_peek_int64
   add rax, r13
   add rsp, 8
   pop r13
@@ -280,7 +280,7 @@ macro_stack_pop_by_name:
   mov r12, rax
 
   mov rdi, qword[r13+MACRO_STACK_DBUFFER_OFFSET]
-  call fn_byte_buffer_get_buf
+  call byte_buffer_get_buf
   mov r14, rax
 
   mov rdi, qword[r13+MACRO_STACK_DBUFFER_OFFSET]
@@ -291,7 +291,7 @@ macro_stack_pop_by_name:
 
   mov rsi, r12       ; index
   sub rsi, r14
-  call fn_byte_buffer_delete_bytes
+  call byte_buffer_delete_bytes
   pop r14
   pop r13
   pop r12
@@ -315,19 +315,19 @@ macro_stack_peek_by_name:
   mov r13, rsi ; name barray
 
   %ifdef ASSERT_STACK_ALIGNMENT
-  call fn_assert_stack_aligned
+  call assert_stack_aligned
   %endif
 
   mov r14, qword[r12+MACRO_STACK_PBUFFER_OFFSET] ; pbuffer
 
   ;; Get dbuffer buf
   mov rdi, qword[r12+MACRO_STACK_DBUFFER_OFFSET]
-  call fn_byte_buffer_get_buf
+  call byte_buffer_get_buf
   mov rbx, rax
 
   ;; Get pbuffer data length
   mov rdi, r14
-  call fn_byte_buffer_get_data_length
+  call byte_buffer_get_data_length
   mov r12, rax
 
   ;; Work our way backwards through the pbuffer until we find a matching
@@ -340,13 +340,13 @@ macro_stack_peek_by_name:
 
   mov rdi, r14
   mov rsi, r12
-  call fn_byte_buffer_read_int64
+  call byte_buffer_read_int64
   mov r15, rax
   add r15, rbx
 
   mov rdi, r15
   mov rsi, r13
-  call fn_barray_equalp
+  call barray_equalp
   cmp rax, 1
   je .find_name_loop_match
 
@@ -416,25 +416,25 @@ macro_stack_bindump_buffers:
   mov r14, rdx ; base
 
   %ifdef ASSERT_STACK_ALIGNMENT
-  call fn_assert_stack_aligned
+  call assert_stack_aligned
   %endif
 
   ;; bindump pbuffer
   mov rdi, qword[r12+MACRO_STACK_PBUFFER_OFFSET]
   mov rsi, r13
   mov rdx, r14
-  call fn_byte_buffer_bindump_buffer
+  call byte_buffer_bindump_buffer
 
   ;; Newline
   mov rdi, 10
   mov rsi, r13
-  call fn_write_char
+  call write_char
 
   ;; bindump dbuffer
   mov rdi, qword[r12+MACRO_STACK_DBUFFER_OFFSET]
   mov rsi, r13
   mov rdx, r14
-  call fn_byte_buffer_bindump_buffer
+  call byte_buffer_bindump_buffer
 
   pop r14
   pop r13

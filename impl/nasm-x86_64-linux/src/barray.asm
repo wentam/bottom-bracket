@@ -1,7 +1,7 @@
 section .text
 global barray_new
-extern fn_malloc
-extern fn_assert_stack_aligned
+extern malloc
+extern assert_stack_aligned
 
 ;;; barray_new(length, *data)
 ;;;   Makes a new heap-allocated barray. Free with normal 'free'.
@@ -13,12 +13,12 @@ barray_new:
   mov r13, rdi ; length
 
   %ifdef ASSERT_STACK_ALIGNMENT
-  call fn_assert_stack_aligned
+  call assert_stack_aligned
   %endif
 
   ;; Allocate
   add rdi, 8
-  call fn_malloc
+  call malloc
   mov rbx, rax
 
   ;; Copy length
