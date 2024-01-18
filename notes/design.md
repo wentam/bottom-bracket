@@ -96,6 +96,10 @@ the tree.
 * [ and ] could be a 'flat array' (farray) where byte arrays are placed flat
   in the array instead of as pointers
 * macroexpander macros?
+* more types could be added by using another bit from -length things.
+  this works because if your children are 8-bytes each you can lose the
+  extra space and still be able to fill all memory.
+* Make comments a fundamental datatype?
 
 # Problems to think about
 

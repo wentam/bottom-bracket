@@ -42,6 +42,7 @@ extern free
 extern bindump
 extern buffered_fd_reader_peek_byte
 extern byte_buffer_push_byte
+extern byte_buffer_write_int64
 extern byte_buffer_get_buf
 
 extern write_char
@@ -50,6 +51,7 @@ extern write_as_base
 section .rodata
 
 parray_literal_macro_name: db 1,0,0,0,0,0,0,0,"("
+byte_string_macro_name: db 1,0,0,0,0,0,0,0,'"'
 
 ;; TODO once we have multi-char reader macros
 ;; this may cause name conflicts
@@ -57,6 +59,9 @@ barray_literal_macro_name: db 8,0,0,0,0,0,0,0,"catchall"
 
 unexpected_eof_parray_str: db "ERROR: Unexpected EOF while reading parray (are your parenthesis mismatched?)",10
 unexpected_eof_parray_str_len: equ $ - unexpected_eof_parray_str
+
+unexpected_eof_bstring_str: db "ERROR: Unexpected EOF while reading byte string (are your double quotes mismatched?)",10
+unexpected_eof_bstring_str_len: equ $ - unexpected_eof_bstring_str
 
 unexpected_eof_barray_str: db "ERROR: Unexpected EOF while reading barray",10
 unexpected_eof_barray_str_len: equ $ - unexpected_eof_barray_str
@@ -106,8 +111,175 @@ push_builtin_reader_macros:
   mov rdi, r12
   call free
 
+  ;; push byte_string literal macro
+  mov rdi, (byte_string_end - byte_string)
+  mov rsi, byte_string
+  call barray_new
+  mov r12, rax
+
+  mov rdi, qword[macro_stack_reader] ; macro stack
+  mov rsi, byte_string_macro_name ; macro name
+  mov rdx, r12                       ; code barray
+  call macro_stack_push
+
+  mov rdi, r12
+  call free
+
   pop r12
   ret
+
+;;; byte_string(*buffered_fd_reader, *output_byte_buffer) -> buf-relative-ptr
+byte_string:
+  push r12
+  push r13
+  push r15
+  mov r12, rdi ; buffered fd reader
+  mov r13, rsi ; output byte buffer
+
+  ;; Write length placeholder
+  mov rdi, r13
+  mov rsi, 0
+  mov rax, byte_buffer_push_int64
+  call rax
+
+  ;; Consume the leading '"'
+  mov rdi, r12
+  mov rax, buffered_fd_reader_read_byte
+  call rax
+
+  mov r15, 0 ; byte counter
+  .byte:
+    ;; Peek the next byte
+    mov rdi, r12
+    mov rax, buffered_fd_reader_peek_byte
+    call rax
+
+    ;; If it's our ending ", leave
+    cmp rax, '"'
+    je .byte_break
+
+    ;; Actually consume the byte
+    mov rdi, r12
+    mov rax, buffered_fd_reader_read_byte
+    call rax
+
+    ;; --------------------
+    ;; --- Escape codes ---
+
+    cmp rax, '\'
+    jne .not_escape
+
+    ;; It's an escape char. Consume the next byte to determine escape type
+    mov rdi, r12
+    mov rax, buffered_fd_reader_read_byte
+    call rax
+
+    cmp rax, BUFFERED_READER_EOF
+    je .eof
+
+    cmp rax, 'n'
+    jne .not_newline
+
+    ;; It's a newline escape code, output literal newline
+    mov rdi, r13
+    mov rsi, 10
+    mov rax, byte_buffer_push_byte
+    call rax
+    jmp .next
+
+    .not_newline:
+
+    cmp rax, '\'
+    jne .not_backslash
+
+    ;; It's a backslash escape, output '\'
+    mov rdi, r13
+    mov rsi, '\'
+    mov rax, byte_buffer_push_byte
+    call rax
+    jmp .next
+
+    .not_backslash:
+
+    cmp rax, '"'
+    jne .not_dquote
+
+    ;; It's a double quote escape, output '"'
+    mov rdi, r13
+    mov rsi, '"'
+    mov rax, byte_buffer_push_byte
+    call rax
+    jmp .next
+
+    .not_dquote
+
+    ;; TODO hex literal
+    ;; TODO dec literal
+    ;; TODO terminal bell \a (ASCII code 0x07)
+    ;; TODO backspace \b     (ASCII code 0x08)
+    ;; TODO page break \f    (ASCII code 0x0C)
+    ;; TODO tab \t           (ASCII code 0x09)
+    ;; TODO vertical tab \v  (ASCII code 0x0B)
+    ;; TODO multiline strings
+
+    .not_escape:
+
+    ;; --- End escape codes ---
+    ;; ------------------------
+
+    ;; Error if it's EOF here
+    cmp rax, BUFFERED_READER_EOF
+    jne .no_eof
+
+    .eof:
+    mov rdi, unexpected_eof_bstring_str
+    mov rsi, unexpected_eof_bstring_str_len
+    mov rax, error_exit
+    call rax
+
+    .no_eof:
+
+    ;; Push the byte to output
+    mov rdi, r13
+    mov rsi, rax
+    mov rax, byte_buffer_push_byte
+    call rax
+
+    .next:
+
+    inc r15
+    jmp .byte
+
+  .byte_break:
+
+  ;; Consume the trailing '"'
+  mov rdi, r12
+  mov rax, buffered_fd_reader_read_byte
+  call rax
+
+  ;; Set rax to a relative pointer to the start of the barray
+  mov rdi, r13
+  mov rax, byte_buffer_get_data_length
+  call rax
+  sub rax, r15
+  sub rax, 8
+
+  ;; Update the length placeholder to real length
+  push rax
+  sub rsp, 8
+  mov rdi, r13
+  mov rsi, rax
+  mov rdx, r15
+  mov rax, byte_buffer_write_int64
+  call rax
+  add rsp, 8
+  pop rax
+
+  pop r15
+  pop r13
+  pop r12
+  ret
+byte_string_end:
 
 ;;; parray_literal(*buffered_fd_reader, *output_byte_buffer) -> buf-relative-ptr
 ;;;   Reader macro for parrays using '(' and ')'
@@ -127,7 +299,7 @@ parray_literal:
   mov r12, rdi ; Preserve buffered reader
   mov r14, rsi ; Preserve output buffer
 
-  ;; Consume the leading '(' TODO assert that it is actually '('
+  ;; Consume the leading '(' TODO assert that it is actually '('?
   mov rdi, r12
   mov rax, buffered_fd_reader_read_byte
   call rax

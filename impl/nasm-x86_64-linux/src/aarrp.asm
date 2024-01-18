@@ -47,6 +47,7 @@ extern free_macro_stacks
 ;; TODO tmp
 extern macro_stack_normal
 extern macro_stack_reader
+extern macro_stack_printer
 extern macro_stack_new
 extern macro_stack_free
 extern macro_stack_push
@@ -72,6 +73,9 @@ welcome_msg_len:  equ $ - welcome_msg
 readermac_msg: db 10,"Reader macro stack",10,"--------",10
 readermac_msg_len: equ $ - readermac_msg
 
+printermac_msg: db 10,"Printer macro stack",10,"--------",10
+printermac_msg_len: equ $ - printermac_msg
+
 buffer_msg: db 10,"Read result backing buffer",10,"--------",10
 buffer_msg_len: equ $ - buffer_msg
 
@@ -91,7 +95,7 @@ test_macro_name_3: db 4,0,0,0,0,0,0,0,"fooo"
 
 section .text
 
-;; TODO: count allocations and warn if not everything has been freed at the end
+;; TODO: count allocations and warn if not everything has been freed at the end - or provide needed things for valgrind to work
 ;; TODO: utility to push all registers and utility to pop all registers,
 ;;       to make it easy to inject debugging functions in the middle of something
 ;; TODO: make sure we're handling all errors that could occur from syscalls
@@ -110,31 +114,22 @@ _start:
 
   call init_macro_stacks
 
-  ;;mov rdi, qword[macro_stack_normal]
-  ;;mov rsi, test_macro_name
-  ;;mov rdx, test_macro_code
-  ;;call macro_stack_push
-
-  ;;mov rdi, qword[macro_stack_normal]
-  ;;mov rsi, test_macro_name_2
-  ;;mov rdx, test_macro_code_2
-  ;;call macro_stack_push
-
-  ;;mov rdi, qword[macro_stack_normal]
-  ;;mov rsi, test_macro_name
-  ;;call macro_stack_pop_by_name
-
-  ;; Newline
-  ;;mov rdi, 10
-  ;;mov rsi, stdout_fd
-  ;;call write_char
-
   mov rdi, readermac_msg
   mov rsi, readermac_msg_len
   mov rdx, stderr_fd
   call write
 
   mov rdi, qword[macro_stack_reader]
+  mov rsi, stderr_fd
+  mov rdx, 16
+  call macro_stack_bindump_buffers
+
+  mov rdi, printermac_msg
+  mov rsi, printermac_msg_len
+  mov rdx, stderr_fd
+  call write
+
+  mov rdi, qword[macro_stack_printer]
   mov rsi, stderr_fd
   mov rdx, 16
   call macro_stack_bindump_buffers

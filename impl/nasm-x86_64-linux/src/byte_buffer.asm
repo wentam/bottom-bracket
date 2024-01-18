@@ -10,6 +10,7 @@ global byte_buffer_get_buf_length
 global byte_buffer_get_buf
 global byte_buffer_push_byte
 global byte_buffer_push_int64
+global byte_buffer_write_int64
 global byte_buffer_pop_bytes
 global byte_buffer_pop_int64
 global byte_buffer_read_int64
@@ -163,6 +164,61 @@ byte_buffer_write_contents:
   pop r12
   ret
 
+;;; byte_buffer_write_int64(*byte_buffer, index, int64)
+;;;   Writes a int64 at a specific index in the byte buffer
+;;;
+;;;   Index is specified in terms of bytes, not int64s.
+;;;
+;;;   Never changes the data length.
+;;;
+;;;   If the index is equal to or greater than the current data length,
+;;;   invalidates any pointers pointing to within the int64 buffer.
+byte_buffer_write_int64:
+  push r12
+  push r13
+  push r14
+
+  mov r12, rdi ; byte buffer
+  mov r13, rsi ; byte index
+  mov r14, rdx ; int64
+
+  ;; Check if we need to expand the buffer
+  mov rax, qword[r12+BYTE_BUFFER_BUF_OFFSET] ; rax = ptr to raw buffer
+  add rax, qword[r12+BYTE_BUFFER_BUF_LENGTH_OFFSET]
+  mov rcx, r13
+  add rcx, 8
+  cmp rax, rcx ; cmp buf end to index+8
+  jg .after_expand
+
+  ;; Expand the buffer
+  mov rdi, qword[r12+BYTE_BUFFER_BUF_OFFSET]         ; buffer
+  mov rsi, qword[r12+BYTE_BUFFER_BUF_LENGTH_OFFSET]  ; new size = current size
+  shl rsi, 1                                         ; * 2
+  mov qword [r12+BYTE_BUFFER_BUF_LENGTH_OFFSET], rsi ; write new size
+  call realloc
+
+  cmp rax, 0
+  jne .good_realloc
+
+  ;; Error and exit if realloc failed
+  mov rdi, realloc_failed_error_str
+  mov rsi, realloc_failed_error_str_len
+  call error_exit
+
+  .good_realloc:
+
+  mov qword[r12+BYTE_BUFFER_BUF_OFFSET], rax ; update buf ptr to realloc result
+
+  .after_expand:
+
+  ;; Write the byte
+  mov rcx, qword[r12+BYTE_BUFFER_BUF_OFFSET]
+  mov qword[rcx+r13], r14
+
+  pop r14
+  pop r13
+  pop r12
+  ret
 
 ;;; byte_buffer_push_byte(*byte_buffer, byte)
 ;;;   Pushes a byte to the byte buffer
