@@ -211,7 +211,7 @@ byte_string:
     call rax
     jmp .next
 
-    .not_dquote
+    .not_dquote:
 
     ;; TODO hex literal
     ;; TODO dec literal
@@ -459,6 +459,8 @@ barray_literal:
   cmp rax, ')'
   je .finish
   cmp rax, '('
+  je .finish
+  cmp rax, '"'
   je .finish
   cmp rax, ' '
   je .finish
