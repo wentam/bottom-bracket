@@ -117,10 +117,6 @@ buffered_fd_reader_read_byte:
   mov r12, rdi                                   ; Struct pointer
   mov r13, qword [r12+BUFFERED_READER_FD_OFFSET] ; fd
 
-  %ifdef ASSERT_STACK_ALIGNMENT
-  call assert_stack_aligned
-  %endif
-
   ;; Decide if we need to refill the buffer
   mov rdi, qword [r12+BUFFERED_READER_READ_PTR_OFFSET]
   cmp rdi, qword [r12+BUFFERED_READER_END_PTR_OFFSET]

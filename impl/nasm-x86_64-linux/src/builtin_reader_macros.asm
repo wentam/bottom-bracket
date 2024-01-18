@@ -44,6 +44,9 @@ extern buffered_fd_reader_peek_byte
 extern byte_buffer_push_byte
 extern byte_buffer_write_int64
 extern byte_buffer_get_buf
+extern parse_uint
+extern alpha36p
+extern alpha10p
 
 extern write_char
 extern write_as_base
@@ -68,6 +71,12 @@ unexpected_eof_barray_str_len: equ $ - unexpected_eof_barray_str
 
 unexpected_paren_str: db "ERROR: Unexpected ')' while reading",10
 unexpected_paren_str_len: equ $ - unexpected_paren_str
+
+invalid_hex_str: db "ERROR: Invalid hex literal while reading byte string (must be 2x A-Z a-z 0-9)",10
+invalid_hex_str_len: equ $ - invalid_hex_str
+
+invalid_dec_str: db "ERROR: Invalid dec literal while reading byte string (must be 3x 0-9) and <256",10
+invalid_dec_str_len: equ $ - invalid_dec_str
 
 %define NEWLINE 10
 %define TAB 9
@@ -213,8 +222,171 @@ byte_string:
 
     .not_dquote:
 
-    ;; TODO hex literal
-    ;; TODO dec literal
+    cmp rax, 'x'
+    jne .not_hex_literal
+
+    ;; It's a hex literal
+
+    ;; Make room to put the hex literal on the stack
+    sub rsp, 2
+
+    ;; It's a hex literal. Read the next two bytes onto the stack.
+    mov rdi, r12
+    mov rax, buffered_fd_reader_read_byte
+    call rax
+    mov byte[rsp], al
+
+    ;; Error if not A-Z a-z 0-9
+    mov rdi, rax
+    mov rax, alpha36p
+    call rax
+    cmp rax, 1
+    je .good_hex_char_1
+
+    mov rdi, invalid_hex_str
+    mov rsi, invalid_hex_str_len
+    mov rax, error_exit
+    call rax
+
+    .good_hex_char_1:
+
+    mov rdi, r12
+    mov rax, buffered_fd_reader_read_byte
+    call rax
+    mov byte[rsp+1], al
+
+    ;; Error if not A-Z a-z 0-9
+    mov rdi, rax
+    mov rax, alpha36p
+    call rax
+    cmp rax, 1
+    je .good_hex_char_2
+
+    mov rdi, invalid_hex_str
+    mov rsi, invalid_hex_str_len
+    mov rax, error_exit
+    call rax
+
+    .good_hex_char_2:
+
+    push 2 ; length of barray
+
+    ;; Parse hex literal
+    mov rdi, rsp ; barray
+    mov rsi, 16  ; base
+    mov rax, parse_uint
+    call rax
+
+    ;; Re-align stack
+    add rsp, 10
+
+    ;; Push the parsed hex literal
+    mov rdi, r13
+    mov rsi, rax
+    mov rax, byte_buffer_push_byte
+    call rax
+    jmp .next
+
+    .not_hex_literal:
+
+    cmp rax, 'd'
+    jne .not_dec_literal
+
+    ;; It's a dec literal
+
+    ;; Make room to put the hex literal on the stack
+    sub rsp, 3
+
+    ;; It's a dec literal. Read the next three bytes onto the stack.
+    mov rdi, r12
+    mov rax, buffered_fd_reader_read_byte
+    call rax
+    mov byte[rsp], al
+
+    ;; Error if not 0-9
+    mov rdi, rax
+    mov rax, alpha10p
+    call rax
+    cmp rax, 1
+    je .good_dec_char_1
+
+    mov rdi, invalid_dec_str
+    mov rsi, invalid_dec_str_len
+    mov rax, error_exit
+    call rax
+
+    .good_dec_char_1:
+
+    mov rdi, r12
+    mov rax, buffered_fd_reader_read_byte
+    call rax
+    mov byte[rsp+1], al
+
+    ;; Error if not 0-9
+    mov rdi, rax
+    mov rax, alpha10p
+    call rax
+    cmp rax, 1
+    je .good_dec_char_2
+
+    mov rdi, invalid_dec_str
+    mov rsi, invalid_dec_str_len
+    mov rax, error_exit
+    call rax
+
+    .good_dec_char_2:
+
+    mov rdi, r12
+    mov rax, buffered_fd_reader_read_byte
+    call rax
+    mov byte[rsp+2], al
+
+    ;; Error if not 0-9
+    mov rdi, rax
+    mov rax, alpha10p
+    call rax
+    cmp rax, 1
+    je .good_dec_char_3
+
+    mov rdi, invalid_dec_str
+    mov rsi, invalid_dec_str_len
+    mov rax, error_exit
+    call rax
+
+    .good_dec_char_3:
+
+    push 3 ; length of barray
+
+    ;; Parse hex literal
+    mov rdi, rsp ; barray
+    mov rsi, 10  ; base
+    mov rax, parse_uint
+    call rax
+
+    ;; Re-align stack
+    add rsp, 11
+
+    ;; Error if dec literal > 255
+    cmp rax, 256
+    jl .dec_in_range
+
+    mov rdi, invalid_dec_str
+    mov rsi, invalid_dec_str_len
+    mov rax, error_exit
+    call rax
+
+    .dec_in_range:
+
+    ;; Push the parsed dec literal
+    mov rdi, r13
+    mov rsi, rax
+    mov rax, byte_buffer_push_byte
+    call rax
+    jmp .next
+
+    .not_dec_literal:
+
+    ;; TODO octal literals \oxxx
     ;; TODO terminal bell \a (ASCII code 0x07)
     ;; TODO backspace \b     (ASCII code 0x08)
     ;; TODO page break \f    (ASCII code 0x0C)

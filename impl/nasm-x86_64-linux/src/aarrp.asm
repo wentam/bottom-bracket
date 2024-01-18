@@ -32,6 +32,7 @@ extern malloc
 extern realloc
 extern free
 extern write_as_base
+extern parse_uint
 extern read
 extern assert_stack_aligned
 extern bindump
@@ -59,6 +60,7 @@ extern macro_stack_pop_by_name
 extern byte_buffer_delete_bytes
 extern barray_new
 extern parray_literal
+extern ascii_to_digit
 
 section .rodata
 
@@ -177,5 +179,31 @@ _start:
 
   call free_macro_stacks
 
+  ;;sub rsp, 8
+  ;;mov byte[rsp], 'F'
+  ;;mov byte[rsp-1], 'F'
+  ;;sub rsp, 1
+  ;;push 2
+
+  ;;;;mov rdi, rsp
+  ;;;;mov rsi, 16
+  ;;;;mov rdx, stderr_fd
+  ;;;;mov rcx, 16
+  ;;;;call bindump
+
+  ;;mov rdi, rsp
+  ;;mov rsi, 16
+  ;;call parse_uint
+
+  ;;mov rdi, rax
+  ;;mov rsi, 10
+  ;;mov rdx, stderr_fd
+  ;;mov rcx, 0
+  ;;call write_as_base
+
+  ;;pop rdi
+  ;;add rsp, 10
+
+  ;; Exit
   mov rdi, 0
   call exit

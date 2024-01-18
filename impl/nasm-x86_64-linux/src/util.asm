@@ -34,10 +34,14 @@ global malloc
 global realloc
 global free
 global write_as_base
+global parse_uint
 global digit_to_ascii
+global ascii_to_digit
 global assert_stack_aligned
 global bindump
 global barray_equalp
+global alpha36p
+global alpha10p
 
 extern byte_buffer_new
 extern byte_buffer_free
@@ -285,6 +289,113 @@ digit_to_ascii:
 
     add rsp, 8
     ret
+
+;;; alpha36p(byte) -> int
+;;;   1 if byte represents the chars A-Z a-z 0-9, else 0
+alpha36p:
+  mov rcx, 1
+  mov rax, 0
+
+  sub rdi, 48 ; move to '0' char
+  cmp rdi, 10
+  cmovb rax, rcx
+
+  sub rdi, 17 ; move to 'A' char
+  cmp rdi, 26
+  cmovb rax, rcx
+
+  sub rdi, 32 ; move to 'a' char
+  cmp rdi, 26
+  cmovb rax, rcx
+
+  ret
+
+;;; alpha10p(byte) -> int
+;;;   1 if byte represents the chars 0-9, else 0
+alpha10p:
+  mov rcx, 1
+  mov rax, 0
+
+  sub rdi, 48 ; move to '0' char
+  cmp rdi, 10
+  cmovb rax, rcx
+  ret
+
+;;; ascii_to_digit(byte)
+;;;   Converts an ascii byte (0-9 A-Z a-z) to the digit it represents.
+;;;   (up to base 36)
+;;;
+;;;   a-z is equivalent to A-Z
+ascii_to_digit:
+  mov rax, rdi
+
+  cmp rax, 57
+  jg .as_uppercase_letter
+
+  sub rax, 48
+  ret
+
+  .as_uppercase_letter:
+  cmp rax, 90
+  jg .as_lowercase_letter
+
+  sub rax, 55
+  ret
+
+  .as_lowercase_letter:
+  sub rax, 87
+  ret
+
+;;; parse_uint(*barray_string, base) -> int
+;;;   Parses an unsigned integer from *barray_string as base
+parse_uint:
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+  mov r12, rdi ; string
+  mov r13, rsi ; base
+
+  mov r15, qword[r12] ; get length
+  add r12, 8          ; move past length
+
+  ;; Loop working right-to-left
+  xor r14, r14 ; result
+  mov rbx, 1    ; multiplier
+  .loop:
+    cmp r15, 0
+    je .break
+
+    ;; Parse digit
+    xor rdi, rdi
+    mov dil, byte[r12+r15-1]
+    call ascii_to_digit
+
+    ;; Multiply digit by multiplier (digit*base*position)
+    mul rbx
+
+    ;; Add to result
+    add r14, rax
+
+    ;; Update multiplier
+    mov rax, rbx
+    mul r13
+    mov rbx, rax
+
+    ;; Next byte
+    dec r15
+    jmp .loop
+
+  .break:
+
+  mov rax, r14
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  ret
 
 ;;; write_as_base(int64, base, fd, pad-to)
 ;;;   Writes a number to fd as a string in a specified base.
