@@ -13,6 +13,7 @@ extern macro_stack_new
 extern macro_stack_free
 extern assert_stack_aligned
 extern push_builtin_reader_macros
+extern push_builtin_printer_macros
 
 section .bss
 
@@ -43,6 +44,7 @@ init_macro_stacks:
 
   ;; Push builtin macros
   call push_builtin_reader_macros
+  call push_builtin_printer_macros
 
   add rsp, 8
   ret

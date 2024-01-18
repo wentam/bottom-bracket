@@ -16,8 +16,6 @@
 ;;;;
 ;;;; return value: rax
 ;;;;
-;;;; The only "non-special" registers are r10 r11.
-;;;;
 ;;;; Syscalls:
 ;;;; arguments: rdi rsi rdx r10 r8 r9. No stack arguments.
 ;;;; return value: rax. A value in the range between -4095 and -1 indicates an error
