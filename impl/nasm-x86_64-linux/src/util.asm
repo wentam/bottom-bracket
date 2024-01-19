@@ -319,7 +319,7 @@ visible_char_p:
   mov rax, 0
 
   sub rdi, 33
-  cmp rdi, 93
+  cmp rdi, 94
   cmovb rax, rcx
 
   ret
