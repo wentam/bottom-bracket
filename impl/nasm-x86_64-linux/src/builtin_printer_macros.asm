@@ -245,7 +245,7 @@ barray_with_byte_strings:
     mov rax, write_char
     call rax
     jmp .next
-    .not_newline
+    .not_newline:
 
     ;; Backslash
     cmp byte[r12], '\'
@@ -259,7 +259,7 @@ barray_with_byte_strings:
     mov rax, write_char
     call rax
     jmp .next
-    .not_backslash
+    .not_backslash:
 
     ;; Double quote
     cmp byte[r12], '"'
@@ -273,7 +273,7 @@ barray_with_byte_strings:
     mov rax, write_char
     call rax
     jmp .next
-    .not_dquote
+    .not_dquote:
 
     ;; If otherwise not visible, hex literal
     xor rdi, rdi
@@ -308,11 +308,11 @@ barray_with_byte_strings:
     mov rax, write_char
     call rax
 
-    .next
+    .next:
     inc r12
     dec r15
     jmp .as_byte_string_loop
-    .as_byte_string_loop_break
+    .as_byte_string_loop_break:
 
   ;; Trailing '"'
   mov rdi, '"'
