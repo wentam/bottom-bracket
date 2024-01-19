@@ -22,6 +22,10 @@ extern macro_stack_call_by_name
 extern free
 extern write_char
 extern write
+extern visible_char_p
+extern barray_invalid_chars
+extern byte_in_barray_p
+extern write_as_base
 
 section .rodata
 parray_macro_name: db 6,0,0,0,0,0,0,0,"parray"
@@ -54,6 +58,23 @@ push_builtin_printer_macros:
   ;; push barray macro
   mov rdi, (barray_end - barray)
   mov rsi, barray
+  call barray_new
+  mov r12, rax ; barray with our barray macro code in it
+
+  mov rdi, qword[macro_stack_printer] ; macro stack
+  mov rsi, barray_macro_name          ; macro name
+  mov rdx, r12                        ; code
+  call macro_stack_push
+
+  mov rdi, r12
+  call free
+
+  ;; push barray with byte-strings macro
+  ;; we intentionally shadow the other barray macro such
+  ;; that you can easily pop this one off the stack to get all barrays
+  ;; printed literally
+  mov rdi, (barray_with_byte_strings_end - barray_with_byte_strings)
+  mov rsi, barray_with_byte_strings
   call barray_new
   mov r12, rax ; barray with our barray macro code in it
 
@@ -125,7 +146,7 @@ data:
   ret
 data_end:
 
-;; barray(*data, fd)
+;;; barray(*data, fd)
 barray:
   push r12
   mov r12, rdi ; *data
@@ -143,7 +164,172 @@ barray:
   ret
 barray_end:
 
-;; parray(*data, fd)
+;;; barray_with_byte_strings(*data, fd)
+barray_with_byte_strings:
+  push r12
+  push r13
+  push r14
+  push r15
+  sub rsp, 8
+  mov r12, rdi ; *data
+  mov r13, rsi ; fd
+
+  ;; Check if we need to use a byte string for this string
+  mov r15, qword[r12] ; Length of barray
+  mov r14, r12
+  add r14, 8 ; Move past length
+  .check_loop:
+    cmp r15, 0
+    je .check_loop_break
+
+    ;; If this isn't a visible ascii char -> byte string
+    xor rdi, rdi
+    mov dil, byte[r14]
+    mov rax, visible_char_p
+    call rax
+    cmp rax, 0
+    je .as_byte_string
+
+    ;; If this contains a barray invalid char -> byte string
+    xor rdi, rdi
+    mov dil, byte[r14]
+    mov rsi, barray_invalid_chars
+    mov rax, byte_in_barray_p
+    call rax
+    cmp rax, 1
+    je .as_byte_string
+
+    inc r14
+    dec r15
+    jmp .check_loop
+
+  .check_loop_break:
+
+  .as_barray_literal:
+  mov r15, qword[r12] ; Length of barray
+  add r12, 8          ; Move past length
+
+  mov rdx, r13 ; fd
+  mov rdi, r12
+  mov rsi, r15
+  mov rax, write
+  call rax
+  jmp .epilogue
+
+  .as_byte_string:
+
+  ;; Leading '"'
+  mov rdi, '"'
+  mov rsi, r13
+  mov rax, write_char
+  call rax
+
+  mov r15, qword[r12] ; Length of barray
+  add r12, 8          ; Move past length
+  .as_byte_string_loop:
+    cmp r15, 0
+    je .as_byte_string_loop_break
+
+    ;; --------------------
+    ;; --- Escape codes ---
+
+    ;; Newline
+    cmp byte[r12], 10
+    jne .not_newline
+    mov rdi, '\'
+    mov rsi, r13
+    mov rax, write_char
+    call rax
+    mov rdi, 'n'
+    mov rsi, r13
+    mov rax, write_char
+    call rax
+    jmp .next
+    .not_newline
+
+    ;; Backslash
+    cmp byte[r12], '\'
+    jne .not_backslash
+    mov rdi, '\'
+    mov rsi, r13
+    mov rax, write_char
+    call rax
+    mov rdi, '\'
+    mov rsi, r13
+    mov rax, write_char
+    call rax
+    jmp .next
+    .not_backslash
+
+    ;; Double quote
+    cmp byte[r12], '"'
+    jne .not_dquote
+    mov rdi, '\'
+    mov rsi, r13
+    mov rax, write_char
+    call rax
+    mov rdi, '"'
+    mov rsi, r13
+    mov rax, write_char
+    call rax
+    jmp .next
+    .not_dquote
+
+    ;; If otherwise not visible, hex literal
+    xor rdi, rdi
+    mov dil, byte[r12]
+    mov rax, visible_char_p
+    call rax
+    cmp rax, 1
+    je .not_hex
+    mov rdi, '\'
+    mov rsi, r13
+    mov rax, write_char
+    call rax
+    mov rdi, 'x'
+    mov rsi, r13
+    mov rax, write_char
+    call rax
+    xor rdi, rdi
+    mov dil, byte[r12]
+    mov rsi, 16
+    mov rdx, r13
+    mov rcx, 2
+    mov rax, write_as_base
+    call rax
+    .not_hex:
+
+    ;; --- End escape codes ---
+    ;; --------------------
+
+    xor rdi, rdi
+    mov dil, byte[r12]
+    mov rsi, r13
+    mov rax, write_char
+    call rax
+
+    .next
+    inc r12
+    dec r15
+    jmp .as_byte_string_loop
+    .as_byte_string_loop_break
+
+  ;; Trailing '"'
+  mov rdi, '"'
+  mov rsi, r13
+  mov rax, write_char
+  call rax
+
+  .epilogue:
+  add rsp, 8
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  ret
+barray_with_byte_strings_end:
+
+;;; parray(*data, fd)
 parray:
   push r12
   push r13

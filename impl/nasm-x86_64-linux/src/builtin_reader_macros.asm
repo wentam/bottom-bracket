@@ -25,6 +25,7 @@
 
 section .text
 global push_builtin_reader_macros
+global barray_invalid_chars
 
 extern macro_stack_reader
 extern macro_stack_push
@@ -47,6 +48,7 @@ extern byte_buffer_get_buf
 extern parse_uint
 extern alpha36p
 extern alpha10p
+extern byte_in_barray_p
 
 extern write_char
 extern write_as_base
@@ -80,6 +82,8 @@ invalid_dec_str_len: equ $ - invalid_dec_str
 
 %define NEWLINE 10
 %define TAB 9
+
+barray_invalid_chars: db 6,0,0,0,0,0,0,0,'(',')',' ','"',NEWLINE,TAB
 
 section .text
 
@@ -628,19 +632,13 @@ barray_literal:
   mov rdi, r12 ; buffered reader
   mov rax, buffered_fd_reader_peek_byte
   call rax
-  cmp rax, ')'
-  je .finish
-  cmp rax, '('
-  je .finish
-  cmp rax, '"'
-  je .finish
-  cmp rax, ' '
-  je .finish
   cmp rax, BUFFERED_READER_EOF
   je .finish
-  cmp rax, NEWLINE
-  je .finish
-  cmp rax, TAB
+  mov rdi, rax
+  mov rsi, barray_invalid_chars
+  mov rax, byte_in_barray_p
+  call rax
+  cmp rax, 1
   je .finish
 
   ;; Read the next char

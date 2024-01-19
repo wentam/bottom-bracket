@@ -42,6 +42,8 @@ global bindump
 global barray_equalp
 global alpha36p
 global alpha10p
+global byte_in_barray_p
+global visible_char_p
 
 extern byte_buffer_new
 extern byte_buffer_free
@@ -308,6 +310,43 @@ alpha36p:
   cmp rdi, 26
   cmovb rax, rcx
 
+  ret
+
+;;; visible_char_p(byte) -> int
+;;;   1 if byte represents a visible non-whitespace ascii char, else 0
+visible_char_p:
+  mov rcx, 1
+  mov rax, 0
+
+  sub rdi, 33
+  cmp rdi, 93
+  cmovb rax, rcx
+
+  ret
+
+;;; byteinbarrayp(byte, *barray)
+;;;   1 if byte appears at least once in *barray, else 0.
+byte_in_barray_p:
+  mov rcx, qword[rsi] ; length
+  add rsi, 8          ; move past length
+
+  .loop:
+  cmp rcx, 0
+  je .break
+
+  cmp dil, byte[rsi]
+  je .match
+
+  dec rcx
+  inc rsi
+  jmp .loop
+
+  .break:
+  mov rax, 0
+  ret
+
+  .match:
+  mov rax, 1
   ret
 
 ;;; alpha10p(byte) -> int
