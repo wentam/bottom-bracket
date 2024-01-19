@@ -297,6 +297,7 @@ barray_with_byte_strings:
     mov rcx, 2
     mov rax, write_as_base
     call rax
+    jmp .next
     .not_hex:
 
     ;; --- End escape codes ---
