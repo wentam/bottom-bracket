@@ -275,6 +275,10 @@ barray_with_byte_strings:
     jmp .next
     .not_dquote:
 
+    ;; Skip hex in the case of space
+    cmp byte[r12], ' '
+    je .not_hex
+
     ;; If otherwise not visible, hex literal
     xor rdi, rdi
     mov dil, byte[r12]
