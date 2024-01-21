@@ -10,6 +10,9 @@ global byte_buffer_get_buf_length
 global byte_buffer_get_buf
 global byte_buffer_push_byte
 global byte_buffer_push_int64
+global byte_buffer_push_barray
+global byte_buffer_push_barray_bytes
+global byte_buffer_push_bytes
 global byte_buffer_write_int64
 global byte_buffer_pop_bytes
 global byte_buffer_pop_int64
@@ -343,17 +346,103 @@ byte_buffer_push_int64:
   ;; Write 8 zeros to make space in the buffer
   mov r12, 8
   .write_int64_space:
-  mov rdi, r14
-  mov rsi, 0
-  call byte_buffer_push_byte
-  dec r12
-  cmp r12, 0
-  jne .write_int64_space
+    mov rdi, r14
+    mov rsi, 0
+    call byte_buffer_push_byte
+    dec r12
+    cmp r12, 0
+    jne .write_int64_space
 
   ;; Replace the zeros with our int64
   mov rax, qword[r14+BYTE_BUFFER_BUF_OFFSET]         ; backing buf
   add rax, qword[r14+BYTE_BUFFER_DATA_LENGTH_OFFSET] ; + existing data
   mov qword[rax-8], r13                              ; Write our int64
+
+  pop r14
+  pop r13
+  pop r12
+  ret
+
+;;; byte_buffer_push_barray(*byte_buffer, *barray)
+;;;   Pushes a barray to the byte buffer.
+;;;   Not just the bytes: includes the length.
+;;;
+;;;   Invalidates any pointers pointing to within the byte buffer.
+byte_buffer_push_barray:
+  push r12
+  push r13
+  push r14
+
+  mov r14, rdi ; byte buffer
+  mov r13, rsi ; barray to write
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call assert_stack_aligned
+  %endif
+
+  ;; Write the length
+  mov rdi, r14
+  mov rsi, qword[r13]
+  call byte_buffer_push_int64
+
+  ;; Write bytes
+  mov rdi, r14
+  mov rsi, r13
+  call byte_buffer_push_barray_bytes
+
+  pop r14
+  pop r13
+  pop r12
+  ret
+
+;;; byte_buffer_push_barray_bytes(*byte_buffer, *barray)
+;;;   Pushes barray bytes to the byte buffer. Doesn't include the length.
+;;;
+;;;   Invalidates any pointers pointing to within the byte buffer.
+byte_buffer_push_barray_bytes:
+  sub rsp, 8
+
+  ;mov rdi, rdi        ; byte buffer
+  mov rdx, qword[rsi] ; length of barray
+  add rsi, 8          ; Move past length
+  mov rsi, rsi        ; *bytes
+  call byte_buffer_push_bytes
+
+  add rsp, 8
+  ret
+
+;;; byte_buffer_push_bytes(*byte_buffer, *bytes, length)
+;;;   Pushes bytes to the byte buffer.
+;;;
+;;;   Invalidates any pointers pointing to within the byte buffer.
+byte_buffer_push_bytes:
+  push r12
+  push r13
+  push r14
+
+  mov r14, rdi ; byte buffer
+  mov r13, rsi ; barray to write
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call assert_stack_aligned
+  %endif
+
+  ;; Write bytes
+  mov r12, rdx ; length counter
+  .write_loop:
+    cmp r12, 0
+    je .write_loop_break
+
+    mov rdi, r14
+    xor rsi, rsi
+    mov sil, byte[r13]
+    call byte_buffer_push_byte
+
+    dec r12
+    inc r13
+    jmp .write_loop
+
+  .write_loop_break:
 
   pop r14
   pop r13

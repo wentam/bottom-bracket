@@ -1,6 +1,6 @@
 ;; TODO: instead of printer macros directly outputting to
 ;; an fd, they should probably output to a buffered output
-;; class (that probably happens to output to an fd).
+;; class - perhaps byte buffer.
 ;;
 ;; lots of tiny fd writes are innefficient, and the output always
 ;; being an fd isn't neccessarily something we want to lock ourselves
@@ -18,6 +18,7 @@ extern barray_new
 extern assert_stack_aligned
 extern macro_stack_printer
 extern macro_stack_push
+extern macro_stack_push_range
 extern macro_stack_call_by_name
 extern free
 extern write_char
@@ -42,68 +43,40 @@ push_builtin_printer_macros:
   %endif
 
   ;; push top-level 'data' macro
-  mov rdi, (data_end - data)
-  mov rsi, data
-  call barray_new
-  mov r12, rax ; data with our data macro code in it
-
   mov rdi, qword[macro_stack_printer] ; macro stack
-  mov rsi, data_macro_name          ; macro name
-  mov rdx, r12                        ; code
-  call macro_stack_push
-
-  mov rdi, r12
-  call free
+  mov rsi, data_macro_name            ; macro name
+  mov rdx, data                       ; code
+  mov rcx, (data_end - data)          ; length
+  call macro_stack_push_range
 
   ;; push barray macro
-  mov rdi, (barray_end - barray)
-  mov rsi, barray
-  call barray_new
-  mov r12, rax ; barray with our barray macro code in it
-
   mov rdi, qword[macro_stack_printer] ; macro stack
   mov rsi, barray_macro_name          ; macro name
-  mov rdx, r12                        ; code
-  call macro_stack_push
-
-  mov rdi, r12
-  call free
+  mov rdx, barray                     ; code
+  mov rcx, (barray_end - barray)      ; length
+  call macro_stack_push_range
 
   ;; push barray with byte-strings macro
   ;; we intentionally shadow the other barray macro such
   ;; that you can easily pop this one off the stack to get all barrays
   ;; printed literally
-  mov rdi, (barray_with_byte_strings_end - barray_with_byte_strings)
-  mov rsi, barray_with_byte_strings
-  call barray_new
-  mov r12, rax ; barray with our barray macro code in it
-
   mov rdi, qword[macro_stack_printer] ; macro stack
   mov rsi, barray_macro_name          ; macro name
-  mov rdx, r12                        ; code
-  call macro_stack_push
-
-  mov rdi, r12
-  call free
+  mov rdx, barray_with_byte_strings   ; code
+  mov rcx, (barray_with_byte_strings_end - barray_with_byte_strings) ; length
+  call macro_stack_push_range
 
   ;; push parray macro
-  mov rdi, (parray_end - parray)
-  mov rsi, parray
-  call barray_new
-  mov r12, rax ; barray with our parray macro code in it
-
   mov rdi, qword[macro_stack_printer] ; macro stack
   mov rsi, parray_macro_name          ; macro name
-  mov rdx, r12                        ; code
-  call macro_stack_push
-
-  mov rdi, r12
-  call free
+  mov rdx, parray                     ; code
+  mov rcx, (parray_end - parray)      ; length
+  call macro_stack_push_range
 
   pop r12
   ret
 
-;; data(*data, fd)
+;;; data(*data, fd)
 data:
   push r12
   push r13

@@ -2,6 +2,7 @@ section .tex
 global macro_stack_new
 global macro_stack_free
 global macro_stack_push
+global macro_stack_push_range
 global macro_stack_pop
 global macro_stack_pop_by_name
 global macro_stack_peek
@@ -26,6 +27,7 @@ extern byte_buffer_peek_int64
 extern byte_buffer_delete_bytes
 
 extern barray_equalp
+extern barray_new
 extern write_char
 extern write_as_base
 extern bindump
@@ -98,6 +100,48 @@ macro_stack_free:
 
   mov rdi, r12
   call free
+  pop r12
+  ret
+
+;;; macro_stack_push_range(*macro_stack, *macro_name, *code_start, code length)
+;;;   Like macro_stack_push, but code is specified via pointer-and-length
+;;;   instead of a barray.
+;;;
+;;;   TODO better name for this function?
+;;;   TODO perhaps this should just be macro_stack_push? do we need the barray
+;;;   one at all?
+macro_stack_push_range:
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+
+  mov r12, rdi ; macro stack
+  mov r13, rsi ; macro name
+  mov r14, rdx ; code start
+  mov r15, rcx ; code length
+
+  ;; Create a new barray with this code in it
+  mov rdi, r15
+  mov rsi, r14
+  call barray_new
+  mov rbx, rax
+
+  ;; Push the macro the normal barray way
+  mov rdi, r12          ; macro stack
+  mov rsi, r13          ; macro name
+  mov rdx, rbx          ; code barray
+  call macro_stack_push
+
+  ;; Free the barray
+  mov rdi, rbx
+  call free
+
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
   pop r12
   ret
 

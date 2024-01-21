@@ -1,11 +1,11 @@
 ;;;; Macro stack bindings
-;;;;   Creates macro stacks for normal, reader, printer macros.
+;;;;   Creates macro stacks for structural, reader, printer macros.
 
 section .text
 global init_macro_stacks
 global free_macro_stacks
 
-global macro_stack_normal
+global macro_stack_structural
 global macro_stack_reader
 global macro_stack_printer
 
@@ -14,10 +14,11 @@ extern macro_stack_free
 extern assert_stack_aligned
 extern push_builtin_reader_macros
 extern push_builtin_printer_macros
+extern push_builtin_structural_macros
 
 section .bss
 
-macro_stack_normal: resq 1
+macro_stack_structural: resq 1
 macro_stack_reader: resq 1
 macro_stack_printer: resq 1
 
@@ -36,7 +37,7 @@ init_macro_stacks:
 
   ;; Create stacks
   call macro_stack_new
-  mov qword[macro_stack_normal], rax
+  mov qword[macro_stack_structural], rax
   call macro_stack_new
   mov qword[macro_stack_reader], rax
   call macro_stack_new
@@ -45,6 +46,7 @@ init_macro_stacks:
   ;; Push builtin macros
   call push_builtin_reader_macros
   call push_builtin_printer_macros
+  call push_builtin_structural_macros
 
   add rsp, 8
   ret
@@ -58,7 +60,7 @@ free_macro_stacks:
   call assert_stack_aligned
   %endif
 
-  mov rdi, qword[macro_stack_normal]
+  mov rdi, qword[macro_stack_structural]
   call macro_stack_free
   mov rdi, qword[macro_stack_reader]
   call macro_stack_free

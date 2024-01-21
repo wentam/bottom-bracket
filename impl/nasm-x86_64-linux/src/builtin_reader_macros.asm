@@ -29,6 +29,7 @@ global barray_invalid_chars
 
 extern macro_stack_reader
 extern macro_stack_push
+extern macro_stack_push_range
 
 extern BUFFERED_READER_EOF
 extern error_exit
@@ -90,55 +91,30 @@ section .text
 ;;; push_builtin_reader_macros()
 ;;;   Pushes builtin reader macros to the reader macro stack
 push_builtin_reader_macros:
-  push r12
-
-  %ifdef ASSERT_STACK_ALIGNMENT
-  call assert_stack_aligned
-  %endif
+  sub rsp, 8
 
   ;; push barray literal macro
-  mov rdi, (barray_literal_end - barray_literal)
-  mov rsi, barray_literal
-  call barray_new
-  mov r12, rax
-
   mov rdi, qword[macro_stack_reader] ; macro stack
   mov rsi, barray_literal_macro_name ; macro name
-  mov rdx, r12                       ; code barray
-  call macro_stack_push
-
-  mov rdi, r12
-  call free
+  mov rdx, barray_literal            ; code
+  mov rcx, (barray_literal_end - barray_literal)
+  call macro_stack_push_range
 
   ;; push parray literal macro
-  mov rdi, (parray_literal_end - parray_literal)
-  mov rsi, parray_literal
-  call barray_new
-  mov r12, rax
-
   mov rdi, qword[macro_stack_reader] ; macro stack
   mov rsi, parray_literal_macro_name ; macro name
-  mov rdx, r12                       ; code barray
-  call macro_stack_push
-
-  mov rdi, r12
-  call free
+  mov rdx, parray_literal            ; code
+  mov rcx, (parray_literal_end - parray_literal) ; length
+  call macro_stack_push_range
 
   ;; push byte_string literal macro
-  mov rdi, (byte_string_end - byte_string)
-  mov rsi, byte_string
-  call barray_new
-  mov r12, rax
+  mov rdi, qword[macro_stack_reader]       ; macro stack
+  mov rsi, byte_string_macro_name          ; macro name
+  mov rdx, byte_string                     ; code
+  mov rcx, (byte_string_end - byte_string) ; length
+  call macro_stack_push_range
 
-  mov rdi, qword[macro_stack_reader] ; macro stack
-  mov rsi, byte_string_macro_name ; macro name
-  mov rdx, r12                       ; code barray
-  call macro_stack_push
-
-  mov rdi, r12
-  call free
-
-  pop r12
+  add rsp, 8
   ret
 
 ;;; byte_string(*buffered_fd_reader, *output_byte_buffer) -> buf-relative-ptr
@@ -390,7 +366,7 @@ byte_string:
 
     .not_dec_literal:
 
-    ;; TODO octal literals \oxxx
+    ;; TODO binary literals \b10101010
     ;; TODO terminal bell \a (ASCII code 0x07)
     ;; TODO backspace \b     (ASCII code 0x08)
     ;; TODO page break \f    (ASCII code 0x0C)
