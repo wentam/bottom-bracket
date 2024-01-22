@@ -47,6 +47,8 @@ extern free_macro_stacks
 
 extern macro_stack_reader
 extern macro_stack_printer
+extern macro_stack_structural
+
 extern macro_stack_new
 extern macro_stack_free
 extern macro_stack_push
@@ -80,6 +82,9 @@ readermac_msg_len: equ $ - readermac_msg
 
 printermac_msg: db 10,"Printer macro stack",10,"--------",10
 printermac_msg_len: equ $ - printermac_msg
+
+structuralmac_msg: db 10,"Structural macro stack",10,"--------",10
+structuralmac_msg_len: equ $ - structuralmac_msg
 
 buffer_msg: db 10,"Read result backing buffer",10,"--------",10
 buffer_msg_len: equ $ - buffer_msg
@@ -146,6 +151,16 @@ _start:
   mov rdx, 16
   call macro_stack_bindump_buffers
 
+  mov rdi, structuralmac_msg
+  mov rsi, structuralmac_msg_len
+  mov rdx, stderr_fd
+  call write
+
+  mov rdi, qword[macro_stack_structural]
+  mov rsi, stderr_fd
+  mov rdx, 16
+  call macro_stack_bindump_buffers
+
   mov rdi, stdin_fd
   call read
   mov r12, rax
@@ -177,7 +192,7 @@ _start:
   call write
 
   mov rdi, r12
-  mov rsi, stdout_fd
+  mov rsi, stderr_fd
   call print
 
   ;; Create macroexpansion backing buffer
