@@ -10,6 +10,8 @@ global _read ; for reader macros
 global free_read_result
 global dump_read_result_buffer
 global dump_read_result
+global _relative_to_abs ; TODO move this somewhere not reader-specific as
+                        ; the macroexpander uses it
 
 ;; TODO cleanup unused
 extern read_char

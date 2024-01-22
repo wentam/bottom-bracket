@@ -60,6 +60,10 @@ extern byte_buffer_delete_bytes
 extern barray_new
 extern parray_literal
 extern ascii_to_digit
+extern byte_buffer_new
+extern structural_macro_expand_relptr
+extern structural_macro_expand
+extern byte_buffer_bindump_buffer
 
 section .rodata
 
@@ -83,8 +87,14 @@ buffer_msg_len: equ $ - buffer_msg
 result_msg: db 10,"Read result",10,"--------",10
 result_msg_len: equ $ - result_msg
 
-print_msg: db 10,"Fed back into aarrp printer",10,"--------",10
+print_msg: db 10,"Printed before macroexpansion",10,"--------",10
 print_msg_len: equ $ - print_msg
+
+print2_msg: db 10,"Printed after macroexpansion",10,"--------",10
+print2_msg_len: equ $ - print2_msg
+
+me_msg: db 10,"Macroexpanded backing buffer",10,"--------",10
+me_msg_len: equ $ - me_msg
 
 test_macro_name: db 3,0,0,0,0,0,0,0,"foo"
 test_macro_code: db 11,0,0,0,0,0,0,0,"code-stuffs"
@@ -160,12 +170,80 @@ _start:
   mov rdx, 16
   call dump_read_result
 
+  ;; Print pre-expanded read
   mov rdi, print_msg
   mov rsi, print_msg_len
   mov rdx, stderr_fd
   call write
 
   mov rdi, r12
+  mov rsi, stdout_fd
+  call print
+
+  ;; TODO tmp create macroexpansion backing buffer
+  call byte_buffer_new
+  mov r14, rax
+
+  ;; TODO tmp newline
+  mov rdi, 10
+  mov rsi, stderr_fd
+  call write_char
+
+  ;; TODO tmp macroexpand
+  mov rdi, r12
+  mov rsi, r14
+  call structural_macro_expand
+  mov r15, rax
+
+  ;; TODO tmp print return pointer
+  ;push rax
+  ;push rax
+  ;mov rdi, rax
+  ;mov rsi, 16
+  ;mov rdx, stderr_fd
+  ;mov rcx, 0
+  ;call write_as_base
+
+  ;; TODO tmp newline
+  ;mov rdi, 10
+  ;mov rsi, stderr_fd
+  ;call write_char
+
+  pop rax
+  pop rax
+
+  ;; TODO tmp print bytes at return pointer
+  ;mov rdi, rax
+  ;mov rsi, 32 ; len
+  ;mov rdx, stderr_fd
+  ;mov rcx, 16 ; base
+  ;call bindump
+
+
+  ;; TODO tmp newline
+  mov rdi, 10
+  mov rsi, stderr_fd
+  call write_char
+
+  ;; TODO tmp
+  mov rdi, me_msg
+  mov rsi, me_msg_len
+  mov rdx, stderr_fd
+  call write
+
+  ;; TODO tmp dump macroexpansion backing buffer
+  mov rdi, r14
+  mov rsi, stderr_fd
+  mov rdx, 16
+  call byte_buffer_bindump_buffer
+
+  ;; Print post-expanded read
+  mov rdi, print2_msg
+  mov rsi, print2_msg_len
+  mov rdx, stderr_fd
+  call write
+
+  mov rdi, r15
   mov rsi, stdout_fd
   call print
 

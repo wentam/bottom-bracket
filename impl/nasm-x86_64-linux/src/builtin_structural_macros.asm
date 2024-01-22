@@ -18,7 +18,9 @@ barray_literal_macro_name: db 17,0,0,0,0,0,0,0,"test_macro_barray"
 barray_test_expansion: db 17,0,0,0,0,0,0,0,"test_macro_barray"
 
 parray_element: db 3,0,0,0,0,0,0,0,"foo"
-parray_test_expansion: dq -3,parray_element,parray_element
+parray_element_2: db 4,0,0,0,0,0,0,0,"foo2"
+parray_element_3: dq -2,barray_test_macro_name
+parray_test_expansion: dq -4,parray_element,parray_element_2,parray_element_3
 
 section .text
 
@@ -56,7 +58,8 @@ barray_test:
 
   mov rdi, r13
   mov rsi, barray_test_expansion
-  call byte_buffer_push_barray
+  mov rax, byte_buffer_push_barray
+  call rax
 
   add rsp, 8
   pop r13
@@ -76,8 +79,9 @@ parray_test:
 
   mov rdi, r13
   mov rsi, parray_test_expansion
-  mov rdx, (8 * 3)
-  call byte_buffer_push_bytes
+  mov rdx, (8 * 4)
+  mov rax, byte_buffer_push_bytes
+  call rax
 
   add rsp, 8
   pop r13
