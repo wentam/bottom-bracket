@@ -44,6 +44,13 @@ section .text
 ;;;
 ;;; TODO should the macro definition code optionally be a pointer specified
 ;;; as [-length, ptr]? Sometimes there's no reason to copy the macro
+;;;
+;;; TODO ability to pop a macro based upon some kind of unique push id -
+;;; such that you can be sure you're 'popping' a specific macro that you pushed
+;;;
+;;; TODO instead of the stack directly containing the code, it would probably
+;;; be much more efficient if we maintained a central pool of macro definitions
+;;; that never go away - then simply push and pop pointers to them.
 
 ;;; struct macro_definition {
 ;;;   size_t  name_length

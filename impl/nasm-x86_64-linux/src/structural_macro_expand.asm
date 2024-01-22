@@ -30,6 +30,12 @@ structural_macro_expand:
   mov r13, rsi ; output byte buffer
 
   call structural_macro_expand_relptr
+  cmp rax, -1
+  jne .not_nothing
+  mov rax, 0
+  .not_nothing:
+
+
   mov r14, rax ; expansion relative ptr
 
   ; make r14 an absolute pointer
@@ -45,6 +51,7 @@ structural_macro_expand:
   add rsp, 8
   pop rax
 
+  .done
   pop r14
   pop r13
   pop r12
@@ -123,7 +130,9 @@ structural_macro_expand_relptr:
   mov rdx, r12                    ; arg1 (*data) TODO: remove first element?
   mov rcx, rbx                    ; output buffer
   call macro_stack_call_by_name
-  ;mov r15, rax ; r15 = expanded macro (if it expanded)
+  mov r15, rax ; r15 = expanded macro (if it expanded)
+  cmp r15, -1
+  je .expand_parray_nothing
   cmp rdx, 0
   je .expand_parray_not_expanded
 
@@ -131,11 +140,17 @@ structural_macro_expand_relptr:
   ;; It expanded. Call self on the expansion, then output the returned pointer
   mov rdi, rbx
   call byte_buffer_get_buf
+  add rax, r15
 
   mov rdi, rax
   mov rsi, r13
   call structural_macro_expand_relptr
   jmp .expand_parray_done
+
+  .expand_parray_nothing:
+    ;; This macro expanded to nothing. Return -1 as our nothing signal.
+    mov rax, -1
+    jmp .expand_parray_done
 
   .expand_parray_not_expanded:
   ;; It didn't expand, call structural_macro_expand_relptr on it's children,
@@ -158,9 +173,17 @@ structural_macro_expand_relptr:
     pop rcx
     pop rcx
 
+    ;; Handle nothing
+    cmp rax, -1
+    jne .child_not_nothing
+    inc rcx ; decrement child count (but it's one's complement so inc)
+    jmp .child_next
+    .child_not_nothing:
+
     push rax
     push rax
 
+    .child_next
     add r12, 8
     dec r15
     jmp .children

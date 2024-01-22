@@ -4,6 +4,7 @@ global push_builtin_structural_macros
 extern byte_buffer_push_barray
 extern byte_buffer_push_barray_bytes
 extern byte_buffer_push_bytes
+extern byte_buffer_push_int64
 
 extern macro_stack_push_range
 
@@ -13,6 +14,7 @@ section .rodata
 
 barray_test_macro_name: db 11,0,0,0,0,0,0,0,"barray-test"
 parray_test_macro_name: db 11,0,0,0,0,0,0,0,"parray-test"
+nothing_macro_name: db 7,0,0,0,0,0,0,0,"nothing"
 
 barray_literal_macro_name: db 17,0,0,0,0,0,0,0,"test_macro_barray"
 barray_test_expansion: db 17,0,0,0,0,0,0,0,"test_macro_barray"
@@ -43,10 +45,17 @@ push_builtin_structural_macros:
   mov rcx, (parray_test_end - parray_test) ; length
   call macro_stack_push_range
 
+  ;; Push parray-test macro
+  mov rdi, qword[macro_stack_structural]   ; macro stack
+  mov rsi, nothing_macro_name          ; macro name
+  mov rdx, nothing                     ; code
+  mov rcx, (nothing_end - nothing) ; length
+  call macro_stack_push_range
+
   add rsp, 8
   ret
 
-;;; barray_test(*structure, *output_byte_buffer)
+;;; barray_test(*structure, *output_byte_buffer) -> output buf relative pointer
 ;;;   Test macro that produces a static barray
 barray_test:
   push r12
@@ -57,17 +66,23 @@ barray_test:
   mov r13, rsi ; output byte buffer
 
   mov rdi, r13
+  mov rsi, 0
+  mov rax, byte_buffer_push_int64
+  call rax
+
+  mov rdi, r13
   mov rsi, barray_test_expansion
   mov rax, byte_buffer_push_barray
   call rax
 
+  mov rax, 8
   add rsp, 8
   pop r13
   pop r12
   ret
 barray_test_end:
 
-;;; parray_test(*structure, *output_byte_buffer)
+;;; parray_test(*structure, *output_byte_buffer) -> output buf relative pointer
 ;;;   Test macro that produces a static parray
 parray_test:
   push r12
@@ -83,8 +98,17 @@ parray_test:
   mov rax, byte_buffer_push_bytes
   call rax
 
+  mov rax, 0
   add rsp, 8
   pop r13
   pop r12
   ret
 parray_test_end:
+
+;;; nothing(*structure, *output_byte_buffer) -> output buf relative pointer
+;;;   macro that expands into nothing
+nothing:
+  mov rax, -1
+  ret
+
+nothing_end:
