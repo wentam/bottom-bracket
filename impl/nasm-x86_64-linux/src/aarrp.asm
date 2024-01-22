@@ -45,7 +45,6 @@ extern barray_equalp
 extern init_macro_stacks
 extern free_macro_stacks
 
-;; TODO tmp
 extern macro_stack_reader
 extern macro_stack_printer
 extern macro_stack_new
@@ -64,6 +63,7 @@ extern byte_buffer_new
 extern structural_macro_expand_relptr
 extern structural_macro_expand
 extern byte_buffer_bindump_buffer
+extern byte_buffer_free
 
 section .rodata
 
@@ -180,16 +180,16 @@ _start:
   mov rsi, stdout_fd
   call print
 
-  ;; TODO tmp create macroexpansion backing buffer
+  ;; Create macroexpansion backing buffer
   call byte_buffer_new
   mov r14, rax
 
-  ;; TODO tmp newline
+  ;; Newline
   mov rdi, 10
   mov rsi, stderr_fd
   call write_char
 
-  ;; TODO tmp macroexpand
+  ;; Macroexpand
   mov rdi, r12
   mov rsi, r14
   call structural_macro_expand
@@ -220,18 +220,12 @@ _start:
   ;call bindump
 
 
-  ;; TODO tmp newline
-  mov rdi, 10
-  mov rsi, stderr_fd
-  call write_char
-
-  ;; TODO tmp
+  ;; Dump macroexpansion backing buffer
   mov rdi, me_msg
   mov rsi, me_msg_len
   mov rdx, stderr_fd
   call write
 
-  ;; TODO tmp dump macroexpansion backing buffer
   mov rdi, r14
   mov rsi, stderr_fd
   mov rdx, 16
@@ -249,6 +243,9 @@ _start:
 
   mov rdi, r12
   call free_read_result
+
+  mov rdi, r14
+  call byte_buffer_free
 
   ;; Newline
   mov rdi, 10
