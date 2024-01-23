@@ -9,6 +9,8 @@ global byte_buffer_get_data_length
 global byte_buffer_get_buf_length
 global byte_buffer_get_buf
 global byte_buffer_push_byte
+global byte_buffer_push_int16
+global byte_buffer_push_int32
 global byte_buffer_push_int64
 global byte_buffer_push_barray
 global byte_buffer_push_barray_bytes
@@ -326,6 +328,79 @@ byte_buffer_read_int64:
   mov rax, qword[rcx+rsi]
   ret
 
+
+
+;;; byte_buffer_push_int16(*byte_buffer, int16)
+;;;   Pushes an int16 to the byte buffer
+;;;
+;;;   Invalidates any pointers pointing to within the byte buffer.
+byte_buffer_push_int16:
+  push r12
+  push r13
+  push r14
+
+  mov r14, rdi ; byte buffer
+  mov r13, rsi ; int16 to write
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call assert_stack_aligned
+  %endif
+
+  ;; Write 2 zeros to make space in the buffer
+  mov r12, 2
+  .write_int16_space:
+    mov rdi, r14
+    mov rsi, 0
+    call byte_buffer_push_byte
+    dec r12
+    cmp r12, 0
+    jne .write_int16_space
+
+  ;; Replace the zeros with our int16
+  mov rax, qword[r14+BYTE_BUFFER_BUF_OFFSET]         ; backing buf
+  add rax, qword[r14+BYTE_BUFFER_DATA_LENGTH_OFFSET] ; + existing data
+  mov word[rax-2], r13w                              ; Write our int16
+
+  pop r14
+  pop r13
+  pop r12
+  ret
+
+;;; byte_buffer_push_int32(*byte_buffer, int32)
+;;;   Pushes an int32 to the byte buffer
+;;;
+;;;   Invalidates any pointers pointing to within the byte buffer.
+byte_buffer_push_int32:
+  push r12
+  push r13
+  push r14
+
+  mov r14, rdi ; byte buffer
+  mov r13, rsi ; int32 to write
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call assert_stack_aligned
+  %endif
+
+  ;; Write 4 zeros to make space in the buffer
+  mov r12, 4
+  .write_int32_space:
+    mov rdi, r14
+    mov rsi, 0
+    call byte_buffer_push_byte
+    dec r12
+    cmp r12, 0
+    jne .write_int32_space
+
+  ;; Replace the zeros with our int32
+  mov rax, qword[r14+BYTE_BUFFER_BUF_OFFSET]         ; backing buf
+  add rax, qword[r14+BYTE_BUFFER_DATA_LENGTH_OFFSET] ; + existing data
+  mov dword[rax-4], r13d                              ; Write our int32
+
+  pop r14
+  pop r13
+  pop r12
+  ret
 
 ;;; byte_buffer_push_int64(*byte_buffer, int64)
 ;;;   Pushes an int64 to the byte buffer

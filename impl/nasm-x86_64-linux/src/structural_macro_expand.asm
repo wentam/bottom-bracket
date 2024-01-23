@@ -51,7 +51,7 @@ structural_macro_expand:
   add rsp, 8
   pop rax
 
-  .done
+  .done:
   pop r14
   pop r13
   pop r12
@@ -183,7 +183,7 @@ structural_macro_expand_relptr:
     push rax
     push rax
 
-    .child_next
+    .child_next:
     add r12, 8
     dec r15
     jmp .children

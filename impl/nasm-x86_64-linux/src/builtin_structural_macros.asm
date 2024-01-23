@@ -5,6 +5,11 @@ extern byte_buffer_push_barray
 extern byte_buffer_push_barray_bytes
 extern byte_buffer_push_bytes
 extern byte_buffer_push_int64
+extern byte_buffer_push_int32
+extern byte_buffer_push_int16
+extern byte_buffer_push_byte
+extern byte_buffer_write_int64
+extern byte_buffer_get_data_length
 
 extern macro_stack_push_range
 extern macro_stack_push
@@ -19,6 +24,7 @@ parray_test_macro_name: db 11,0,0,0,0,0,0,0,"parray-test"
 nothing_macro_name: db 7,0,0,0,0,0,0,0,"nothing"
 push_macro_macro_name: db 10,0,0,0,0,0,0,0,"push-macro"
 pop_macro_macro_name: db 9,0,0,0,0,0,0,0,"pop-macro"
+elf64_relocatable_macro_name: db 17,0,0,0,0,0,0,0,"elf64-relocatable"
 
 barray_literal_macro_name: db 17,0,0,0,0,0,0,0,"test_macro_barray"
 barray_test_expansion: db 17,0,0,0,0,0,0,0,"test_macro_barray"
@@ -69,6 +75,13 @@ push_builtin_structural_macros:
   mov rsi, pop_macro_macro_name          ; macro name
   mov rdx, pop_macro                     ; code
   mov rcx, (pop_macro_end - pop_macro) ; length
+  call macro_stack_push_range
+
+  ;; Push elf64_relocatable macro
+  mov rdi, qword[macro_stack_structural]   ; macro stack
+  mov rsi, elf64_relocatable_macro_name          ; macro name
+  mov rdx, elf64_relocatable                     ; code
+  mov rcx, (elf64_relocatable_end - elf64_relocatable) ; length
   call macro_stack_push_range
 
   add rsp, 8
@@ -168,3 +181,171 @@ pop_macro:
   ret
 
 pop_macro_end:
+
+;;; elf64_relocatable(*structure, *output_byte_buffer) -> output buf relative ptr
+;;;   Macro for producing a relocatable (.o) elf64 file. Expands to a barray.
+elf64_relocatable:
+  push r12
+  push r13
+  sub rsp, 8
+
+  mov r12, rdi ; structure
+  mov r13, rsi ; output byte buffer
+
+  ;; Push a barray length placeholder
+  mov rdi, r13
+  mov rsi, 0
+  mov rax, byte_buffer_push_int64
+  call rax
+
+  ;; Write magic
+  mov rdi, r13
+  mov rsi, 0x464C457F
+  mov rax, byte_buffer_push_int32
+  call rax
+
+  ;; Write EI_CLASS (we're 64 bit)
+  mov rdi, r13
+  mov rsi, 2
+  mov rax, byte_buffer_push_byte
+  call rax
+
+  ;; Write EI_DATA to 1 to indicate little endiannes
+  mov rdi, r13
+  mov rsi, 1
+  mov rax, byte_buffer_push_byte
+  call rax
+
+  ;; Write EI_VERSION
+  mov rdi, r13
+  mov rsi, 1
+  mov rax, byte_buffer_push_byte
+  call rax
+
+  ;; Write EI_OSABI. Statically encoding 'linux' for now.
+  mov rdi, r13
+  mov rsi, 3
+  mov rax, byte_buffer_push_byte
+  call rax
+
+  ;; Write EI_ABIVERSION. Nothing cares about this, so we write 0.
+  mov rdi, r13
+  mov rsi, 0
+  mov rax, byte_buffer_push_byte
+  call rax
+
+  ;; 7 bytes of padding for e_ident to be 16 bytes wide
+  mov rdi, r13
+  mov rsi, 0
+  mov rax, byte_buffer_push_int32
+  call rax
+  mov rdi, r13
+  mov rsi, 0
+  mov rax, byte_buffer_push_byte
+  call rax
+  mov rdi, r13
+  mov rsi, 0
+  mov rax, byte_buffer_push_byte
+  call rax
+  mov rdi, r13
+  mov rsi, 0
+  mov rax, byte_buffer_push_byte
+  call rax
+
+  ;; Write e_type. We're a relocatable file.
+  mov rdi, r13
+  mov rsi, 1
+  mov rax, byte_buffer_push_int16
+  call rax
+
+  ;; Write e_machine. We're amd64.
+  mov rdi, r13
+  mov rsi, 62
+  mov rax, byte_buffer_push_int16
+  call rax
+
+  ;; Write e_version.
+  mov rdi, r13
+  mov rsi, 1
+  mov rax, byte_buffer_push_int32
+  call rax
+
+  ;; Write e_entry. This is zero because we're not an executable.
+  mov rdi, r13
+  mov rsi, 0
+  mov rax, byte_buffer_push_int64
+  call rax
+
+  ;; Write e_phoff. This is zero because we're not an executable.
+  mov rdi, r13
+  mov rsi, 0
+  mov rax, byte_buffer_push_int64
+  call rax
+
+  ;; Write e_shoff TODO placeholder
+  mov rdi, r13
+  mov rsi, 64
+  mov rax, byte_buffer_push_int64
+  call rax
+
+  ;; Write e_flags. These are cpu-specific flags. statically 0 for now.
+  mov rdi, r13
+  mov rsi, 0
+  mov rax, byte_buffer_push_int32
+  call rax
+
+  ;; Write e_ehsize. This is the size of this header
+  mov rdi, r13
+  mov rsi, 64
+  mov rax, byte_buffer_push_int16
+  call rax
+
+  ;; Write e_phentsize. This is the size of each program header entry
+  mov rdi, r13
+  mov rsi, 0
+  mov rax, byte_buffer_push_int16
+  call rax
+
+  ;; Write e_phnum. This is zero because we're not an executable
+  mov rdi, r13
+  mov rsi, 0
+  mov rax, byte_buffer_push_int16
+  call rax
+
+  ;; Write e_shentsize. This is the size of each section header entry TODO placeholder
+  mov rdi, r13
+  mov rsi, 64
+  mov rax, byte_buffer_push_int16
+  call rax
+
+  ;; Write e_shnum. This is the number of sections. TODO placeholder
+  mov rdi, r13
+  mov rsi, 0
+  mov rax, byte_buffer_push_int16
+  call rax
+
+  ;; Write e_shstrndx. TODO placeholder
+  mov rdi, r13
+  mov rsi, 0
+  mov rax, byte_buffer_push_int16
+  call rax
+
+  ;; Update barray length with our byte buffer's data length
+  mov rdi, r13
+  mov rax, byte_buffer_get_data_length
+  call rax
+
+  mov rdi, r13
+  mov rsi, 0
+  mov rdx, rax
+  sub rdx, 8
+  mov rax, byte_buffer_write_int64
+  call rax
+
+  mov rax, 0
+  add rsp, 8
+  pop r13
+  pop r12
+  ret
+
+elf64_relocatable_end:

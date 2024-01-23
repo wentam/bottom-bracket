@@ -313,6 +313,8 @@ macro_stack_peek:
   pop r12
   ret
 
+;;; TODO: I think this is broken: don't we need to update the pbuffer with
+;;; all new pointers after the deleted one?
 ;;; macro_stack_pop_by_name(*macro_stack,*name_barray)
 ;;;   Removes the most recently pushed macro that matches the name barray.
 ;;;
