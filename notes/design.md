@@ -22,15 +22,6 @@ AARRP has two data types, both arrays: parrays (pointer arrays) and barrays (byt
 These types can be nested as much as you'd like to produce a tree-like structure:
 `(foo bar (biz boz) (((thing))) () blah)` is a valid structure.
 
-Because AARRP arrays can contain binary data, you can't textually represent
-everything that the data type can contain by default. This is fixable by
-introducing your own hex literals with macros (macros can produce barrays
-with arbitrary bytes without limitation).
-
-You're welcome to include binary bytes in your text file directly, though
-without macros there's still no way to represent the bytes 40 and 41 as
-these are the ( and ) ascii characters.
-
 ## Memory structure
 
 barrays are represented with a size\_t positive length of the array,
