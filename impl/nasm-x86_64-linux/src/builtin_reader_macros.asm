@@ -58,6 +58,7 @@ section .rodata
 
 parray_literal_macro_name: db 1,0,0,0,0,0,0,0,"("
 byte_string_macro_name: db 1,0,0,0,0,0,0,0,'"'
+comment_literal_macro_name: db 1,0,0,0,0,0,0,0,";"
 
 ;; TODO once we have multi-char reader macros
 ;; this may cause name conflicts
@@ -98,6 +99,13 @@ push_builtin_reader_macros:
   mov rsi, barray_literal_macro_name ; macro name
   mov rdx, barray_literal            ; code
   mov rcx, (barray_literal_end - barray_literal)
+  call macro_stack_push_range
+
+  ;; push comment literal macro
+  mov rdi, qword[macro_stack_reader] ; macro stack
+  mov rsi, comment_literal_macro_name ; macro name
+  mov rdx, comment_literal            ; code
+  mov rcx, (comment_literal_end - comment_literal) ; length
   call macro_stack_push_range
 
   ;; push parray literal macro
@@ -484,11 +492,16 @@ parray_literal:
   mov rax, _read
   call rax
 
+  cmp rax, -1
+  je .empty_child
+
   ;; Push a (relative) pointer to this child onto the stack
   sub rsp, 8
   push rax
 
   inc r15 ; increment child counter
+
+  .empty_child:
 
   jmp .children ; Next child
 
@@ -661,3 +674,45 @@ barray_literal:
   pop r12
   ret
 barray_literal_end:
+
+;;; comment_literal(*buffered_fd_reader, *output_byte_buffer) -> buf-relative-ptr
+;;;   Reader macro for comments
+comment_literal:
+  push r12
+  push r14
+  sub rsp, 8
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  mov rax, assert_stack_aligned
+  call rax
+  %endif
+
+  mov r12, rdi ; Preserve buffered reader
+  mov r14, rsi ; Preserve output buffer
+
+  ;; Consume chars until we hit a newline (don't consume the newline)
+
+  .char:
+  ;; peek next
+  mov rdi, r12 ; buffered reader
+  mov rax, buffered_fd_reader_peek_byte
+  call rax
+  cmp rax, 0x0A ; newline
+  je .epilogue
+  cmp rax, BUFFERED_READER_EOF
+  je .epilogue
+
+  ;; consume the byte
+  mov rdi, r12
+  mov rax, buffered_fd_reader_read_byte
+  call rax
+
+  jmp .char
+
+  .epilogue:
+  mov rax, -1
+  add rsp, 8
+  pop r14
+  pop r12
+  ret
+comment_literal_end:

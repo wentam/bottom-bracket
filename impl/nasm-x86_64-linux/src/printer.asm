@@ -15,6 +15,9 @@ section .text
 print:
   sub rsp, 8
 
+  cmp rdi, 0 ; Don't do anything if data is NULL
+  je .done
+
   ;; Call top-level 'data' macro
   mov rdx, rdi ; *data
   mov rcx, rsi ; fd
@@ -22,5 +25,6 @@ print:
   mov rsi, data_macro_name
   call macro_stack_call_by_name
 
+  .done:
   add rsp, 8
   ret

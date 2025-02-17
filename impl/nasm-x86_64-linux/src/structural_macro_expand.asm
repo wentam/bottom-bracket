@@ -73,6 +73,10 @@ structural_macro_expand_relptr:
   push rbp
   sub rsp, 8
 
+  mov rax, -1
+  cmp rdi, 0 ; If data is NULL, return -1 for no data
+  je .done
+
   mov r12, rdi ; data
   mov r13, rsi ; output byte buffer
 

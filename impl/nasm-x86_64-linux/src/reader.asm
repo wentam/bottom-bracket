@@ -75,6 +75,8 @@ section .text
 ;;;   Reads one expression from the file descriptor into internal representation
 ;;;
 ;;;   You must free the result with free_read_result when done.
+;;;
+;;;   Returns NULL if the read result is nothing.
 read:
   push r14 ; Preserve
   push r13 ; Preserve
@@ -136,10 +138,18 @@ read:
   pop rax
   mov r12, rax
 
+  cmp rax, -1
+  jne .not_null
+  mov rax, 0 ; We'll return NULL for this empty read result
+  jmp .null
+
+  .not_null:
   ;; r12 contains a relative pointer, we need to return absolute.
   mov rdi, r14
   call byte_buffer_get_buf
   add rax, r12
+
+  .null:
 
   ;; Convert relative pointers to absolute
   push rax
@@ -159,9 +169,14 @@ read:
 ;;;   Frees all memory associated with a call to read().
 free_read_result:
   sub rsp, 8
+  cmp rdi, 0 ; if NULL just return
+  je .done
+
   call _get_byte_buf_from_read_result
   mov rdi, rax
   call byte_buffer_free
+
+  .done:
   add rsp, 8
   ret
 
@@ -178,6 +193,9 @@ _relative_to_abs:
   push r14
   push r15
   sub rsp, 8
+
+  cmp rdi, 0
+  je .epilogue
 
   mov r12, rdi ; read result ptr
   mov r13, rsi ; byte buffer
@@ -230,6 +248,8 @@ _relative_to_abs:
 ;;; _read(*buffered_fd_reader, *output_buffer) -> ptr
 ;;;   Recursive implementation of read(). Return a *buffer-relative* pointer to
 ;;;   the result.
+;;;
+;;;   Returns -1 if the read result is nothing.
 _read:
   push r12
   push r13
@@ -307,6 +327,9 @@ dump_read_result_buffer:
   push r13
   sub rsp, 8
 
+  cmp rdi, 0
+  je .done
+
   mov r12, rsi ; fd
   mov r13, rdx ; base
 
@@ -321,6 +344,7 @@ dump_read_result_buffer:
   mov rdx, r13
   call byte_buffer_bindump_buffer
 
+  .done:
   add rsp, 8
   pop r13
   pop r12
@@ -334,6 +358,10 @@ dump_read_result:
   push r14
   push r15
   sub rsp, 8
+
+  cmp rdi, 0
+  je .epilogue
+
   mov r12, rdi ; reader result
   mov r13, rsi ; fd
   mov r14, rdx ; base
@@ -368,6 +396,7 @@ dump_read_result:
   mov rcx, r14
   call bindump
 
+  .epilogue:
   add rsp, 8
   pop r15
   pop r14

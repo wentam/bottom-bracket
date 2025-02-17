@@ -24,6 +24,7 @@ global byte_buffer_dump_buffer
 global byte_buffer_bindump_buffer
 global byte_buffer_write_contents
 global byte_buffer_delete_bytes
+global byte_buffer_extend
 
 extern malloc
 extern realloc
@@ -33,6 +34,7 @@ extern error_exit
 extern assert_stack_aligned
 extern bindump
 extern write
+extern write_as_base
 
 section .rodata
 
@@ -55,7 +57,7 @@ section .text
 %define BYTE_BUFFER_BUF_LENGTH_OFFSET 8
 %define BYTE_BUFFER_BUF_OFFSET 16
 
-%define BYTE_BUFFER_START_SIZE 256 ; Must be a power of 2
+%define BYTE_BUFFER_START_SIZE 64 ; Must be a power of 2
 
 ;;; byte_buffer_new()
 ;;;   Creates a new byte buffer
@@ -279,6 +281,65 @@ byte_buffer_push_byte:
   inc qword[r13+BYTE_BUFFER_DATA_LENGTH_OFFSET]      ; increment data length
 
   add rsp, 8
+  pop r13
+  pop r12
+  ret
+
+;;; byte_buffer_extend(*byte_buffer, count)
+;;;   Increases data length by count (expanding backing buffer if needed)
+;;;
+;;;   Invalidates any pointers pointing to within the buffer.
+;;; TODO make this the only realloc path in byte buffer?
+byte_buffer_extend:
+  push r12
+  push r13
+  push r14
+
+  mov r12, rdi ; byte buffer
+  mov r13, rsi ; count
+
+  ;; Work out pointer to the first unwritten byte in buffer + count
+  mov r14, qword[r12+BYTE_BUFFER_BUF_OFFSET]
+  add r14, qword[r12+BYTE_BUFFER_DATA_LENGTH_OFFSET]
+  add r14, r13
+
+  ;; Check if we need to expand
+  mov rax, qword[r12+BYTE_BUFFER_BUF_OFFSET]        ; rax = ptr to byte buffer
+  add rax, qword[r12+BYTE_BUFFER_BUF_LENGTH_OFFSET] ; rax += buf length
+  cmp rax, r14                                      ; cmp buf end to write ptr
+  jg .after_expand
+
+  ;; Expand the buffer
+  mov rdi, qword[r12+BYTE_BUFFER_BUF_OFFSET]         ; buffer
+  mov rsi, qword[r12+BYTE_BUFFER_BUF_LENGTH_OFFSET]  ; new size = current size
+  mov rcx, qword[r12+BYTE_BUFFER_DATA_LENGTH_OFFSET] ; minimum size
+  add rcx, r13
+
+  .compute_size:
+   shl rsi, 1   ; * 2
+   cmp rsi, rcx
+   jle .compute_size
+
+  mov qword [r12+BYTE_BUFFER_BUF_LENGTH_OFFSET], rsi ; write new size
+  call realloc
+
+  cmp rax, 0
+  jne .good_realloc
+
+  ;; Error and exit if realloc failed
+  mov rdi, realloc_failed_error_str
+  mov rsi, realloc_failed_error_str_len
+  call error_exit
+
+  .good_realloc:
+
+  mov qword[r12+BYTE_BUFFER_BUF_OFFSET], rax ; update buf ptr to realloc result
+
+  .after_expand:
+
+  add qword[r12+BYTE_BUFFER_DATA_LENGTH_OFFSET], r13 ; Add to data length
+
+  pop r14
   pop r13
   pop r12
   ret

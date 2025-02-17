@@ -111,13 +111,21 @@ test_macro_name_3: db 4,0,0,0,0,0,0,0,"fooo"
 
 section .text
 
-;; TODO: count allocations and warn if not everything has been freed at the end - or provide needed things for valgrind to work
+;; TODO: count allocations and warn if not everything has been freed at the end - or provide
+;;       needed things for valgrind to work
 ;; TODO: utility to push all registers and utility to pop all registers,
 ;;       to make it easy to inject debugging functions in the middle of something
 ;; TODO: make sure we're handling all errors that could occur from syscalls
-;; TODO write_as_base isn't keeping the stack 16-aligned while making function calls
-;; TODO: rather than error outright, the reader should generate error codes for things like unexpected EOF for us to handle here
+;; TODO: write_as_base isn't keeping the stack 16-aligned while making function calls
+;; TODO: rather than error outright, the reader should generate error codes for things like
+;;       unexpected EOF for us to handle here
 ;; TODO: reader macros should be able to expand into nothing by returning NULL
+;; TODO: right now structural macro expansion and 'read' work in different ways: structural macro
+;;       expansion expands into a byte buffer passed as an argument, while 'read' creates it's
+;;       own buffer and returns a pointer. I think it should be possible to make this consistent,
+;;       and if possible I think I prefer the 'read' approach as it masks the usage of byte buffer.
+;;
+;;       pay attention to what happens when a reader macro/structural macro expands into nothing.
 _start:
   ;; Output welcome string to stderr
   ;;mov rdi, welcome_msg
