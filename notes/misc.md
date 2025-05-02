@@ -8,7 +8,7 @@ specific printer macros present
 * important: aarrp ALWAYS only evaluates one form from the input, there is no implicit top-level list or anything like that. aarrp will provide a way to wrap the input in some top-level form, so if you want you can wrap in a list or in a macro entering your language of choice. See point below about how to wrap without command line arguments in a really flexible way.
 * If something doesn't need to be a builtin macro, IT SHOULD NOT BE. We want the core to be as minimal as humanly possible. We also want fewer builtins that language builders have in their namespace.
 * To wrap your input in something, just use (include "file.aarrp") in your input to aarrp to template it. Example: echo '(with-popped-printer-macros (include "my-real-code.aarrp")) | aarrp'. This might be most ergonomic if 'include' is a builtin macro, though think about if there's a good way to avoid this.
-* [A] If you want to define a "compile-time variable" like -D to define something, do that by wrapping at CLI time like above with a macro (not builtin) that defines them. echo '(with-macros-from "my-language.aarrp" (with-my-language (with-defined (LINUX X11 WAYLAND) (include "my-code.aarrp"))))' | aarrp. This approach is more flexible as the "CLI" arguments that are supported are not hardcoded into aarrp, and the arguments aren't implementation-defined.
+* [A] If you want to define a "compile-time variable" like -D to define something, do that by wrapping at CLI time like above with a macro (not builtin) that defines them. echo '(with-macros (include "my-language.aarrp") (with-my-language (with-defined (LINUX X11 WAYLAND) (include "my-code.aarrp"))))' | aarrp. This approach is more flexible as the "CLI" arguments that are supported are not hardcoded into aarrp, and the arguments aren't implementation-defined.
 * It would be cool to have the ability to "watch" macroexpansion happen step-by-step where pressing spacebar or whatever advances one expansion. This should not be done with a CLI argument, but a macro that implements this behavior printing as it goes (macros can have side-effects!)
 * Should macros pushed with push-macro automatically pop at the end of the "scope"? Right now the behavior is a little bit confusing, as something very nested could push a macro that is then applied to something at the top-level. I also don't want to force the user to be so intricitally aware of macroexpansion order or make exact macroexpansion order incredibly important in the implementation.
   Perhaps what we want instead is a (with-macros) macro. Could also support both, document the caveats of (push-macro) clearly. Though once you have one, you could implement the other inside the language.
@@ -27,19 +27,19 @@ specific printer macros present
 * we need a way to specify compile-time functions that macros can call.
 * a builtin (or not builtin) (with) macro that prefixes children with 'with' so you can drop into a bunch of libraries etc at once: (with (my-language (somelibrary foo) defined) my-code) expands into (with-my-language (with-some-library foo (with-defined my-code)))
   It's a bit easier to make the case for this being a builtin macro because it relates directly to the task of macro work, and helps people be comfortable with with-thing wrappers that can be resisted by some users. It's also a simple macro to implement.
-* Typical programming language compilation command example: $ echo '(with-macros-from "my-language.aarrp" (with-my-language (with-defined ((OS LINUX) X11 WAYLAND) (include "my-code.aarrp"))))' | aarrp
+* Typical programming language compilation command example: $ echo '(with-macros (include "my-language.aarrp") (with-my-language (with-defined ((OS LINUX) X11 WAYLAND) (include "my-code.aarrp"))))' | aarrp
                                   Or with the 'with' macro: $ echo '(with ((macros-from "my-language.aarrp")
                                                                            my-language
                                                                            (defined ((OS LINUX) X11 WAYLAND)))
                                                                       (include "my-code.aarrp"))' | aarrp
 * Or maybe just have a 'nest' macro:
-  (nest (with-macros-from "my-language.aarrp")
+  (nest (with-macros (include "my-language.aarrp"))
         (with-my-language)
         (with-defined (stuff))
         (include "my-code.aarrp"))
 
   Expands into:
-    (with-macros-from "my-language.aarrp"
+    (with-macros (include "my-language.aarrp")
       (with-my-language
         (with-defined (stuff)
           (include "my-code.aarrp"))))
@@ -47,7 +47,7 @@ specific printer macros present
   This solves the problem more generally.
 
 * You could also argue that not using a 'nest' macro and just using a different indentation style solves the problem nicely:
-    (with-macros-from "my-language.aarrp"
+    (with-macros (include "my-language.aarrp")
     (with-my-language
     (with-my-library
     (with-defined (stuff)
@@ -56,7 +56,9 @@ specific printer macros present
 This feels a little bit wrong, but so does spending build compute time on a 'nest' macro that really just changes how you indent it.
 
 * in my higher-level language, probably call (let) (with-vars) instead to stay consistent with the 'with' pattern.
-* When we say (with-macros-from "foo.aarrp" (with-macros-from "bar.aarrp" my-code)), the macros from foo.aarrp would be available inside bar.aarrp. This isn't *that* wierd, as it behaves the same way in C with #include, but we might want to provide a mechanism that locally reverts to just builtin macros, like (with-only-builtins foo). with-macros-from - or another macro with a similar name, could automatically use with-only-builtins.
+* When we say (with-macros (include "foo.aarrp") (with-macros (include "bar.aarrp") my-code)), the macros from foo.aarrp would be available inside bar.aarrp. This isn't *that* wierd, as it behaves the same way in C with #include, but we might want to provide a mechanism that locally reverts to just builtin macros, like (with-only-builtins foo). with-macros - or another macro with a similar name, could automatically use with-only-builtins.
 * Note that you could build an interpreted language in aarrp by using macros for their side effects instead of what they expand into. Could implement python inside aarrp like this.
 * It's definitely worth documenting clearly that macros are about both expansion *and* side-effects, unlike in CL
 * Because macros are about side-effects, there's definitely an argument to be had that maybe macroexpansion needs a specified, deterministic order
+* A naming scheme that differentiates between a build-time thing and a runtime thing would probably be helpful, like (push-function) and (runtime-function)
+* include probably needs to be a builtin macro. Yes, you could implement it in aarrp, but there would be no way to include the include macro as a library.
