@@ -62,3 +62,24 @@ This feels a little bit wrong, but so does spending build compute time on a 'nes
 * Because macros are about side-effects, there's definitely an argument to be had that maybe macroexpansion needs a specified, deterministic order
 * A naming scheme that differentiates between a build-time thing and a runtime thing would probably be helpful, like (push-function) and (runtime-function)
 * include probably needs to be a builtin macro. Yes, you could implement it in aarrp, but there would be no way to include the include macro as a library.
+* idea: markup language like markdown/latex implemented via aarrp macros (expands into some renderable format?)
+* should aarrp understand that there are different platforms for machine code? When defining a macro, you could define ((x86_64 "machine_code") (risc-v "machine_code")) to support different platforms for macro execution. This could also be left up to the user to resolve by having the user access an (aarrp-platform) macro and switching themselves. This may make sense to occur in aarrp though, because aarrp's core functionality has to do with the execution of machine code. Building this into aarrp would avoid undefined behavior if you accidentally choose to execute machine code from one platform on another, and building this into aarrp would be very very simple (the x86_64 implementation of aarrp just needs to always look up the x86_64 machine code.)
+
+(with-macros
+  ((elf64-relocatable
+     (x86_64-linux (cat
+                     "some machine code" ; mov rdi, 5
+                     "some machine code" ; syscall
+                     "some machine code")))
+   (nest
+     (x86_64-linux (cat "foo" "bar"))
+     (aarch64-windows (cat "foo" "bar"))))
+
+  (elf64_relocatable foo))
+
+Currently strongly leaning towards resolving it within aarrp. Avoids undefined behavior, can easily emit a warning if you define a macro without an implementation for the aarrp execution platform, can easily emit an error when you try to call a macro when there isn't an implementation for the aarrp execution platform, more ergonomic, doesn't really add complexity to aarrp (but would be a bit complex to do it inside the aarrp language), completely thetical to aarrp's role as managing the execution of machine-language macros. Implementing this yourself inside the aarrp language would *not* allow you to produce a nice error upon macroexpansion, so I think this is a must.
+
+Question is: is this by cpu arch? x86_64, arm? or By platform: x86_64-linux, arm-windows. My current intuition says platform: I think you want a separate entry to occur per implementation required - which itself is a good way to define "platform" within aarrp. Windows and linux have different "system" apis, linux with syscalls and windows with win32, and this demands separate implementations.
+
+This does result in a combinatorial explosion of assemblers required to be implemented in machine language inside the aarrp language, but I think that's just reality.
+* To bootstrap aarrp, we could implement it once in as simple of an assembly language as possible - like RISC-V - then demand that those who wish to bootstrap must run a RISC-V virtual machine. If you keep it to a minimal portion of the risc-V instruction set, said VM could be very simple. We could even write some VMs.
