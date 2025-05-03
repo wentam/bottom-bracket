@@ -66,11 +66,12 @@ This feels a little bit wrong, but so does spending build compute time on a 'nes
 * should aarrp understand that there are different platforms for machine code? When defining a macro, you could define ((x86_64 "machine_code") (risc-v "machine_code")) to support different platforms for macro execution. This could also be left up to the user to resolve by having the user access an (aarrp-platform) macro and switching themselves. This may make sense to occur in aarrp though, because aarrp's core functionality has to do with the execution of machine code. Building this into aarrp would avoid undefined behavior if you accidentally choose to execute machine code from one platform on another, and building this into aarrp would be very very simple (the x86_64 implementation of aarrp just needs to always look up the x86_64 machine code.)
 
 (with-macros
-  ((elf64-relocatable
+  ((my-new-macro
      (x86_64-linux (cat
                      "some machine code" ; mov rdi, 5
                      "some machine code" ; syscall
-                     "some machine code")))
+                     "some machine code"))
+     (aarch64-win32 "some ARM win32 machine code")))
    (nest
      (x86_64-linux (cat "foo" "bar"))
      (aarch64-windows (cat "foo" "bar"))))
@@ -82,4 +83,25 @@ Currently strongly leaning towards resolving it within aarrp. Avoids undefined b
 Question is: is this by cpu arch? x86_64, arm? or By platform: x86_64-linux, arm-windows. My current intuition says platform: I think you want a separate entry to occur per implementation required - which itself is a good way to define "platform" within aarrp. Windows and linux have different "system" apis, linux with syscalls and windows with win32, and this demands separate implementations.
 
 This does result in a combinatorial explosion of assemblers required to be implemented in machine language inside the aarrp language, but I think that's just reality.
+
+Note: to avoid actually running an assembler/compiler for all supported platforms when defining a macro, you could have your IR assembler/compiler accept an instruction to only produce a specified platform - then pass it (aarrp-platform).
+
+Another interesting thing to note is that this would allow aarrp implementations to do some weird stuff like support execution of macros written for another platform through virtualization. This is actually a good argument to NOT have your IR assembler expand into only one but always provide all options. This is actually really interesting because it doesn't actually assume what our host platform is, we're just listing the ways we know how to accomplish the task and letting the aarrp implementation choose whichever it knows how to execute best. It's also probably not that big of a deal to have your high-level language expand into all, because this portability is implemented at the IR level which should be a case of quick assembly for all.
+
+If needing to assemble and optimize the IR 20 times is too expensive, aarrp implementations could also provide a list of the macro execution platforms it supports sorted by priority, and the IR could limit it's expansions.
+
+Another perspective: this is actually a little bit weird, because you only ever need one platform at a given time. (with-macros) could also always only accept the correct machine code for the aarrp execution platform, and you could also provide a (select-platform) macro that expands into the relevant platform for convenience:
+
+(with-macros
+  ((elf64-relocatable
+     (select-platform
+       (x86_64-linux   "machine code")
+       (risc-v-windows "machine code")))))
+
+The downside of this is the inability to have nice errors if you try to execute a macro on an unsupported platform.
+
+* Due to the above, we could support a lot of platforms easily by for example using box64 in an ARM implementation of aarrp to support macroexpansion.
+
 * To bootstrap aarrp, we could implement it once in as simple of an assembly language as possible - like RISC-V - then demand that those who wish to bootstrap must run a RISC-V virtual machine. If you keep it to a minimal portion of the risc-V instruction set, said VM could be very simple. We could even write some VMs.
+* Idea: support execution of macros written for a different platform/arch through virtualization in more advanced implementations of aarrp.
+* Helpful line for documentation purposes: "aarrp exposes all levels of abstraction for you to see and interact with, including machine language."
