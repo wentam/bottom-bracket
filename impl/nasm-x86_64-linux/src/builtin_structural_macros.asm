@@ -1,4 +1,8 @@
 ;; TODO: all builtin macros should be prefixed with aarrp/
+;; TODO: make sure macros always use the mov rax, foo; call foo pattern.
+;;       call foo uses relative addresses, the above pattern uses absolute.
+;;       Do this even if 'call foo' seems to work, as any time a macro moves
+;;       this will eventually break.
 
 section .text
 global push_builtin_structural_macros
@@ -18,6 +22,7 @@ extern byte_buffer_extend
 extern byte_buffer_new
 extern byte_buffer_free
 extern structural_macro_expand
+extern structural_macro_expand_tail
 extern write
 extern write_as_base
 extern compare_barrays
@@ -766,27 +771,16 @@ barray_cat:
   mov r12, rdi ; input structure
   mov r13, rsi ; output byte buffer
 
-  ;; Grab our input's tail (parray without our own macro name)
-  mov rdi, r12
-  mov rax, parray_tail_new
-  call rax
-  mov r15, rax
-
-  ;; Macroexpand our input
+  ;; Macroexpand tail of our input
   mov rax, byte_buffer_new
   call rax
   mov r14, rax ; r14 = macroexpansion backing buffer
 
-  mov rdi, r15
+  mov rdi, r12
   mov rsi, r14
-  mov rax, structural_macro_expand
+  mov rax, structural_macro_expand_tail
   call rax
   mov r12, rax ; r12 = macroexpanded tail of input structure
-
-  ;; Free our original input tail
-  mov rdi, r15
-  mov rax, free
-  call rax
 
   ;; Push a length placeholder
   mov rdi, r13
@@ -807,7 +801,7 @@ barray_cat:
   cmp rbx, 0
   je .concat_loop_break
 
-  ;; TODO if our input item is not a barray, error and exit
+  ;; If our input item is not a barray, error and exit
   mov rdi, qword[r8]
   cmp qword[rdi], 0
   jge .is_barray
@@ -844,7 +838,6 @@ barray_cat:
   mov rax, byte_buffer_write_int64
   call rax
 
-  .done:
   ;; Free our macroexpansion
   mov rdi, r14
   mov rax, byte_buffer_free

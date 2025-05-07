@@ -1,6 +1,7 @@
 section .text
 global structural_macro_expand
 global structural_macro_expand_relptr
+global structural_macro_expand_tail
 
 extern byte_buffer_get_buf
 extern byte_buffer_get_data_length
@@ -16,6 +17,10 @@ extern macro_stack_call_by_name
 
 extern write_as_base
 extern write_char
+
+extern parray_tail_new
+
+extern free
 
 section .rodata
 
@@ -251,3 +256,40 @@ structural_macro_expand_relptr:
   pop r12
   ret
 
+
+;;; structural_macro_expand_tail(*parray, *output_byte_buffer)
+;;;   Macroexpands input parray excluding the first element of the parray.
+;;;
+;;;   Undefined behavior if input isn't a parray.
+structural_macro_expand_tail:
+  push r12
+  push r13
+  push r14
+  push r15
+  sub rsp, 8
+
+  mov r12, rdi ; data
+  mov r13, rsi ; output byte buffer
+
+  ;; Compute tail
+  mov rdi, r12
+  call parray_tail_new
+  mov r14, rax ; r14 = tail of parray
+
+  ;; Macroexpand
+  mov rdi, r14
+  mov rsi, r13
+  call structural_macro_expand
+  mov r15, rax ; r15 = macroexpanded tail
+
+  ;; Free tail
+  mov rdi, r14
+  call free
+
+  mov rax, r15
+  add rsp, 8
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  ret
