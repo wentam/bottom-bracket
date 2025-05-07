@@ -88,7 +88,7 @@ Note: to avoid actually running an assembler/compiler for all supported platform
 
 Another interesting thing to note is that this would allow aarrp implementations to do some weird stuff like support execution of macros written for another platform through virtualization. This is actually a good argument to NOT have your IR assembler expand into only one but always provide all options. This is actually really interesting because it doesn't actually assume what our host platform is, we're just listing the ways we know how to accomplish the task and letting the aarrp implementation choose whichever it knows how to execute best. It's also probably not that big of a deal to have your high-level language expand into all, because this portability is implemented at the IR level which should be a case of quick assembly for all.
 
-If needing to assemble and optimize the IR 20 times is too expensive, aarrp implementations could also provide a list of the macro execution platforms it supports sorted by priority, and the IR could limit it's expansions.
+If needing to assemble and optimize the IR 20 times is too expensive, aarrp implementations could also provide a list of the macro execution platforms it supports sorted by priority, and the IR could limit it's expansions. Probably also providing stubs for other supported platforms so you can still see a list of supported platforms inside aarrp.
 
 Another perspective: this is actually a little bit weird, because you only ever need one platform at a given time. (with-macros) could also always only accept the correct machine code for the aarrp execution platform, and you could also provide a (select-platform) macro that expands into the relevant platform for convenience:
 
@@ -105,3 +105,22 @@ The downside of this is the inability to have nice errors if you try to execute 
 * To bootstrap aarrp, we could implement it once in as simple of an assembly language as possible - like RISC-V - then demand that those who wish to bootstrap must run a RISC-V virtual machine. If you keep it to a minimal portion of the risc-V instruction set, said VM could be very simple. We could even write some VMs.
 * Idea: support execution of macros written for a different platform/arch through virtualization in more advanced implementations of aarrp.
 * Helpful line for documentation purposes: "aarrp exposes all levels of abstraction for you to see and interact with, including machine language."
+* Once we have a high-level language, a video walking through the abstractions bottom-up would be a great way to demonstrate what aarrp is about.
+* We probably want to implement macros in the aarrp language (not builtin) for elf executables (not just relocatable object files), as well as implement a linker directly in macros. That way, you can actually specify your entire build process directly inside aarrp.
+
+(link-elf-executable (elf64-relocatable foo) (include "somefile_with_elf64-relocatable.aarrp"))
+
+Would expand into an elf executable.
+
+No makefiles required! It's all aarrp!
+
+Worth thinking about how we would implement incremental builds with this.
+* If we're writing our own assembler in machine language, could we share this assembler implementation for fully-verifiable bootstrapping? Could we writing it in a simple file format like stage0 "hex", then for the in-aarrp implementation include and parse it into aarrp structures?
+* I don't like that byte_buffer stuff needs to be part of the public interface with the current
+  design, and used when implementing macros. I want byte_buffer to be an implementation detail and I want as minimal of a public interface as possible. I think we need to rethink this interface.
+    * macro(*input_structure, *cleanup_out) -> absolute output pointer or NULL for nothing. Macro writes a pointer to a cleanup function to *cleanup_out such as free() or byte_buffer_free() if it wants aarrp to free it's data when it's done with it.
+    * counter-argument: the byte_buffer functions like byte_buffer_push_barray are highly convienient for constructing output, and if we're going to provide this as public anyway we may as well use it as the default interface.
+        * but of course, this could all still be implemented inside aarrp-land.
+* We want to limit the amount of builtin functions available to macro as well. We plan to give users the ability to define build-time functions of their own in some way.
+* I'm starting to think that there should be no self-hosted implementation. I want to encourage everyone to go through fully verifiable bootstrapping paths, and aarrp is so simple the assembly implementations can be well-optimized. Either way we need an assembly implementation per-platform to bootstrap.
+    * counter-argument: not every platform needs a bootstrap implementation necessarily, as aarrp can be cross-compiled from another machine or through virtualization as a bootstrap process. A self-hosted implementation could then cover a wider range of platforms

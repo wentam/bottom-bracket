@@ -1,0 +1,6 @@
+(aarrp/with-macros
+ ((my-nothing-macro
+   (x86_64 (aarrp/barray-cat
+            "\x48\xB8\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF" ; mov rax, -1
+            "\xC3"))))                                 ; ret
+ (my-nothing-macro))

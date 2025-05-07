@@ -794,7 +794,6 @@ barray_cat:
 
   mov r8, r12
   add r8, 8 ; move past length
-
   mov r9, 0 ; byte counter
 
   .concat_loop:
