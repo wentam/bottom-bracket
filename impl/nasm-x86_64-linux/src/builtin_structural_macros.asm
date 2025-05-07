@@ -1,3 +1,5 @@
+;; TODO: all builtin macros should be prefixed with aarrp/
+
 section .text
 global push_builtin_structural_macros
 
@@ -13,11 +15,16 @@ extern byte_buffer_write_int64
 extern byte_buffer_get_data_length
 extern byte_buffer_get_buf
 extern byte_buffer_extend
+extern byte_buffer_new
+extern byte_buffer_free
+extern structural_macro_expand
 extern write
 extern write_as_base
 extern compare_barrays
 extern print
 extern error_exit
+extern parray_tail_new
+extern free
 
 extern macro_stack_push_range
 extern macro_stack_push
@@ -33,6 +40,7 @@ nothing_macro_name: db 7,0,0,0,0,0,0,0,"nothing"
 push_macro_macro_name: db 10,0,0,0,0,0,0,0,"push-macro"
 pop_macro_macro_name: db 9,0,0,0,0,0,0,0,"pop-macro"
 elf64_relocatable_macro_name: db 17,0,0,0,0,0,0,0,"elf64-relocatable"
+barray_cat_macro_name: db 16,0,0,0,0,0,0,0,"aarrp/barray-cat"
 
 barray_literal_macro_name: db 17,0,0,0,0,0,0,0,"test_macro_barray"
 barray_test_expansion: db 17,0,0,0,0,0,0,0,"test_macro_barray"
@@ -48,6 +56,9 @@ sections_str: db 8,0,0,0,0,0,0,0,"sections"
 
 barray_error: db "ERROR: Got barray in section, expecting parrays only",10
 barray_error_len:  equ $ - barray_error
+
+cat_parray_error: db "ERROR: Got parray in barray-cat, expecting barrays only",10
+cat_parray_error_len:  equ $ - cat_parray_error
 
 section .text
 
@@ -97,6 +108,14 @@ push_builtin_structural_macros:
   mov rsi, elf64_relocatable_macro_name          ; macro name
   mov rdx, elf64_relocatable                     ; code
   mov rcx, (elf64_relocatable_end - elf64_relocatable) ; length
+  call macro_stack_push_range
+
+
+  ;; Push barray-cat macro
+  mov rdi, qword[macro_stack_structural]  ; macro stack
+  mov rsi, barray_cat_macro_name          ; macro name
+  mov rdx, barray_cat                     ; code
+  mov rcx, (barray_cat_end - barray_cat)  ; length
   call macro_stack_push_range
 
   add rsp, 8
@@ -596,6 +615,7 @@ _elf64_relocatable_pad_to_nearest:
 ;;; 64-bit specific?
 ;;; TODO should this just be 'elf' and not relocatable specific?
 ;;; TODO should this be a builtin macro? might be fine to just be implemented in aarrp as a lib
+;;; TODO: macroexpand all children like aarrp/barray-cat does
 elf64_relocatable:
   push rbp
   push r12
@@ -729,3 +749,112 @@ elf64_relocatable:
   ret
 
 elf64_relocatable_end:
+
+
+;;; aarrp/barray-cat
+;;;
+;;; TODO: error if one of the children is a parray after macroexpansion
+
+;;; barray_cat(structure*, output_byte_buffer*) -> output buf relative ptr
+barray_cat:
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+
+  mov r12, rdi ; input structure
+  mov r13, rsi ; output byte buffer
+
+  ;; Grab our input's tail (parray without our own macro name)
+  mov rdi, r12
+  mov rax, parray_tail_new
+  call rax
+  mov r15, rax
+
+  ;; Macroexpand our input
+  mov rax, byte_buffer_new
+  call rax
+  mov r14, rax ; r14 = macroexpansion backing buffer
+
+  mov rdi, r15
+  mov rsi, r14
+  mov rax, structural_macro_expand
+  call rax
+  mov r12, rax ; r12 = macroexpanded tail of input structure
+
+  ;; Free our original input tail
+  mov rdi, r15
+  mov rax, free
+  call rax
+
+  ;; Push a length placeholder
+  mov rdi, r13
+  mov rsi, 0
+  mov rax, byte_buffer_push_int64
+  call rax
+
+  ;; Iterate over children and build our output
+  mov rbx, qword[r12]
+  not rbx
+
+  mov r8, r12
+  add r8, 8 ; move past length
+
+  mov r9, 0 ; byte counter
+
+  .concat_loop:
+  cmp rbx, 0
+  je .concat_loop_break
+
+  ;; TODO if our input item is not a barray, error and exit
+  mov rdi, qword[r8]
+  cmp qword[rdi], 0
+  jge .is_barray
+
+  mov rdi, cat_parray_error
+  mov rsi, cat_parray_error_len
+  mov rax, error_exit
+  call rax
+
+  .is_barray:
+
+  mov rdi, qword[r8]
+  add r9, qword[rdi]
+
+  mov rdi, r13
+  mov rsi, qword[r8]
+  mov rax, byte_buffer_push_barray_bytes
+  push r8
+  push r9
+  call rax
+  pop r9
+  pop r8
+
+  add r8, 8
+  dec rbx
+  jmp .concat_loop
+
+  .concat_loop_break:
+
+  ;; Update output length
+  mov rdi, r13
+  mov rsi, 0
+  mov rdx, r9
+  mov rax, byte_buffer_write_int64
+  call rax
+
+  .done:
+  ;; Free our macroexpansion
+  mov rdi, r14
+  mov rax, byte_buffer_free
+  call rax
+
+  mov rax, 0
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  ret
+barray_cat_end:

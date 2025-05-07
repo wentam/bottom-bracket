@@ -1,0 +1,3 @@
+* implement structural_macro_expand_parray_tail for convenience in macros?
+* rework macro interface and all builtins to not use byte_buffer?
+* implement aarrp/with-macros
