@@ -44,6 +44,7 @@ global alpha36p
 global alpha10p
 global byte_in_barray_p
 global visible_char_p
+global compare_barrays
 
 extern byte_buffer_new
 extern byte_buffer_free
@@ -843,3 +844,44 @@ assert_stack_aligned:
 
   add rsp, 8
   ret
+
+;;; TODO
+;;; compare_barrays(barray_1*, barray_2*)
+;;;   returns 1 if barrays are identical, else 0
+compare_barrays:
+  sub rsp, 8
+
+  ;; TODO assert stack aligned
+
+  ;; Compare lengths
+  mov rdx, qword[rsi]
+  cmp qword[rdi], rdx
+  mov rax, 0
+  jne .epilogue
+
+  ;; Same length, compare bytes
+
+  mov rdx, qword[rsi]  ; length
+  mov r11, rdi ; pointer to byte of first array
+  add r11, 8   ; move past length
+  mov r10, rsi ; pointer to byte of second array
+  add r10, 8   ; move past length
+  .cmp_loop:
+    mov r9b, byte[r10]
+    mov r8b, byte[r11]
+    cmp r9b, r8b
+    mov rax, 0
+    jne .epilogue
+
+    inc r11
+    inc r10
+    dec rdx
+    cmp rdx, 0
+    jne .cmp_loop
+
+  mov rax, 1
+
+  .epilogue:
+  add rsp, 8
+  ret
+

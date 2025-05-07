@@ -9,6 +9,7 @@ global byte_buffer_get_data_length
 global byte_buffer_get_buf_length
 global byte_buffer_get_buf
 global byte_buffer_push_byte
+global byte_buffer_push_byte_n_times
 global byte_buffer_push_int16
 global byte_buffer_push_int32
 global byte_buffer_push_int64
@@ -285,6 +286,36 @@ byte_buffer_push_byte:
   pop r12
   ret
 
+
+;;; byte_buffer_push_byte_n_times(*byte_buffer, byte, count)
+;;;   Pushes a byte count times.
+byte_buffer_push_byte_n_times:
+  push r12
+  push r13
+  push r14
+
+  mov r12, rdi ; byte buffer
+  mov r13, rsi ; byte
+  mov r14, rdx ; count
+
+  cmp r14, 0
+  je .epilogue
+
+  .loop
+  mov rdi, r12
+  mov rsi, r13
+  call byte_buffer_push_byte
+  dec r14
+  cmp r14, 0
+  jne .loop
+
+  .epilogue:
+  pop r14
+  pop r13
+  pop r12
+  ret
+
+
 ;;; byte_buffer_extend(*byte_buffer, count)
 ;;;   Increases data length by count (expanding backing buffer if needed)
 ;;;
@@ -408,6 +439,7 @@ byte_buffer_push_int16:
   %endif
 
   ;; Write 2 zeros to make space in the buffer
+  ;; TODO use extend or push_byte_n_times?
   mov r12, 2
   .write_int16_space:
     mov rdi, r14
@@ -444,6 +476,7 @@ byte_buffer_push_int32:
   %endif
 
   ;; Write 4 zeros to make space in the buffer
+  ;; TODO use extend or push_byte_n_times?
   mov r12, 4
   .write_int32_space:
     mov rdi, r14
@@ -480,6 +513,7 @@ byte_buffer_push_int64:
   %endif
 
   ;; Write 8 zeros to make space in the buffer
+  ;; TODO use extend or push_byte_n_times?
   mov r12, 8
   .write_int64_space:
     mov rdi, r14

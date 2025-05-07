@@ -60,6 +60,7 @@ push_builtin_printer_macros:
   ;; we intentionally shadow the other barray macro such
   ;; that you can easily pop this one off the stack to get all barrays
   ;; printed literally
+
   mov rdi, qword[macro_stack_printer] ; macro stack
   mov rsi, barray_macro_name          ; macro name
   mov rdx, barray_with_byte_strings   ; code

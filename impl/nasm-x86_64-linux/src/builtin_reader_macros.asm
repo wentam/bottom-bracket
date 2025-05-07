@@ -22,6 +22,10 @@
 ;; TODO instead of needing to push a barray for code, builtins would be cleaner
 ;; if the macro_stack allowed you to simply specify a pointer to already valid
 ;; memory (and maybe a length if it needs that).
+;;
+;; TODO barrays that contain a semicolon include the comment
+;; TODO comments at the start of our input become the only that evaluated
+
 
 section .text
 global push_builtin_reader_macros
