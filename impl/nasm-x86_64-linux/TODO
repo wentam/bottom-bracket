@@ -1,2 +1,10 @@
+* make the macro stack return an id on push and allow you to pop by id
+* make aarrp/with-macros pop the macros it pushes by id
+* make aarrp/with-macros push a macro that produces an error if there are no supported implementations in the macro spec
+* make it so that aarrp/with-macros macro specs can use macros defined previously in the same with-macros.
 * rework macro interface and all builtins to not use byte_buffer?
-* implement aarrp/with-macros
+* implement a way to have labels in machine code, perhaps via a macro like aarrp/barry-cat-with-labels
+* implement aarrp/with-data and aarrp/data-addr
+* implement aarrp/include (as a builtin probably)
+* implement x86_64 assembler (not as a builtin, and in machine code)
+* set rbp correctly at the start of all function calls?

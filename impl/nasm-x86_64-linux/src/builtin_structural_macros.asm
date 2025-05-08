@@ -46,6 +46,7 @@ push_macro_macro_name: db 10,0,0,0,0,0,0,0,"push-macro"
 pop_macro_macro_name: db 9,0,0,0,0,0,0,0,"pop-macro"
 elf64_relocatable_macro_name: db 17,0,0,0,0,0,0,0,"elf64-relocatable"
 barray_cat_macro_name: db 16,0,0,0,0,0,0,0,"aarrp/barray-cat"
+with_macros_macro_name: db 17,0,0,0,0,0,0,0,"aarrp/with-macros"
 
 barray_literal_macro_name: db 17,0,0,0,0,0,0,0,"test_macro_barray"
 barray_test_expansion: db 17,0,0,0,0,0,0,0,"test_macro_barray"
@@ -62,8 +63,36 @@ sections_str: db 8,0,0,0,0,0,0,0,"sections"
 barray_error: db "ERROR: Got barray in section, expecting parrays only",10
 barray_error_len:  equ $ - barray_error
 
-cat_parray_error: db "ERROR: Got parray in barray-cat, expecting barrays only",10
+cat_parray_error: db "ERROR: Got parray in aarrp/barray-cat, expecting barrays only",10
 cat_parray_error_len:  equ $ - cat_parray_error
+
+;;; Stuff for with-macros macro:
+
+with_macros_need_parray_error: db "ERROR: Got barray for the macro list in aarrp/with-macros. Must be parray of macro specifiers.",10
+with_macros_need_parray_error_len:  equ $ - with_macros_need_parray_error
+
+with_macros_need_parray_2_error: db "ERROR: Got barray for a macro specifier in aarrp/with-macros. Must be parray like (my-macro (my-platform machine-code)).",10
+with_macros_need_parray_2_error_len:  equ $ - with_macros_need_parray_2_error
+
+with_macros_name_not_barray_error: db "ERROR: Got parray instead of barray for macro name in aarrp/with-macros. Should be barray.",10
+with_macros_name_not_barray_error_len:  equ $ - with_macros_name_not_barray_error
+
+with_macros_spec_too_short_error: db "ERROR: Macro spec too short for a macro in aarrp/with-macros. Should have at least 2 elements: (macro-name (platform-1 machine-code-1))",10
+with_macros_spec_too_short_error_len:  equ $ - with_macros_spec_too_short_error
+
+with_macros_impl_spec_not_parray_error: db "ERROR: Got barray for implementation specifier in aarrp/with-macros. Should be parray like (my-platform machine-code).",10
+with_macros_impl_spec_not_parray_error_len:  equ $ - with_macros_impl_spec_not_parray_error
+
+with_macros_impl_spec_wrong_len_error: db "ERROR: Implementation specifier wrong length in aarrp/with-macros. Should be two barray elements like (platform machine-code).",10
+with_macros_impl_spec_wrong_len_error_len:  equ $ - with_macros_impl_spec_wrong_len_error
+
+with_macros_impl_spec_platform_not_barray_error: db "ERROR: First element of implementation specifier in aarrp/with-macros is not a barray. Should be a barray of the platform name like x86_64-linux."
+with_macros_impl_spec_platform_not_barray_error_len:  equ $ - with_macros_impl_spec_platform_not_barray_error
+
+with_macros_impl_spec_machine_code_not_barray_error: db "ERROR: Second element of implementation specifier in aarrp/with-macros is not a barray. Should be a barray of machine code for the given platform.",10
+with_macros_impl_spec_machine_code_not_barray_error_len:  equ $ - with_macros_impl_spec_machine_code_not_barray_error
+
+with_macros_supported_platform_barray: db 12,0,0,0,0,0,0,0,"x86_64-linux"
 
 section .text
 
@@ -121,6 +150,13 @@ push_builtin_structural_macros:
   mov rsi, barray_cat_macro_name          ; macro name
   mov rdx, barray_cat                     ; code
   mov rcx, (barray_cat_end - barray_cat)  ; length
+  call macro_stack_push_range
+
+  ;; Push with-macros macro
+  mov rdi, qword[macro_stack_structural]  ; macro stack
+  mov rsi, with_macros_macro_name          ; macro name
+  mov rdx, with_macros                    ; code
+  mov rcx, (with_macros_end - with_macros)  ; length
   call macro_stack_push_range
 
   add rsp, 8
@@ -757,8 +793,6 @@ elf64_relocatable_end:
 
 
 ;;; aarrp/barray-cat
-;;;
-;;; TODO: error if one of the children is a parray after macroexpansion
 
 ;;; barray_cat(structure*, output_byte_buffer*) -> output buf relative ptr
 barray_cat:
@@ -850,3 +884,326 @@ barray_cat:
   pop r12
   ret
 barray_cat_end:
+
+;;; _with_macros_try_push_impl(macro_name_barray*, impl_spec*)
+;;;   Attempts to push a macro implementation spec to the structural macro stack
+;;;
+;;;   Undefined behavior if impl_spec* isn't a parray.
+;;;   Undefined behavior if macro_name_barray* isn't a barray.
+;;;
+;;;   Returns 1 on success, 0 on failure.
+_with_macros_try_push_impl:
+  push r12
+  push r13
+  push r14
+
+  mov r12, rdi ; r12 = macro name barray
+  mov r13, rsi ; r13 = impl_spec* parray
+
+  ;; Error if impl_spec* parray has anything other than 2 elements
+  mov rdi, qword[r13]
+  not rdi
+  cmp rdi, 2
+  je .correct_spec_len
+
+  mov rdi, with_macros_impl_spec_wrong_len_error
+  mov rsi, with_macros_impl_spec_wrong_len_error_len
+  call error_exit
+
+  .correct_spec_len:
+
+  ;; Error if the first element of impl_spec* parray isn't a barray (to name the platform)
+  mov rdi, qword[r13+8]
+  mov rsi, qword[rdi]
+  cmp rsi, 0
+  jge .platform_is_barray
+
+  mov rdi, with_macros_impl_spec_platform_not_barray_error
+  mov rsi, with_macros_impl_spec_platform_not_barray_error_len
+  call error_exit
+
+  .platform_is_barray:
+
+  ;; Error if the second element of the impl_spec* parray isn't a barray (specifying machine code)
+  mov rdi, qword[r13+16]
+  mov rsi, qword[rdi]
+  cmp rsi, 0
+  jge .code_is_barray
+
+  mov rdi, with_macros_impl_spec_machine_code_not_barray_error
+  mov rsi, with_macros_impl_spec_machine_code_not_barray_error_len
+  call error_exit
+
+  .code_is_barray:
+
+  ;; If the first element if impl_spec* is x86_64-linux, push the macro and return 1
+  mov rdi, with_macros_supported_platform_barray
+  mov rsi, qword[r13+8]
+  call compare_barrays
+  cmp rax, 0
+  je .not_our_platform
+
+  mov rdi, qword[macro_stack_structural] ; macro stack
+  mov rsi, r12                           ; macro name barray
+  mov rdx, qword[r13+16]
+  call macro_stack_push
+  mov rax, 1
+  jmp .epilogue
+
+  .not_our_platform:
+
+  mov rax, 0
+  .epilogue:
+  pop r14
+  pop r13
+  pop r12
+  ret
+
+;;; _with_macros_push_macro(macro_spec*)
+;;;   Pushes a macro spec to the macro spec if there's an implementation for a platform
+;;;   we support.
+;;;
+;;;   Returns 1 on a successful, 0 on failure.
+;;;
+;;;   Undefined behavior if macro_spec is not a parray.
+_with_macros_push_macro:
+  push r12
+  push r13
+  push r14
+  push r15
+  sub rsp, 8
+
+  mov r12, rdi ; r12 = macro spec
+
+  ;; If our input parray has fewer than 2 elements, error
+  mov rdi, qword[r12]
+  not rdi
+  cmp rdi, 2
+  jge .enough_elements
+
+  mov rdi, with_macros_spec_too_short_error
+  mov rsi, with_macros_spec_too_short_error_len
+  call error_exit
+
+  .enough_elements:
+
+  ;; If this macro spec's first element isn't a barray for the name of a macro,
+  ;; error and exit
+  mov rdi, qword[r12+8]
+  cmp qword[rdi], 0
+  jge .name_is_barray
+
+  mov rdi, with_macros_name_not_barray_error
+  mov rsi, with_macros_name_not_barray_error_len
+  call error_exit
+
+  .name_is_barray:
+
+  ;; Iterate over implementations
+  mov r14, r12
+  add r14, 16  ; r14 = pointer to pointer to first implementation
+
+  mov r15, qword[r12]
+  not r15
+  dec r15 ; r15 = counter
+
+  .impl_loop:
+  cmp r15, 0
+  je .impl_loop_break
+
+  ;; If this implementation spec isn't a parray, error and exit
+  mov rdi, qword[r14]
+  mov rsi, qword[rdi]
+  cmp rsi, 0
+  jl .impl_is_parray
+
+  mov rdi, with_macros_impl_spec_not_parray_error
+  mov rsi, with_macros_impl_spec_not_parray_error_len
+  call error_exit
+
+  .impl_is_parray:
+
+  ;; Push the implementation if we support the platform. Break loop if we succeed.
+  mov rdi, qword[r12+8] ; macro name
+  mov rsi, qword[r14]
+  call _with_macros_try_push_impl
+
+  ;; Return 1 if we succeeded in the push.
+  cmp rax, 1
+  je .epilogue
+
+  add r14, 8
+  dec r15
+  jmp .impl_loop
+
+  .impl_loop_break:
+
+  mov rax, 0
+  .epilogue:
+  add rsp, 8
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  ret
+
+;;; _with_macros_push_macros(macro_list*)
+;;;   Returns the quantity of macros pushed
+;;;
+;;;   Undefined behavior if macro_list is not a parray
+_with_macros_push_macros:
+  push r12
+  push r13
+  push r14
+  push r15
+  sub rsp, 8
+
+  mov r12, rdi ; r12 = macro list (already verified as parray by caller)
+  mov r15, 0   ; push counter
+
+  ;; Iterate over macros:
+  mov r13, qword[r12]
+  not r13               ; r13 = macro count
+  mov r14, r12
+  add r14, 8            ; r14 = pointer to pointer to first macro
+
+  .macro_loop:
+  cmp r13, 0
+  je .macro_loop_break
+
+  ;; Error if the macro specifier isn't a parray
+  mov rdi, qword[r14]
+  cmp qword[rdi], 0
+  jl .spec_is_parray
+
+  mov rdi, with_macros_need_parray_2_error
+  mov rsi, with_macros_need_parray_2_error_len
+  call error_exit
+
+  .spec_is_parray:
+
+  ;; Push the macro with _with_macros_push_macro
+
+  mov rdi, qword[r14]
+  call _with_macros_push_macro
+  cmp rax, 0
+  je .not_pushed
+  inc r15
+  .not_pushed:
+
+  add r14, 8 ; r14 = pointer to pointer to next macro
+  dec r13
+  jmp .macro_loop
+  .macro_loop_break:
+
+  ;; Return quantity of macros successfully pushed
+  mov rax, r15
+
+  add rsp, 8
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  ret
+
+;;; with_macros(structure*, output_byte_buffer*) -> output buf relative ptr
+;;; TODO make sure that we can use previous macros in the list when defining a macro, like let*. This probably means calling macroexpand individually on each macro spec right before we use it.
+;;; TODO make sure that if there isn't a supported platform, we get a nice error. Probably do this by pushing a macro that produces an error if we failed to push a useful macro when pushing macros.
+with_macros:
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+
+  mov r12, rdi ; input structure
+  mov r13, rsi ; output bytpe buffer
+
+  ;; If input has less than 3 items, just return -1 and return to expand into nothing,
+  mov rax, -1
+  mov rdi, qword[r12]
+  not rdi
+  cmp rdi, 3
+  jl .epilogue
+
+  ;; Macroexpand the 2nd item in the input structure (macro list parray)
+  mov rax, byte_buffer_new
+  call rax
+  mov r14, rax ; r14 = byte buffer for 2nd input macroexpansion (macro list)
+
+  mov rdi, qword[r12+16]
+  mov rsi, r14
+  mov rax, structural_macro_expand
+  call rax
+  mov r15, rax ; r15 = 2nd input macroexpansion
+
+  ;; If the 2nd item in the input structure parray isn't a parray, error (this is supposed to me a list of macros)
+  cmp qword[r15], 0
+  jl .is_parray
+
+  mov rdi, with_macros_need_parray_error
+  mov rsi, with_macros_need_parray_error_len
+  mov rax, error_exit
+  call rax
+
+  .is_parray:
+
+  ;; Iterate over list of macros and push them to macro stack
+  mov rdi, r15
+  mov rax, _with_macros_push_macros
+  call rax
+
+  push rax
+  sub rsp, 8
+
+  ;; Free the macroexpanded 2nd item from our input
+  mov rdi, r14
+  mov rax, byte_buffer_free
+  call rax
+
+  ;; Macroexpand 3rd item in the input structure into our output buffer
+  mov rdi, qword[r12+24]
+  mov rsi, r13
+  mov rax, structural_macro_expand
+  call rax
+  mov rbx, rax ; rbx = abs pointer to result
+
+  mov rdi, r13
+  mov rax, byte_buffer_get_buf
+  call rax
+  sub rbx, rax ; rbx = relative pointer to result
+
+  add rsp, 8
+  pop rax ; rax = macro pushed count
+
+  ;; Pop all the macros we pushed
+  ;; TODO Just popping the correct number of macros isn't a good approach to this,
+  ;;      Our child macros may push but not pop macros to implement some kind of
+  ;;      "global" macro setup. We need some way for push_macro to return an id such that
+  ;;      we keep track of the ids and pop those specific ids. Would be much less fragile.
+
+  .pop_loop:
+  cmp rax, 0
+  je .break_pop_loop
+  push rax
+  sub rsp, 8
+
+  mov rdi, qword[macro_stack_structural] ; macro stack
+  mov rax, macro_stack_pop
+  call rax
+
+  add rsp, 8
+  pop rax
+  dec rax
+  .break_pop_loop:
+
+  ;; Return buffer relative pointer to our structure in output buffer
+  mov rax, rbx
+  .epilogue:
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  ret
+with_macros_end:
