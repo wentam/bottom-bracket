@@ -1068,7 +1068,6 @@ _with_macros_push_macros:
   ret
 
 ;;; with_macros(structure*, output_byte_buffer*) -> output buf relative ptr
-;;; TODO make sure that we can use previous macros in the list when defining a macro, like let*. This probably means calling macroexpand individually on each macro spec right before we use it.
 with_macros:
   push r12
   push r13

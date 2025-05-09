@@ -70,7 +70,7 @@ structural_macro_expand:
 ;;;   If cp_shy_greedy is shy (1), we will only expand the first element of each parray.
 ;;;   If cp_shy_greedy is greedy (2), everything will be expanded.
 ;;;
-;;;   If you're not sure, you probably want a greedy expand
+;;;   If you're not sure, you probably want a greedy expand.
 ;;;
 ;;;   To understarnd why 'shy' expansions are needed, look at how aarrp/with-macros manages
 ;;;   to behave like let* where each macro definition can use the last.
