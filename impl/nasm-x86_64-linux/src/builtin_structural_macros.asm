@@ -42,8 +42,6 @@ section .rodata
 barray_test_macro_name: db 11,0,0,0,0,0,0,0,"barray-test"
 parray_test_macro_name: db 11,0,0,0,0,0,0,0,"parray-test"
 nothing_macro_name: db 7,0,0,0,0,0,0,0,"nothing"
-push_macro_macro_name: db 10,0,0,0,0,0,0,0,"push-macro"
-pop_macro_macro_name: db 9,0,0,0,0,0,0,0,"pop-macro"
 elf64_relocatable_macro_name: db 17,0,0,0,0,0,0,0,"elf64-relocatable"
 barray_cat_macro_name: db 16,0,0,0,0,0,0,0,"aarrp/barray-cat"
 with_macros_macro_name: db 17,0,0,0,0,0,0,0,"aarrp/with-macros"
@@ -92,6 +90,9 @@ with_macros_impl_spec_platform_not_barray_error_len:  equ $ - with_macros_impl_s
 with_macros_impl_spec_machine_code_not_barray_error: db "ERROR: Second element of implementation specifier in aarrp/with-macros is not a barray. Should be a barray of machine code for the given platform.",10
 with_macros_impl_spec_machine_code_not_barray_error_len:  equ $ - with_macros_impl_spec_machine_code_not_barray_error
 
+with_macros_unsupported_platform_error: db "ERROR: Attempt to expand a macro that doesn't have an implementation for a platform we support. Supported platforms: x86_64-linux."
+with_macros_unsupported_platform_error_len: equ $ - with_macros_unsupported_platform_error
+
 with_macros_supported_platform_barray: db 12,0,0,0,0,0,0,0,"x86_64-linux"
 
 section .text
@@ -120,21 +121,6 @@ push_builtin_structural_macros:
   mov rsi, nothing_macro_name          ; macro name
   mov rdx, nothing                     ; code
   mov rcx, (nothing_end - nothing) ; length
-  call macro_stack_push_range
-
-
-  ;; Push push_macro macro
-  mov rdi, qword[macro_stack_structural]   ; macro stack
-  mov rsi, push_macro_macro_name          ; macro name
-  mov rdx, push_macro                     ; code
-  mov rcx, (push_macro_end - push_macro) ; length
-  call macro_stack_push_range
-
-  ;; Push pop_macro macro
-  mov rdi, qword[macro_stack_structural]   ; macro stack
-  mov rsi, pop_macro_macro_name          ; macro name
-  mov rdx, pop_macro                     ; code
-  mov rcx, (pop_macro_end - pop_macro) ; length
   call macro_stack_push_range
 
   ;; Push elf64_relocatable macro
@@ -214,49 +200,6 @@ nothing:
   ret
 
 nothing_end:
-
-;;; push_macro(*structure, *output_byte_buffer) -> output buf relative pointer
-;;;   Macro with a side-effect of pushing a new macro onto the structural
-;;;   macro stack. Expands to nothing.
-push_macro:
-  push r12
-
-  mov r12, rdi ; structure
-  ;; TODO error if wrong parameter count
-  ;; TODO error if parameters aren't barrays
-
-  mov rdi, qword[macro_stack_structural]
-  mov rsi, qword[r12+16]
-  mov rdx, qword[r12+24]
-  mov rax, macro_stack_push
-  call rax
-
-  mov rax, -1
-  pop r12
-  ret
-push_macro_end:
-
-
-;;; pop_macro(*structure, *output_byte_buffer) -> output buf relative pointer
-;;;   Macro with a side-effect of popping a macro off the structural macro
-;;;   stack. Expands to nothing.
-pop_macro:
-  push r12
-
-  mov r12, rdi ; structure
-
-  ;; TODO if an argument is specified, do pop-by-name
-
-  mov rdi, qword[macro_stack_structural]
-  mov rax, macro_stack_pop
-  call rax
-
-  mov rax, -1
-  pop r12
-  ret
-
-pop_macro_end:
-
 
 ;;; _elf64_relocatable_find_sections_parray(structure*)
 ;;;   Returns a pointer to the sections parray of an elf64-relocatable macro call
@@ -812,6 +755,7 @@ barray_cat:
 
   mov rdi, r12
   mov rsi, r14
+  mov rdx, 2 ; greedy expand
   mov rax, structural_macro_expand_tail
   call rax
   mov r12, rax ; r12 = macroexpanded tail of input structure
@@ -961,9 +905,7 @@ _with_macros_try_push_impl:
 
 ;;; _with_macros_push_macro(macro_spec*)
 ;;;   Pushes a macro spec to the macro spec if there's an implementation for a platform
-;;;   we support.
-;;;
-;;;   Returns 1 on a successful, 0 on failure.
+;;;   we support, else pushes a macro with the same name that produces an error.
 ;;;
 ;;;   Undefined behavior if macro_spec is not a parray.
 _with_macros_push_macro:
@@ -1038,7 +980,15 @@ _with_macros_push_macro:
 
   .impl_loop_break:
 
-  mov rax, 0
+  ;; We failed to push an implementation, push our error-producing macro in it's place so
+  ;; any attempt to use this macro fails with an error.
+
+  mov rdi, qword[macro_stack_structural]  ; macro stack
+  mov rsi, qword[r12+8]                   ; macro name
+  mov rdx, with_macros_unsupported_platform                     ; code
+  mov rcx, (with_macros_unsupported_platform_end - with_macros_unsupported_platform)  ; length
+  call macro_stack_push_range
+
   .epilogue:
   add rsp, 8
   pop r15
@@ -1082,14 +1032,25 @@ _with_macros_push_macros:
 
   .spec_is_parray:
 
-  ;; Push the macro with _with_macros_push_macro
+  ;; Push the macro with _with_macros_push_macro using macroexpanded macro spec
+  ;; (in case it uses macros we just defined)
+
+  call byte_buffer_new
+  push rax
+  sub rsp, 8
 
   mov rdi, qword[r14]
+  mov rsi, rax
+  mov rdx, 2 ; greedy expand
+  call structural_macro_expand
+
+  mov rdi, rax
   call _with_macros_push_macro
-  cmp rax, 0
-  je .not_pushed
   inc r15
-  .not_pushed:
+
+  add rsp, 8
+  pop rdi
+  call byte_buffer_free
 
   add r14, 8 ; r14 = pointer to pointer to next macro
   dec r13
@@ -1108,7 +1069,6 @@ _with_macros_push_macros:
 
 ;;; with_macros(structure*, output_byte_buffer*) -> output buf relative ptr
 ;;; TODO make sure that we can use previous macros in the list when defining a macro, like let*. This probably means calling macroexpand individually on each macro spec right before we use it.
-;;; TODO make sure that if there isn't a supported platform, we get a nice error. Probably do this by pushing a macro that produces an error if we failed to push a useful macro when pushing macros.
 with_macros:
   push r12
   push r13
@@ -1133,6 +1093,7 @@ with_macros:
 
   mov rdi, qword[r12+16]
   mov rsi, r14
+  mov rdx, 1 ; SHY expand because we don't have all macros defined yet
   mov rax, structural_macro_expand
   call rax
   mov r15, rax ; r15 = 2nd input macroexpansion
@@ -1164,6 +1125,7 @@ with_macros:
   ;; Macroexpand 3rd item in the input structure into our output buffer
   mov rdi, qword[r12+24]
   mov rsi, r13
+  mov rdx, 2 ; greedy expand
   mov rax, structural_macro_expand
   call rax
   mov rbx, rax ; rbx = abs pointer to result
@@ -1207,3 +1169,20 @@ with_macros:
   pop r12
   ret
 with_macros_end:
+
+;;; with_macros_unsupported_platform(structure*, output_byte_buffer*) -> output buf relative ptr
+;;;   Macro pushed to the stack if a macro in with-macros is defined without an
+;;;   implementation for a platform we support.
+;;;
+;;;   Just produces an error and exits.
+with_macros_unsupported_platform:
+  mov rdi, with_macros_unsupported_platform_error
+  mov rsi, with_macros_unsupported_platform_error_len
+  mov rax, error_exit
+  call rax
+
+  ret
+with_macros_unsupported_platform_end:
+
+
+

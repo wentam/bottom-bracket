@@ -31,9 +31,9 @@ structural_macro_expand:
   push r13
   push r14
 
-  mov r12, rdi ; data
-  mov r13, rsi ; output byte buffer
-
+  mov r12, rdi  ; data
+  mov r13, rsi  ; output byte buffer
+  ;mov rdx, rdx ; cp_shy_greedy
   call structural_macro_expand_relptr
   cmp rax, -1
   jne .not_nothing
@@ -62,9 +62,18 @@ structural_macro_expand:
   pop r12
   ret
 
-;;; structural_macro_expand_relptr(*data, *output_byte_buffer) -> ptr
+;;; structural_macro_expand_relptr(*data, *output_byte_buffer, shy_greedy) -> ptr
 ;;;   Produces a recursively (structural) macroexpanded version of *data in
 ;;;   *output_byte_buffer.
+;;;
+;;;   If cp_shy_greedy is cp (0), nothing will be expanded and we act as a recursive copy.
+;;;   If cp_shy_greedy is shy (1), we will only expand the first element of each parray.
+;;;   If cp_shy_greedy is greedy (2), everything will be expanded.
+;;;
+;;;   If you're not sure, you probably want a greedy expand
+;;;
+;;;   To understarnd why 'shy' expansions are needed, look at how aarrp/with-macros manages
+;;;   to behave like let* where each macro definition can use the last.
 ;;;
 ;;;   Uses buffer-relative pointers, thus not yet a valid AARRP structure.
 ;;;
@@ -84,6 +93,7 @@ structural_macro_expand_relptr:
 
   mov r12, rdi ; data
   mov r13, rsi ; output byte buffer
+  mov r14, rdx ; shy_greedy
 
   mov rdi, qword[r12] ; length of first thing in data
   cmp rdi, 0
@@ -93,14 +103,16 @@ structural_macro_expand_relptr:
   ;; Save our data length to use as our buffer-relative pointer
   mov rdi, r13
   call byte_buffer_get_data_length
-  mov r14, rax
+  push rax
+  sub rsp, 8
 
   ;; Push this barray to the byte buffer
   mov rdi, r13
   mov rsi, r12
   call byte_buffer_push_barray
 
-  mov rax, r14 ; We stashed return value in r14
+  add rsp, 8
+  pop rax
   jmp .done
 
   .expand_parray:
@@ -111,13 +123,15 @@ structural_macro_expand_relptr:
     ;; Save our data length to use as our buffer-relative pointer
     mov rdi, r13
     call byte_buffer_get_data_length
-    mov r14, rax
+    push rax
+    sub rsp, 8
 
     mov rdi, r13
     mov rsi, -1
     call byte_buffer_push_int64
 
-    mov rax, r14
+    add rsp, 8
+    pop rax
     jmp .done
 
   .not_empty:
@@ -132,6 +146,10 @@ structural_macro_expand_relptr:
   ;; ptr)
   call byte_buffer_new
   mov rbx, rax
+
+  ;; Skip expansion if we're in copy mode
+  cmp r14, 0
+  je .expand_parray_not_expanded
 
   ;; Try to expand this parray based on first element
   mov rdi, qword[macro_stack_structural] ; macro stack
@@ -153,6 +171,7 @@ structural_macro_expand_relptr:
 
   mov rdi, rax
   mov rsi, r13
+  mov rdx, r14
   call structural_macro_expand_relptr
   jmp .expand_parray_done
 
@@ -178,6 +197,20 @@ structural_macro_expand_relptr:
     push rcx
     mov rdi, qword[r12]
     mov rsi, r13
+    mov rdx, r14
+
+    ;; If we're in shy mode (r14 == 1) and this isn't the first child,
+    ;; set rdx to 0 for copy expansion.
+    cmp r14, 1
+    jne .not_copy_exp
+    mov rax, rcx
+    not rax
+    cmp r15, rax
+    je .not_copy_exp
+
+    mov rdx, 0
+    .not_copy_exp:
+
     call structural_macro_expand_relptr
     pop rcx
     pop rcx
