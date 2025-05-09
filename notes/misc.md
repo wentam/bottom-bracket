@@ -119,8 +119,41 @@ Worth thinking about how we would implement incremental builds with this.
 * I don't like that byte_buffer stuff needs to be part of the public interface with the current
   design, and used when implementing macros. I want byte_buffer to be an implementation detail and I want as minimal of a public interface as possible. I think we need to rethink this interface.
     * macro(*input_structure, *cleanup_out) -> absolute output pointer or NULL for nothing. Macro writes a pointer to a cleanup function to *cleanup_out such as free() or byte_buffer_free() if it wants aarrp to free it's data when it's done with it.
+    * macro(*input_structure, *macroexpansion_struct) with struct arg representing macroexpansion with cleanup func and such
     * counter-argument: the byte_buffer functions like byte_buffer_push_barray are highly convienient for constructing output, and if we're going to provide this as public anyway we may as well use it as the default interface.
         * but of course, this could all still be implemented inside aarrp-land.
+        * that said, generally, we need at least the stuff required to reasonably write an assembler in machine language built-in. Most macros need to be able to produce dynamically sized outputs, and needing to implement a byte buffer in machine language for every platform first probably isn't ideal.
 * We want to limit the amount of builtin functions available to macro as well. We plan to give users the ability to define build-time functions of their own in some way.
 * I'm starting to think that there should be no self-hosted implementation. I want to encourage everyone to go through fully verifiable bootstrapping paths, and aarrp is so simple the assembly implementations can be well-optimized. Either way we need an assembly implementation per-platform to bootstrap.
     * counter-argument: not every platform needs a bootstrap implementation necessarily, as aarrp can be cross-compiled from another machine or through virtualization as a bootstrap process. A self-hosted implementation could then cover a wider range of platforms
+* We probably want to give the user access to the macro stack functions in user-defined macros (by providing macros like (aarrp/builtin-func-addr/macro_stack_push)), as well as give them access to generally anything else we do with builtin macros that we're willing to standardize as a public interface
+* Make sure we give the user access to push/pop reader and printer macros within a structural macro implementation
+* Rename macro_stack to function_stack? We're probably going to use it for build-time functions that you can specify and use in your macros too.
+    * Or maybe even just "stack": We may also use this for a stack of arbitrary data blobs, like for storing error strings
+* We probably with a nice way to do (aarrp/with-data ((my-str "foobar") (my-other-data "\xFF\xFF"))). Perhaps using what we currently call the "macro stack".
+    * Make it store aarrp structures, not just barrays. You should be able to say (aarrp/with-data ((my-data (foo bar baz)))).
+* If we use the macro-stack for non-executable things, make sure we can create a macro stack that uses non-executable memory.
+* This might be a nicer way to check stack alignment:
+
+%macro safe_call 1
+    %ifdef ASSERT_STACK_ALIGNMENT
+        call assert_stack_aligned
+    %endif
+    call %1
+%endmacro
+
+then use safe_call everywhere instead of call.
+* We might need a way for macros to expand into a "spliced" list - AKA (foo (my-macro)) expanding into (foo a b c).
+    * This also might be logically broken: what if you call a splice macro at the top level?
+* We need to think about how build-time macro libraries could be distributed.
+    * They could potentially be distributed as .so files that contain a function you can call to push all of it's macros - or simple all of it's macros listed as data with a symbol to reference them (a "global"). aarrp could have a standard way of loading these with (load-so-macros).
+        * This is fancy because you could include both runtime library components and buildtime components in a single .so file.
+    * They could be distributed as raw .aarrp files of source, but that would require building all build-time dependencies from source everytime (slow)
+    * They could be distributed as raw aarrp structures fully macroexpanded (compiled) in binary format, maybe call it something like file.aarrpb64.
+    * .arrpb format with the header specifying the pointer/array length sizes and (includeb) macro that can import arbitrary-sized structures.
+        * this is probably the best default approach
+    * Users can always build their own solutions (though includeb makes sense as a builtin I think).
+* Right now if you do ((macro-that-expands-into-nothing-barry)), it expands literally into (nothing) even with a nothing macro defined. If this is a problem and we want to fix this, we probably want to repeat the entire macroexpansion process repeatedly until nothing expand.
+    * We probably want to fix this even though I can't think of a use-case: feels more complete and I think it's logically correct
+* We probably want a (with-masked-macros (foo bar baz) my-form) that disables those macros for my-form.
+* in my IR I should call mov cp because that makes more sense

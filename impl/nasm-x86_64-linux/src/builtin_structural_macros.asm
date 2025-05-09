@@ -1092,7 +1092,7 @@ with_macros:
 
   mov rdi, qword[r12+16]
   mov rsi, r14
-  mov rdx, 1 ; SHY expand because we don't have all macros defined yet
+  mov rdx, 1 ; SHY b/c we need to be able to use the macros we define as we go
   mov rax, structural_macro_expand
   call rax
   mov r15, rax ; r15 = 2nd input macroexpansion
