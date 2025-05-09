@@ -4,7 +4,8 @@ global macro_stack_free
 global macro_stack_push
 global macro_stack_push_range
 global macro_stack_pop
-global macro_stack_pop_by_name
+; TODO fixme first global macro_stack_pop_by_name
+global macro_stack_pop_by_id
 global macro_stack_peek
 global macro_stack_peek_by_name
 global macro_stack_bindump_buffers
@@ -17,6 +18,7 @@ extern byte_buffer_new
 extern byte_buffer_free
 extern byte_buffer_push_byte
 extern byte_buffer_push_int64
+extern byte_buffer_push_barray
 extern byte_buffer_get_data_length
 extern byte_buffer_bindump_buffer
 extern byte_buffer_get_buf
@@ -45,22 +47,18 @@ section .text
 ;;; TODO should the macro definition code optionally be a pointer specified
 ;;; as [-length, ptr]? Sometimes there's no reason to copy the macro
 ;;;
-;;; TODO ability to pop a macro based upon some kind of unique push id -
-;;; such that you can be sure you're 'popping' a specific macro that you pushed
-;;;
 ;;; TODO instead of the stack directly containing the code, it would probably
 ;;; be much more efficient if we maintained a central pool of macro definitions
 ;;; that never go away - then simply push and pop pointers to them.
 
 ;;; struct macro_definition {
-;;;   size_t  name_length
-;;;   char    name[name_length] // flat in struct
-;;;   size_t  code_length;
-;;;   char    code[code_length] // flat in struct
+;;;   size_t  id
+;;;   barray  name // flat in struct
+;;;   barray  code // flat in struct
 ;;; }
 
 ;;; struct macro_stack {
-;;;   byte_buffer* pbuffer;         // array of pointers to macro definitions
+;;;   byte_buffer* pbuffer;         // array of relative pointers to macro definitions
 ;;;   byte_buffer* dbuffer;         // macro definitions
 ;;; }
 
@@ -114,9 +112,7 @@ macro_stack_free:
 ;;;   Like macro_stack_push, but code is specified via pointer-and-length
 ;;;   instead of a barray.
 ;;;
-;;;   TODO better name for this function?
-;;;   TODO perhaps this should just be macro_stack_push? do we need the barray
-;;;   one at all?
+;;;   Returns a unique id of the macro pushed
 macro_stack_push_range:
   push r12
   push r13
@@ -141,9 +137,15 @@ macro_stack_push_range:
   mov rdx, rbx          ; code barray
   call macro_stack_push
 
+  push rax
+  sub rsp, 8
+
   ;; Free the barray
   mov rdi, rbx
   call free
+
+  add rsp, 8
+  pop rax
 
   pop rbx
   pop r15
@@ -160,6 +162,8 @@ macro_stack_push_range:
 ;;;
 ;;;   *code should be a barray of the macro code.
 ;;;   The memory at *code doesn't need to remain valid after this returns.
+;;;
+;;;   Returns a unique id of the macro pushed
 macro_stack_push:
   push r12
   push r13
@@ -175,57 +179,40 @@ macro_stack_push:
   call assert_stack_aligned
   %endif
 
-
   ;; Save the current data length in dbuffer to use as a relative pointer
   ;; to the macro definition
   mov rdi, qword[r15+MACRO_STACK_DBUFFER_OFFSET]
   call byte_buffer_get_data_length
   mov rbx, rax ; rbx = relative pointer to the code we're about to write
 
-  ;; Copy the name barray into the dbuffer
-  push r14
+  ;; Grab current highest id used on this stack
+  mov rdi, r15
+  call macro_stack_highest_id
+  inc rax
+  push rax
   sub rsp, 8
 
-  mov r14, r12
-  add r13, 8 ; Include length
-  .barray_cp_loop:
-    cmp r13, 0
-    je .barray_cp_loop_break
+  ;; Write id to dbuffer (highest id + 1)
+  mov rdi, qword[r15+MACRO_STACK_DBUFFER_OFFSET]
+  mov rsi, rax
+  call byte_buffer_push_int64
 
-    mov rdi, qword[r15+MACRO_STACK_DBUFFER_OFFSET]
-    mov sil, byte[r14]
-    call byte_buffer_push_byte
+  ;; Copy the name and code barrays into the dbuffer
+  mov rdi, qword[r15+MACRO_STACK_DBUFFER_OFFSET]
+  mov rsi, r12
+  call byte_buffer_push_barray
 
-    dec r13
-    inc r14
-    jmp .barray_cp_loop
-
-  .barray_cp_loop_break:
-
-  add rsp, 8
-  pop r14
-
-  ;; Copy code barray into the dbuffer
-  mov r13, qword[r14] ; length of macro code
-  add r13, 8 ; We want to include length
-  .code_cp_loop:
-    cmp r13, 0
-    je .code_cp_loop_break
-
-    mov rdi, qword[r15+MACRO_STACK_DBUFFER_OFFSET]
-    mov sil, byte[r14]
-    call byte_buffer_push_byte
-
-    dec r13
-    inc r14
-    jmp .code_cp_loop
-
-  .code_cp_loop_break:
+  mov rdi, qword[r15+MACRO_STACK_DBUFFER_OFFSET]
+  mov rsi, r14
+  call byte_buffer_push_barray
 
   ;; Write a relative pointer to this definition into the pbuffer
   mov rdi, qword[r15+MACRO_STACK_PBUFFER_OFFSET]
   mov rsi, rbx
   call byte_buffer_push_int64
+
+  add rsp, 8
+  pop rax
 
   pop rbx
   pop r15
@@ -261,20 +248,21 @@ macro_stack_pop:
   ;; Obtain name length from dbuffer via the pointer
   mov rdi, qword[r12+MACRO_STACK_DBUFFER_OFFSET]
   mov rsi, rbx
+  mov rsi, 8 ; move past id
   call byte_buffer_read_int64
   mov r14, rax
 
-  ;; Obtain macro length from dbuffer via the pointer+name length+8
+  ;; Obtain macro length from dbuffer via the pointer+8(id)+8(name length int)+name length
   mov rcx, rbx
   add rcx, r14
-  add rcx, 8
+  add rcx, 16
   mov rdi, qword[r12+MACRO_STACK_DBUFFER_OFFSET]
   mov rsi, rcx
   call byte_buffer_read_int64
 
   ;; Calculate total byte length of this macro definition from the above
   add r14, rax
-  add r14, 16
+  add r14, 24 ; (name length int)+(code length int)+(id)
 
   ;; Pop the bytes off the dbuffer
   mov rdi, qword[r12+MACRO_STACK_DBUFFER_OFFSET]
@@ -286,6 +274,135 @@ macro_stack_pop:
   add rsp, 8
   pop r14
   pop rbx
+  pop r13
+  pop r12
+  ret
+
+;;; TODO use this in pop
+;;; _macro_stack_macro_definition_len(*macro_stack, *macro_definition_relptr) -> int64
+_macro_stack_macro_definiton_len:
+  push r12
+  push r13
+  push r14
+
+  mov r12, rdi ; r12 = macro stack
+  mov r13, rsi ; r13 = relptr
+
+  ;; r14 = name length
+  mov rdi, qword[r12+MACRO_STACK_DBUFFER_OFFSET]
+  mov rsi, r13
+  mov rsi, 8 ; move past id
+  call byte_buffer_read_int64
+  mov r14, rax
+
+  ;; Obtain macro length from dbuffer via the pointer+8(id)+8(name length int)+name length
+  mov rdi, qword[r12+MACRO_STACK_DBUFFER_OFFSET]
+  mov rsi, r13
+  add rsi, r14
+  add rsi, 16
+  call byte_buffer_read_int64
+
+  ;; Calculate final length
+  add rax, r14
+  add rax, 24 ; id+name_length_int+code_length_int
+
+  pop r14
+  pop r13
+  pop r12
+  ret
+
+;;; macro_stack_pop_by_id(*macro_stack, id)
+;;;   Removes the macro on the stack with the given id. After you do this, your
+;;;   id is invalid and may end up referring to a new, different macro pushed
+;;;   to the stack (or no macro at all).
+macro_stack_pop_by_id:
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+  push rbp
+  sub rsp, 8
+
+  mov r12, rdi ; r12 = macro stack
+  mov r13, rsi ; r13 = id
+
+  ;; Get length of pbuffer
+  mov rdi, qword[r12+MACRO_STACK_PBUFFER_OFFSET]
+  call byte_buffer_get_data_length
+  mov r14, rax ; r14 = pbuffer data length
+  mov r15, rax ; r15 = pbuffer data length (preserved for later)
+
+  ;; Walk backwards through the pbuffer
+  .pbuffer_loop:
+  cmp r14, 0
+  jle .pbuffer_loop_notfound
+
+  ;; Read an id
+  mov rdi, qword[r12+MACRO_STACK_PBUFFER_OFFSET]
+  mov rsi, r14
+  sub rsi, 8
+  call byte_buffer_read_int64
+  mov rbx, rax ; rbx = pointer to macro definiton
+
+  mov rdi, qword[r12+MACRO_STACK_DBUFFER_OFFSET]
+  mov rsi, rbx
+  call byte_buffer_read_int64
+
+  ;; Break if this id is a match
+  cmp rax, r13
+  je .pbuffer_loop_found
+
+  sub r14, 8
+  jmp .pbuffer_loop
+
+  .pbuffer_loop_notfound:
+  ;; ID not found, return
+  jmp .epilogue
+
+  .pbuffer_loop_found:
+
+  sub r14, 8 ; r14 = relptr to pbuffer relptr
+
+  ;; Get size of macro definition
+  mov rdi, r12
+  mov rsi, rbx
+  call _macro_stack_macro_definiton_len
+  mov rbp, rax
+
+  ;; Shift pointer in pbuffer out and subtract the macro definition size from
+  ;; all pointers after in the stack as we go.
+  mov rdi, qword[r12+MACRO_STACK_PBUFFER_OFFSET]
+  call byte_buffer_get_buf
+
+  sub r15, 8 ; We're shifting, so we want to stop one short
+  .pbuffer_shift_loop:
+  cmp r14, r15
+  jge .pbuffer_shift_loop_break
+  mov rdi, qword[rax+r14+8]
+  sub rdi, rbp
+  mov qword[rax+r14], rdi
+  add r14, 8
+  jmp .pbuffer_shift_loop
+  .pbuffer_shift_loop_break:
+
+  ;; Shrink pbuffer by 8 bytes
+  mov rdi, qword[r12+MACRO_STACK_PBUFFER_OFFSET]
+  mov rsi, 8
+  call byte_buffer_pop_bytes
+
+  ;; Delete bytes out of dbuffer
+  mov rdi, qword[r12+MACRO_STACK_DBUFFER_OFFSET]
+  mov rsi, rbx
+  mov rdx, rbp
+  call byte_buffer_delete_bytes
+
+  .epilogue:
+  add rsp, 8
+  pop rbp
+  pop rbx
+  pop r15
+  pop r14
   pop r13
   pop r12
   ret
@@ -313,7 +430,9 @@ macro_stack_peek:
   pop r12
   ret
 
-;;; TODO: I think this is broken: don't we need to update the pbuffer with
+;;; TODO I think this is broken: don't we need to update the pbuffer with
+;;;      DO NOT USE THIS until fixed
+;;;
 ;;; all new pointers after the deleted one?
 ;;; macro_stack_pop_by_name(*macro_stack,*name_barray)
 ;;;   Removes the most recently pushed macro that matches the name barray.
@@ -338,13 +457,50 @@ macro_stack_pop_by_name:
 
   mov rdi, qword[r13+MACRO_STACK_DBUFFER_OFFSET]
 
-  mov rdx, qword[r12]
-  add rdx, qword[r12+rdx+8]
-  add rdx, 16
+  mov rdx, qword[r12+8]
+  add rdx, qword[r12+rdx+16]
+  add rdx, 24
 
   mov rsi, r12       ; index
   sub rsi, r14
   call byte_buffer_delete_bytes
+  pop r14
+  pop r13
+  pop r12
+  ret
+
+;;; macro_stack_highest_id(*macro_stack)
+;;;   Returns the highest id currently on this stack
+macro_stack_highest_id:
+  push r12
+  push r13
+  push r14
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call assert_stack_aligned
+  %endif
+
+  mov r12, rdi                                   ; r12 = macro stack
+  mov r13, qword[r12+MACRO_STACK_PBUFFER_OFFSET] ; r13 = pbuffer
+
+  ;; Get pbuffer data length
+  mov rdi, r13
+  call byte_buffer_get_data_length
+  cmp rax, 0
+  je .epilogue ; If the macro stack is empty, return 0
+
+  ;; Grab pointer to highest macro definition
+  mov rdi, r13
+  mov rsi, rax
+  sub rsi, 8
+  call byte_buffer_read_int64
+
+  ;; Grab and return highest id
+  mov rdi, qword[r12+MACRO_STACK_DBUFFER_OFFSET]
+  mov rsi, rax
+  call byte_buffer_read_int64
+
+  .epilogue:
   pop r14
   pop r13
   pop r12
@@ -398,6 +554,7 @@ macro_stack_peek_by_name:
   add r15, rbx
 
   mov rdi, r15
+  add rdi, 8 ; move past id
   mov rsi, r13
   call barray_equalp
   cmp rax, 1
@@ -440,14 +597,14 @@ macro_stack_call_by_name:
   mov rdx, 0
   cmp rax, 0
   je .epilogue
-  mov rcx, qword[rax] ; rdi = name length
+  mov rcx, qword[rax+8] ; rdi = name length
 
   mov rdi, r12
   mov rsi, r13
   mov rdx, r14
 
   add rax, rcx ; macro_definition+name length
-  add rax, 16  ; + width of both length integers
+  add rax, 24  ; + width of both length integers + id
   call rax
 
   mov rdx, 1

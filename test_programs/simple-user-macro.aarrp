@@ -1,7 +1,7 @@
-(aarrp/with-macros
+((aarrp/with-macros
  ((my-nothing-macro
    (x86_64-linux (aarrp/barray-cat
                   "\x48\xB8\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF" ; mov rax, -1
                   "\xC3")))                                  ; ret
   (unsupported-macro (a (aarrp/barray-cat "\xFF" (my-nothing-macro)))))
- (a b (my-nothing-macro) (aunsupported-macro)))
+ (a b (my-nothing-macro) (aunsupported-macro))))

@@ -1,11 +1,13 @@
-* make the macro stack return an id on push and allow you to pop by id
-* make aarrp/with-macros pop the macros it pushes by id
 * implement a way to have labels in machine code, perhaps via a macro like aarrp/barry-cat-with-labels or maybe there's a way to make arbitrary "label scopes" independent from cat
 * implement aarrp/with-data and aarrp/data-address
   * make sure it can support arbitrary aarrp structures, see notes/misc.md
 * implement aarrp/include (as a builtin probably)
 * implement x86_64 assembler (not as a builtin, and in machine code)
+* implement elf64-relocatable (or maybe just elf-relocatable?)
 * implement with-functions
 * don't always malloc executable, make sure macro stack mallocs executable except when serving as data stack
 * rework macro interface and all builtins to not use byte_buffer?
 * allow macros to expand into a "spliced" parray?: (a b (splicy macro)) -> (a b c d e). More notes in notes/misc.md
+* are compare_barrays and barray_equalp the same function? We need to either remove one or document the difference.
+* Put barray utility functions into a barray.asm, not util.asm
+* fix macro_stack_pop_by_name

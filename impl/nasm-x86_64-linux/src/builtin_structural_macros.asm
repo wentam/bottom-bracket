@@ -15,6 +15,7 @@ extern byte_buffer_push_int32
 extern byte_buffer_push_int16
 extern byte_buffer_push_byte
 extern byte_buffer_push_byte_n_times
+extern byte_buffer_read_int64
 extern byte_buffer_write_int64
 extern byte_buffer_get_data_length
 extern byte_buffer_get_buf
@@ -34,6 +35,7 @@ extern free
 extern macro_stack_push_range
 extern macro_stack_push
 extern macro_stack_pop
+extern macro_stack_pop_by_id
 
 extern macro_stack_structural
 
@@ -244,7 +246,6 @@ _elf64_relocatable_find_sections_parray:
     dec r13
     cmp r13, 0
     jne .find_sections_loop
-
 
   mov rax, r15
   add rsp, 8
@@ -835,7 +836,7 @@ barray_cat_end:
 ;;;   Undefined behavior if impl_spec* isn't a parray.
 ;;;   Undefined behavior if macro_name_barray* isn't a barray.
 ;;;
-;;;   Returns 1 on success, 0 on failure.
+;;;   Returns macro id on success, -1 on failure.
 _with_macros_try_push_impl:
   push r12
   push r13
@@ -880,7 +881,7 @@ _with_macros_try_push_impl:
 
   .code_is_barray:
 
-  ;; If the first element if impl_spec* is x86_64-linux, push the macro and return 1
+  ;; If the first element if impl_spec* is x86_64-linux, push the macro and return id
   mov rdi, with_macros_supported_platform_barray
   mov rsi, qword[r13+8]
   call compare_barrays
@@ -891,12 +892,11 @@ _with_macros_try_push_impl:
   mov rsi, r12                           ; macro name barray
   mov rdx, qword[r13+16]
   call macro_stack_push
-  mov rax, 1
   jmp .epilogue
 
   .not_our_platform:
 
-  mov rax, 0
+  mov rax, -1
   .epilogue:
   pop r14
   pop r13
@@ -908,6 +908,8 @@ _with_macros_try_push_impl:
 ;;;   we support, else pushes a macro with the same name that produces an error.
 ;;;
 ;;;   Undefined behavior if macro_spec is not a parray.
+;;;
+;;;   Returns macro id
 _with_macros_push_macro:
   push r12
   push r13
@@ -970,9 +972,9 @@ _with_macros_push_macro:
   mov rsi, qword[r14]
   call _with_macros_try_push_impl
 
-  ;; Return 1 if we succeeded in the push.
-  cmp rax, 1
-  je .epilogue
+  ;; Return macro id if we succeeded in the push.
+  cmp rax, -1
+  jne .epilogue
 
   add r14, 8
   dec r15
@@ -988,6 +990,7 @@ _with_macros_push_macro:
   mov rdx, with_macros_unsupported_platform                     ; code
   mov rcx, (with_macros_unsupported_platform_end - with_macros_unsupported_platform)  ; length
   call macro_stack_push_range
+  ;; return id
 
   .epilogue:
   add rsp, 8
@@ -997,19 +1000,17 @@ _with_macros_push_macro:
   pop r12
   ret
 
-;;; _with_macros_push_macros(macro_list*)
-;;;   Returns the quantity of macros pushed
-;;;
+;;; _with_macros_push_macros(macro_list*, id_byte_buffer*)
 ;;;   Undefined behavior if macro_list is not a parray
 _with_macros_push_macros:
   push r12
   push r13
   push r14
   push r15
-  sub rsp, 8
+  push rbx
 
   mov r12, rdi ; r12 = macro list (already verified as parray by caller)
-  mov r15, 0   ; push counter
+  mov rbx, rsi ; rbx = id byte buffer
 
   ;; Iterate over macros:
   mov r13, qword[r12]
@@ -1046,7 +1047,11 @@ _with_macros_push_macros:
 
   mov rdi, rax
   call _with_macros_push_macro
-  inc r15
+
+  ;; Push id to our id list
+  mov rdi, rbx
+  mov rsi, rax
+  call byte_buffer_push_int64
 
   add rsp, 8
   pop rdi
@@ -1057,10 +1062,7 @@ _with_macros_push_macros:
   jmp .macro_loop
   .macro_loop_break:
 
-  ;; Return quantity of macros successfully pushed
-  mov rax, r15
-
-  add rsp, 8
+  pop rbx
   pop r15
   pop r14
   pop r13
@@ -1069,11 +1071,14 @@ _with_macros_push_macros:
 
 ;;; with_macros(structure*, output_byte_buffer*) -> output buf relative ptr
 with_macros:
+  push rbp
+  mov rbp, rsp
   push r12
   push r13
   push r14
   push r15
   push rbx
+  sub rsp, 8 ; alloc for id byte buffer
 
   mov r12, rdi ; input structure
   mov r13, rsi ; output bytpe buffer
@@ -1108,8 +1113,14 @@ with_macros:
 
   .is_parray:
 
+  ;; Allocate byte buffer to track macro ids that we push
+  mov rax, byte_buffer_new
+  call rax
+  mov qword[rbp-48], rax
+
   ;; Iterate over list of macros and push them to macro stack
   mov rdi, r15
+  mov rsi, rax
   mov rax, _with_macros_push_macros
   call rax
 
@@ -1137,35 +1148,52 @@ with_macros:
   add rsp, 8
   pop rax ; rax = macro pushed count
 
-  ;; Pop all the macros we pushed
-  ;; TODO Just popping the correct number of macros isn't a good approach to this,
-  ;;      Our child macros may push but not pop macros to implement some kind of
-  ;;      "global" macro setup. We need some way for push_macro to return an id such that
-  ;;      we keep track of the ids and pop those specific ids. Would be much less fragile.
+  ;; Pop all the macros we pushed by id
+  ;; We do this right-to-left because it's faster for the stack implementation
+  mov rdi, qword[rbp-48]
+  mov rax, byte_buffer_get_data_length
+  call rax
 
   .pop_loop:
   cmp rax, 0
-  je .break_pop_loop
+  jle .pop_loop_break
+
   push rax
   sub rsp, 8
 
+  mov rdi, qword[rbp-48]
+  mov rsi, rax
+  sub rsi, 8
+  mov rax, byte_buffer_read_int64
+  call rax
+
   mov rdi, qword[macro_stack_structural] ; macro stack
-  mov rax, macro_stack_pop
+  mov rsi, rax
+  mov rax, macro_stack_pop_by_id
   call rax
 
   add rsp, 8
   pop rax
-  dec rax
-  .break_pop_loop:
+
+  sub rax, 8
+  jmp .pop_loop
+  .pop_loop_break:
+
+  ;; Free id byte buffer
+  mov rdi, qword[rbp-48]
+  mov rax, byte_buffer_free
+  call rax
 
   ;; Return buffer relative pointer to our structure in output buffer
   mov rax, rbx
   .epilogue:
+  add rsp, 8
   pop rbx
   pop r15
   pop r14
   pop r13
   pop r12
+  pop rbp
   ret
 with_macros_end:
 
