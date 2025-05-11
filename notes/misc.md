@@ -2,6 +2,8 @@ Keep these notes around even after stuff is implemented so I can remember why I 
 
 Try to re-read this occassionaly when working on aarrp so we remember important things.
 
+When reading these notes, note that the macro stack was renamed to kv stack later on, and many of these notes predate this change.
+
 * We need structural macros like (with-popped-printer-macros (barray) (my-form)) that expand (my-form) without
 specific printer macros present
 * There should be no command line arguments to the aarrp binary whatsoever to avoid the platform-dependent and implementation-dependent nature of that, and the fact that we want everything to be standardized. See some of the points below on how this can be avoided. Also see tag [A] in this file.
