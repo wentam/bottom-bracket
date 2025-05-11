@@ -299,10 +299,11 @@ structural_macro_expand_tail:
   push r13
   push r14
   push r15
-  sub rsp, 8
+  push rbx
 
   mov r12, rdi ; data
   mov r13, rsi ; output byte buffer
+  mov rbx, rdx ; cp_shy_greedy
 
   ;; Compute tail
   mov rdi, r12
@@ -312,6 +313,7 @@ structural_macro_expand_tail:
   ;; Macroexpand
   mov rdi, r14
   mov rsi, r13
+  mov rdx, rbx
   call structural_macro_expand
   mov r15, rax ; r15 = macroexpanded tail
 
@@ -320,7 +322,7 @@ structural_macro_expand_tail:
   call free
 
   mov rax, r15
-  add rsp, 8
+  pop rbx
   pop r15
   pop r14
   pop r13

@@ -412,6 +412,8 @@ parse_uint:
     mov dil, byte[r12+r15-1]
     call ascii_to_digit
 
+    ;; TODO error if digit >= base?
+
     ;; Multiply digit by multiplier (digit*base*position)
     mul rbx
 

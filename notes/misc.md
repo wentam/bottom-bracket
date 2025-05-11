@@ -147,6 +147,7 @@ Worth thinking about how we would implement incremental builds with this.
 then use safe_call everywhere instead of call.
 * We might need a way for macros to expand into a "spliced" list - AKA (foo (my-macro)) expanding into (foo a b c).
     * This also might be logically broken: what if you call a splice macro at the top level?
+    * Wanting to use this also generally implies you're making assumptions on who your parent macro is, which is wrong.
 * We need to think about how build-time macro libraries could be distributed.
     * They could potentially be distributed as .so files that contain a function you can call to push all of it's macros - or simple all of it's macros listed as data with a symbol to reference them (a "global"). aarrp could have a standard way of loading these with (load-so-macros).
         * This is fancy because you could include both runtime library components and buildtime components in a single .so file.
@@ -163,3 +164,23 @@ then use safe_call everywhere instead of call.
 * It should be possible to implement executable macros even on a platform that doesn't support executable memory by simply writing out executable files or w/e else. This can still be abstracted away nicely in the label stack because we simply have functions in the label stack implemntation to call the value.
 * Because executable memory is not an assumed property of the platform, the publicly exposed version of malloc probably shouldn't allow executable as a flag. The public version could call malloc_linux which does have such a flag, and thus internal components could use malloc_linux on the linux platform.
 * To define build-time functions, you could use with-data and mark the data as executable.
+* If we had a parray-cat builtin, you could include multiple different .aarrp files with macro lists and use them all in one with-macros call.
+* it might be useful for barray-cat to have an (aarrp/barray-cat/offset-labels 5) that counts as an offset as that element is hit.
+* We need to make our own indentation profile for neovim (treesitter?).
+    * I don't like that how w/ lisp we indent things differently depending on if we're working with data, a function, or a macro. It's all data and we should be consistent, right?
+* A namespacing alias macro like (with-namespace-aliases ((asm wentam/asm/x86_64)) (asm/mov rdi 5)) would be handy.
+* We need to establish clear namespacing rules. Current thoughts:
+    * All macros should be namespaced, because a sub-language might want to use that same name.
+        * But this might be weird - like if "if" is a macro: (wentam/my-cool-programming-language/if (= 5 5) foo) - could be cumbersome.
+    * Forms that hold meaning inside a specific macro - like the labels in barray-cat, do NOT
+      get namespaced because a sub-macro using those terms won't have our logic apply. We don't
+      want to make namespaces too cumbersome.
+* when implementing our ELF macro, we probably want it to expand into a barray-cat w/ labels, supporting labels within the ELF macro so we can define symbols and stuff
+    * When you define a symbol for a function in a relocatable .o, the value of the symbol is relative to the start of the .text section. We need to reference it in a different section.
+        * This means the semantics of the situation are a little bit more complex, and thus it may be the ELF more-or-less implements it's own label system semantically (even if it compiles into barray-cat).
+* when designing macros/abstractions, it's probably best to make sure "list of X" is always actually a list, even if it doesn't need to be. Example: with-macros has you define macros in a list, even though we could infer that the last element is the expansion.
+  This is generally desirable because we want to make sure a macro can also expand into "list of X". At the time of this writing, splicing isn't a thing and I'm not sure it should be a thing.
+  * Currently, barray-cat doesn't work this way - you just do (barray-cat a b c) and not (barray-cat (a b c)). We might want to change this.
+* We might do better implementing the ELF macro in smaller steps: implement an (elf/relocatable/header ) macro that expands into an ELF header for example.
+    * To be able to reference things like symbol values, we would probably need the barray-cat absolute label ref thing, as well as add and subtract macros to make them relative to the right thing.
+* Add macro that adds binary values of n-byte width, as well as a macro to convert ascii numbers to binary values and a macro to negate binary values so you can subtract using the add macro.

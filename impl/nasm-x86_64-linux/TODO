@@ -1,12 +1,10 @@
-* make macro stack a generic label stack
 * implement a way to have labels in machine code, perhaps via a macro like aarrp/barry-cat-with-labels or maybe there's a way to make arbitrary "label scopes" independent from cat
-* fix macro_stack_pop_by_name
 * barray-cat support local labels - either with explicit push-and-pop or maybe like nasm
   * I currently favour nasm's design for ergonomics but this might be technically less flexible
 * implement aarrp/with-data and aarrp/data-address
   * make sure it can support arbitrary aarrp structures, see notes/misc.md
   * make sure we can still easily reference a barray value as raw bytes, not a barray (maybe at definition time or maybe at reference time)
-  * reference data by pointer or by copying in entire raw data both.
+  * reference data by pointer or by copying in entire raw data both. Perhaps raw data access is indirect through a deref macro.
 * implement aarrp/include (as a builtin probably)
 * implement x86_64 assembler (not as a builtin, and in machine code)
 * implement elf64-relocatable (or maybe just elf-relocatable?)
@@ -19,3 +17,4 @@
 * Put barray utility functions into a barray.asm, not util.asm
 * make malloc not always executable (split into malloc and malloc_linux as per notes so that public malloc is never executable)
 * make macro stack not always executable
+* fix kv_stack_pop_by_key

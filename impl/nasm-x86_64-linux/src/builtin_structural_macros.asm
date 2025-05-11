@@ -7,35 +7,45 @@
 section .text
 global push_builtin_structural_macros
 
-extern byte_buffer_push_barray
-extern byte_buffer_push_barray_bytes
+extern byte_buffer_new
+extern byte_buffer_free
+extern byte_buffer_extend
+extern byte_buffer_get_buf
+extern byte_buffer_push_byte
 extern byte_buffer_push_bytes
 extern byte_buffer_push_int64
 extern byte_buffer_push_int32
 extern byte_buffer_push_int16
-extern byte_buffer_push_byte
-extern byte_buffer_push_byte_n_times
 extern byte_buffer_read_int64
+extern byte_buffer_push_barray
 extern byte_buffer_write_int64
 extern byte_buffer_get_data_length
-extern byte_buffer_get_buf
-extern byte_buffer_extend
-extern byte_buffer_new
-extern byte_buffer_free
+extern byte_buffer_push_barray_bytes
+extern byte_buffer_push_byte_n_times
+extern byte_buffer_push_int_as_width_LE
+extern byte_buffer_push_int_as_width_BE
+
 extern structural_macro_expand
 extern structural_macro_expand_tail
+
 extern write
 extern write_as_base
+extern write_char
 extern compare_barrays
 extern print
 extern error_exit
 extern parray_tail_new
 extern free
+extern parse_uint
 
-extern kv_stack_push_range
-extern kv_stack_push
+extern kv_stack_new
 extern kv_stack_pop
+extern kv_stack_free
+extern kv_stack_push
+extern kv_stack_push_range
 extern kv_stack_pop_by_id
+extern kv_stack_value_by_key
+extern kv_stack_bindump_buffers
 
 extern macro_stack_structural
 
@@ -65,6 +75,21 @@ barray_error_len:  equ $ - barray_error
 
 cat_parray_error: db "ERROR: Got parray in aarrp/barray-cat, expecting barrays only",10
 cat_parray_error_len:  equ $ - cat_parray_error
+
+;;; Stuff for barray-cat macro:
+barray_cat_abs_ref_name: db 13,0,0,0,0,0,0,0,"label-abs-ref"
+barray_cat_rel_ref_name: db 13,0,0,0,0,0,0,0,"label-rel-ref"
+barray_cat_label_name: db 5,0,0,0,0,0,0,0,"label"
+barray_cat_label_scope_name: db 11,0,0,0,0,0,0,0,"label-scope"
+barray_cat_global_label_name: db 12,0,0,0,0,0,0,0,"global-label"
+barray_cat_be_name: db 2,0,0,0,0,0,0,0,"BE"
+
+
+barray_cat_element_error: db "ERROR: Invalid element in aarrp/barray-cat. Must be one of: raw barray, label, global-label, label-scope, label-abs-ref, label-rel-ref",10
+barray_cat_element_error_len:  equ $ - barray_cat_element_error
+
+barray_cat_no_label_error: db "ERROR: Unable to find referenced label in aarrp/barray-cat",10
+barray_cat_no_label_error_len:  equ $ - barray_cat_no_label_error
 
 ;;; Stuff for with-macros macro:
 
@@ -738,6 +763,482 @@ elf64_relocatable_end:
 
 ;;; aarrp/barray-cat
 
+;;; _barray_cat_push_layer(parray*, label_stack*, output_byte_buffer*)
+;;;   * pushes all labels in this layer
+;;;   * pushes all content in this layer (recursively)
+_barray_cat_push_layer:
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+
+  mov r12, rdi ; r12 = layer parray*
+  mov r13, rsi ; r13 = label stack*
+  mov r14, rdx ; r14 = output byte buffer*
+
+  ;; Get current counter
+  mov rdi, r14
+  call byte_buffer_get_data_length
+  sub rax, 8 ; subtract barray len int
+
+  ;; Push labels
+  mov rdi, r12
+  mov rsi, r13
+  mov rdx, rax
+  mov rcx, 1
+  call _barray_cat_push_layer_labels
+  mov r15, rax ; r15 = label count
+
+  ;; Push content (push_content should call us to dig into the tree)
+  mov rdi, r12
+  mov rsi, r14
+  mov rdx, r13
+  call _barray_cat_push_layer_content
+
+  ;; Pop labels
+  .poploop:
+  cmp r15, 0
+  je .poploop_break
+
+  mov rdi, r13
+  call kv_stack_pop
+
+  dec r15
+  jmp .poploop
+  .poploop_break:
+
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  ret
+
+;;; _barray_cat_push_layer_labels(parray*,
+;;;                               label_stack*,
+;;;                               offset,
+;;;                               push_locals) -> push count, byte counter
+;;;   Scans the input parray and pushes all top-level labels at the correct address
+;;;   to the label stack.
+;;;
+;;;   Offset specifies the starting point for label addresses, as we might not be at the root.
+;;;
+;;;   If push_locals is 1, we will push locals at our top level
+;;;   Non-top-level locals will never be pushed.
+;;;
+;;;   Returns the quantity of labels pushed
+_barray_cat_push_layer_labels:
+  push rbp
+  mov rbp, rsp
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+  sub rsp, 24
+
+  mov r12, rdi ; r12 = layer parray*
+  mov r13, rsi ; r13 = label stack*
+  mov r14, rdx ; r14 = counter
+  mov r15, rcx ; r15 = push_locals bool
+
+  mov qword[rbp-56], 0 ; push counter
+
+  ;; Iterate over each element in layer
+  mov rbx, qword[r12]
+  not rbx
+  add r12, 8 ; move past length
+  .element_loop:
+  cmp rbx, 0
+  je .element_loop_break
+
+  ;; qword[rbp-48] = pointer to this element
+  mov rax, qword[r12]
+  mov qword[rbp-48], rax
+
+  ;; If it's a barray, add the length of the barray to our counter. Continue.
+  mov rax, qword[rbp-48]
+  cmp qword[rax], 0
+  jl .not_barray
+  add r14, qword[rax]
+  jmp .element_loop_continue
+  .not_barray:
+
+  ;; If it's a label reference, add the size of the label reference to our counter. Continue.
+  mov rax, qword[rbp-48]
+  cmp qword[rax], 0
+  jge .not_label_ref
+    ; Check if it has 4 elements, otherwise not a (valid) label ref
+    mov rdi, qword[rax]
+    not rdi
+    cmp rdi, 4
+    jne .not_label_ref
+
+    ; Check if the 3rd element is a barray
+    mov rax, qword[rbp-48]
+    mov rdi, qword[rax+24] ; rdi = pointer to 3rd barray
+    cmp qword[rdi], 0
+    jl .not_label_ref
+
+    ; Check if it's label-abs-ref or label-rel-ref
+    mov rax, qword[rbp-48]
+    mov rdi, qword[rax+8]
+    mov rsi, barray_cat_rel_ref_name
+    call compare_barrays
+    cmp rax, 1
+    je .is_label_ref
+
+    mov rax, qword[rbp-48]
+    mov rdi, qword[rax+8]
+    mov rsi, barray_cat_abs_ref_name
+    call compare_barrays
+    cmp rax, 1
+    je .is_label_ref
+
+    jmp .not_label_ref
+    .is_label_ref:
+
+    ; Parse the integer (TODO parse integer function should error for us if it's not a valid int)
+    mov rax, qword[rbp-48]
+    mov rdi, qword[rax+24] ; rdi = pointer to 3rd barray
+    mov rsi, 10            ; base 10
+    call parse_uint
+
+    ; Add the integer to our counter
+    add r14, rax
+    jmp .element_loop_continue
+  .not_label_ref:
+
+  ;; TODO Maybe if it's label-offset, apply that offset to our counter?
+
+  ;; If it's a global label, push it's name with our current counter value. Continue.
+  mov rax, qword[rbp-48]
+  cmp qword[rax], 0
+  jge .not_global_label
+    ; Check if it has 2 elements
+    mov rdi, qword[rax]
+    not rdi
+    cmp rdi, 2
+    jne .not_global_label
+
+    ; Check if the second element is a barray
+    mov rax, qword[rbp-48]
+    mov rdi, qword[rax+16]
+    cmp qword[rdi], 0
+    jl .not_global_label
+
+    ; Check if the first element is global-label
+    mov rax, qword[rbp-48]
+    mov rdi, qword[rax+8]
+    mov rsi, barray_cat_global_label_name
+    call compare_barrays
+    cmp rax, 1
+    jne .not_global_label
+
+    ; Push the 2nd element as our label name w/ our current counter as the value
+    mov rax, qword[rbp-48] ; rax = pointer to global-label parray
+    mov rsi, qword[rax+16] ; rsi = pointer to 2nd element
+
+    sub rsp, 16 ; allocate 16 bytes on the stack
+    mov qword[rsp], 8 ; barray length is 1
+    mov qword[rsp+8], r14 ; value is our counter
+    mov rdi, r13 ; the label stack
+    mov rdx, rsp
+    call kv_stack_push
+    add rsp, 16 ; free our 16 byte stack allocation
+    inc qword[rbp-56]
+
+    jmp .element_loop_continue
+  .not_global_label:
+
+  ;; If it's a local label AND push_locals is 1, push it's name with our counter. Continue.
+  mov rax, qword[rbp-48]
+  cmp qword[rax], 0
+  jge .not_local_label
+    ; Check if it has 2 elements
+    mov rdi, qword[rax]
+    not rdi
+    cmp rdi, 2
+    jne .not_local_label
+
+    ; Check if the second element is a barray
+    mov rax, qword[rbp-48]
+    mov rdi, qword[rax+16]
+    cmp qword[rdi], 0
+    jl .not_local_label
+
+    ; Check if the first element is label
+    mov rax, qword[rbp-48]
+    mov rdi, qword[rax+8]
+    mov rsi, barray_cat_label_name
+    call compare_barrays
+    cmp rax, 1
+    jne .not_local_label
+
+    ; If local pushes are disabled, don't push
+    cmp r15, 0
+    je .nopush
+
+    ; Push the 2nd element as our label name w/ our current counter as the value
+    mov rax, qword[rbp-48] ; rax = pointer to global-label parray
+    mov rsi, qword[rax+16] ; rsi = pointer to 2nd element
+
+    sub rsp, 16 ; allocate 16 bytes on the stack
+    mov qword[rsp], 8 ; barray length is 8
+    mov qword[rsp+8], r14 ; value is our counter
+    mov rdi, r13 ; the label stack
+    mov rdx, rsp
+    call kv_stack_push
+    add rsp, 16 ; free our 16 byte stack allocation
+    inc qword[rbp-56]
+    .nopush:
+
+    jmp .element_loop_continue
+  .not_local_label:
+
+  ;; If it's a label scope, recurse then continue
+  mov rax, qword[rbp-48]
+  cmp qword[rax], 0
+  jge .not_label_scope
+    ; Check if it has at least 1 element
+    mov rdi, qword[rax]
+    not rdi
+    cmp rdi, 1
+    jl .not_label_scope
+
+    ; Check if the first element is label-scope
+    mov rax, qword[rbp-48]
+    mov rdi, qword[rax+8]
+    mov rsi, barray_cat_label_scope_name
+    call compare_barrays
+    cmp rax, 1
+    jne .not_label_scope
+
+    ; If it has exactly one element, take no action
+    mov rax, qword[rbp-48]
+    mov rdi, qword[rax]
+    not rdi
+    cmp rdi, 1
+    je .label_scope_noaction
+
+    ; Compute the tail of the scope (remove first element)
+    mov rdi, qword[rbp-48]
+    call parray_tail_new
+    push rax
+    sub rsp, 8 ; align stack
+
+    ; Call self with push_locals as 0
+    mov rdi, rax ; the parray tail*
+    mov rsi, r13 ; label stack*
+    mov rdx, r14 ; counter
+    mov rcx, 0   ; don't push locals for child
+    call _barray_cat_push_layer_labels
+
+    ; Assign it's 2nd return value (byte counter) to our counter
+    mov r14, rdx
+
+    ; Free the parray tail
+    add rsp, 8
+    pop rdi
+    call free
+
+    .label_scope_noaction:
+    jmp .element_loop_continue
+  .not_label_scope:
+
+  ;; If we get here, error
+  mov rdi, barray_cat_element_error
+  mov rsi, barray_cat_element_error_len
+  call error_exit
+
+  .element_loop_continue:
+  add r12, 8 ; next element
+  dec rbx
+  jmp .element_loop
+  .element_loop_break:
+
+  mov rax, qword[rbp-56] ; Return push count
+  mov rdx, r14           ; Return counter as second value
+
+  add rsp, 24
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  pop rbp
+  ret
+
+;;; _barray_cat_push_layer_content(parray*, output_byte_buffer*, label_stack*)
+;;;   Scans the input parray and:
+;;;     *  pushes all raw barrays to the output
+;;;     *  pushes all sub-layers
+;;;     *  resolves all label refs, pushing them to the output
+_barray_cat_push_layer_content:
+  push rbp
+  mov rbp, rsp
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+  sub rsp, 24
+
+  mov r12, rdi ; layer parray*
+  mov r13, rsi ; output byte buffer*
+  mov rbx, rdx ; label stack*
+
+  mov r14, qword[rdi]
+  not r14
+  add r12, 8 ; move past length
+  .element_loop:
+  cmp r14, 0
+  jle .element_loop_break
+
+  ;; r15 = pointer to this element
+  mov r15, qword[r12]
+
+  ;; If this element is a raw barray, push it to the output. Continue.
+  cmp qword[r15], 0
+  jl .not_barray
+  mov rdi, r13
+  mov rsi, r15
+  call byte_buffer_push_barray_bytes
+  jmp .element_loop_continue
+  .not_barray:
+
+  ;; If this element - now known to be a parray - is empty, then continue.
+  cmp qword[r15], -1
+  je .element_loop_continue
+
+  ;; If this element is a label or global-label, ignore it. Continue.
+  mov rdi, qword[r15+8]
+  mov rsi, barray_cat_global_label_name
+  call compare_barrays
+  cmp rax, 1
+  je .element_loop_continue
+
+  mov rdi, qword[r15+8]
+  mov rsi, barray_cat_label_name
+  call compare_barrays
+  cmp rax, 1
+  je .element_loop_continue
+
+  ;; If this element is a label scope, recurse through _barray_cat_push_layer. Continue.
+  mov rdi, qword[r15+8]
+  mov rsi, barray_cat_label_scope_name
+  call compare_barrays
+  cmp rax, 1
+  jne .not_label_scope
+
+  mov rdi, r15
+  call parray_tail_new
+  push rax
+  sub rsp, 8
+
+  mov rdi, rax
+  mov rsi, rbx
+  mov rdx, r13
+  call _barray_cat_push_layer
+
+  add rsp, 8
+  pop rax
+
+  mov rdi, rax
+  call free
+
+  jmp .element_loop_continue
+  .not_label_scope:
+
+  ;; If this element is a ref, resolve and output the ref. Continue.
+
+  mov qword[rbp-48], 0 ; 0 = abs
+
+  mov rdi, qword[r15+8]
+  mov rsi, barray_cat_abs_ref_name
+  call compare_barrays
+  cmp rax, 1
+  je .is_ref
+
+  mov rdi, qword[r15+8]
+  mov rsi, barray_cat_rel_ref_name
+  call compare_barrays
+  cmp rax, 1
+  je .is_ref_and_rel
+
+  jmp .not_ref
+  .is_ref_and_rel:
+
+  mov rdi, r13
+  call byte_buffer_get_data_length
+  sub rax, 8
+
+  sub qword[rbp-48], rax ; = -current-pos
+  .is_ref:
+
+  mov rdi, qword[r15+32]
+  mov rsi, barray_cat_be_name
+  call compare_barrays
+  cmp rax, 1
+  mov rdi, byte_buffer_push_int_as_width_LE
+  mov rsi, byte_buffer_push_int_as_width_BE
+  cmove rdi, rsi
+  mov qword[rbp-56], rdi
+
+  mov rdi, rbx
+  mov rsi, qword[r15+16]
+  call kv_stack_value_by_key
+  push rax
+  sub rsp, 8
+
+  ;; Error if rax is NULL/0
+  cmp rax, 0
+  jne .found_label
+
+  mov rdi, barray_cat_no_label_error
+  mov rsi, barray_cat_no_label_error_len
+  call error_exit
+
+  .found_label:
+
+  mov rdi, qword[r15+24]
+  mov rsi, 10
+  call parse_uint
+
+  add rsp, 8
+  pop rdx
+
+  mov rsi, qword[rbp-48]
+  add rsi, qword[rdx+8]
+
+  mov rdx, rax
+  mov rdi, r13
+  call qword[rbp-56]
+
+  jmp .element_loop_continue
+  .not_ref:
+
+  ;; Error if we get here
+  mov rdi, barray_cat_element_error
+  mov rsi, barray_cat_element_error_len
+  call error_exit
+
+  .element_loop_continue:
+  add r12, 8 ; next element
+  dec r14
+  jmp .element_loop
+  .element_loop_break:
+
+  add rsp, 24
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  pop rbp
+  ret
+
 ;;; barray_cat(structure*, output_byte_buffer*) -> output buf relative ptr
 barray_cat:
   push rbp
@@ -755,10 +1256,10 @@ barray_cat:
   ;; Macroexpand tail of our input
   mov rax, byte_buffer_new
   call rax
-  mov qword[rbp-56], rax ; qword[rbp-56] = macroexpansion backing buffer
+  mov qword[rbp-48], rax ; qword[rbp-48] = macroexpansion backing buffer
 
   mov rdi, r12
-  mov rsi, qword[rbp-56]
+  mov rsi, qword[rbp-48]
   mov rdx, 2 ; greedy expand
   mov rax, structural_macro_expand_tail
   call rax
@@ -770,69 +1271,37 @@ barray_cat:
   mov rax, byte_buffer_push_int64
   call rax
 
-  ;; Iterate over children and build our output
-  mov rbx, qword[r12]
-  not rbx
+  ;; Create label stack
+  mov rax, kv_stack_new
+  call rax
+  mov qword[rbp-56], rax ; qword[rbp-56] = label stack
 
-  mov r14, r12
-  add r14, 8 ; move past length
-  mov qword[rbp-48], 0 ; byte counter
-
-  .concat_loop:
-  cmp rbx, 0
-  je .concat_loop_break
-
-  ;; TODO If our input item is a parray starting with aarrp/barray-cat/label, store the
-  ;; label+address pair. Proceed to next iteration.
-
-  ;; TODO If our input items is a parray starting with aarrp/barray-cat/label-relative-ref,
-  ;; output a relative reference to the label and increment qword[rbp-48] accordingly.
-  ;; Proceed to next iteration.
-  ;; TODO make sure we error if the label doesn't exist
-
-  ;; TODO If our input items is a parray starting with aarrp/barray-cat/label-absolute-ref,
-  ;; output an absolute reference to the label and increment qword[rbp-48] accordingly.
-  ;; Proceed to next iteration.
-  ;; TODO make sure we error if the label doesn't exist
-
-  ;; If our input item is not a barray, error and exit
-  mov rdi, qword[r14]
-  cmp qword[rdi], 0
-  jge .is_barray
-
-  mov rdi, cat_parray_error
-  mov rsi, cat_parray_error_len
-  mov rax, error_exit
+  ;; Push the layer
+  mov rdi, r12
+  mov rsi, qword[rbp-56]
+  mov rdx, r13
+  mov rax, _barray_cat_push_layer
   call rax
 
-  .is_barray:
-
-  ;; Output this barray to our result
-  mov rdi, qword[r14]
-  mov rax, qword[rdi]
-  add qword[rbp-48], rax
-
-  mov rdi, r13
-  mov rsi, qword[r14]
-  mov rax, byte_buffer_push_barray_bytes
+  ;; Free label stack
+  mov rdi, qword[rbp-56]
+  mov rax, kv_stack_free
   call rax
-
-  .concat_loop_continue:
-  add r14, 8
-  dec rbx
-  jmp .concat_loop
-
-  .concat_loop_break:
 
   ;; Update output length
   mov rdi, r13
+  mov rax, byte_buffer_get_data_length
+  call rax
+  sub rax, 8
+
+  mov rdi, r13
   mov rsi, 0
-  mov rdx, qword[rbp-48]
+  mov rdx, rax
   mov rax, byte_buffer_write_int64
   call rax
 
   ;; Free our macroexpansion
-  mov rdi, qword[rbp-56]
+  mov rdi, qword[rbp-48]
   mov rax, byte_buffer_free
   call rax
 

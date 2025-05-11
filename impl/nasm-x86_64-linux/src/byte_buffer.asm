@@ -16,6 +16,8 @@ global byte_buffer_push_int64
 global byte_buffer_push_barray
 global byte_buffer_push_barray_bytes
 global byte_buffer_push_bytes
+global byte_buffer_push_int_as_width_LE
+global byte_buffer_push_int_as_width_BE
 global byte_buffer_write_int64
 global byte_buffer_pop_bytes
 global byte_buffer_pop_int64
@@ -301,7 +303,7 @@ byte_buffer_push_byte_n_times:
   cmp r14, 0
   je .epilogue
 
-  .loop
+  .loop:
   mov rdi, r12
   mov rsi, r13
   call byte_buffer_push_byte
@@ -579,6 +581,107 @@ byte_buffer_push_barray_bytes:
   call byte_buffer_push_bytes
 
   add rsp, 8
+  ret
+
+;;; byte_buffer_push_int_as_width_LE(*byte_buffer, int, width)
+;;;   Pushes the integer to the byte buffer as [width] bytes.
+;;;
+;;;   width can be larger than the source int - we'll sign extend it.
+byte_buffer_push_int_as_width_LE:
+  push r12
+  push r13
+  push r14
+  push r15
+  sub rsp, 8
+
+  mov r12, rdi ; byte buffer
+  mov r13, rsi ; int
+  mov r14, rdx ; width
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call assert_stack_aligned
+  %endif
+
+  mov r15, 0
+  .write_loop:
+  cmp r14, 0
+  je .write_loop_break
+
+  mov rdx, r13
+  mov cl, r15b
+  sar rdx, cl
+
+  mov rdi, r12
+  mov rsi, rdx
+  call byte_buffer_push_byte
+
+  add r15, 8
+  dec r14
+  jmp .write_loop
+  .write_loop_break:
+
+  add rsp, 8
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  ret
+
+;;; byte_buffer_push_int_as_width_BE(*byte_buffer, int, width)
+;;;   Pushes the integer to the byte buffer as [width] bytes.
+;;;
+;;;   width can be larger than the source int - we'll sign extend it.
+byte_buffer_push_int_as_width_BE:
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+
+  mov r12, rdi ; byte buffer
+  mov r13, rsi ; int
+  mov r14, rdx ; width
+  mov rbx, rdx
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call assert_stack_aligned
+  %endif
+
+  mov r15, 0
+  .stack_write_loop:
+  cmp r14, 0
+  je .stack_write_loop_break
+
+  mov rdx, r13
+  mov cl, r15b
+  sar rdx, cl
+
+  push rdx
+  sub rsp, 8
+
+  add r15, 8
+  dec r14
+  jmp .stack_write_loop
+  .stack_write_loop_break:
+
+  .push_loop:
+  cmp rbx, 0
+  jle .push_loop_break
+
+  add rsp, 8
+  pop rsi
+  mov rdi, r12
+  call byte_buffer_push_byte
+
+  dec rbx
+  jmp .push_loop
+  .push_loop_break:
+
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
   ret
 
 ;;; byte_buffer_push_bytes(*byte_buffer, *bytes, length)

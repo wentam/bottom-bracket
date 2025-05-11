@@ -26,6 +26,7 @@ global kv_stack_peek
 global kv_stack_peek_by_key
 global kv_stack_bindump_buffers
 global kv_stack_call_by_key
+global kv_stack_value_by_key
 
 extern malloc
 extern free
@@ -592,6 +593,21 @@ kv_stack_peek_by_key:
   pop r14
   pop r13
   pop r12
+  ret
+
+;;; kv_stack_value_by_key(*kv_stack, *key_barray)
+;;;   Obtains a value by key, with higher-stack frames of the same key shadowing lower ones.
+;;;
+;;;   Returns a pointer to the value barray or NULL if it doesn't exist.
+kv_stack_value_by_key:
+  call kv_stack_peek_by_key
+  cmp rax, 0
+  je .done
+  mov rcx, qword[rax+8] ; rdi = name length
+  add rax, rcx ; frame+name length
+  add rax, 16  ; + width of name length integer + id
+
+  .done
   ret
 
 ;;; kv_stack_call_by_key(*kv_stack, *name_barray, arg1, arg2, arg3)
