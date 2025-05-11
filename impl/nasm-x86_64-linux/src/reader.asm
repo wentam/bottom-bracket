@@ -43,7 +43,7 @@ extern byte_buffer_get_data_length
 extern byte_buffer_get_buf
 extern byte_buffer_bindump_buffer
 
-extern macro_stack_call_by_name
+extern kv_stack_call_by_key
 extern macro_stack_reader
 
 section .rodata
@@ -282,7 +282,7 @@ _read:
   mov rcx, r14
   mov rdi, qword[macro_stack_reader]
   mov rsi, rsp
-  call macro_stack_call_by_name
+  call kv_stack_call_by_key
   pop rcx
   pop rcx
 
@@ -294,7 +294,7 @@ _read:
   mov rsi, catchall_macro_name
   mov rdx, r12
   mov rcx, r14
-  call macro_stack_call_by_name
+  call kv_stack_call_by_key
 
   cmp rdx, 0
   je .no_macro

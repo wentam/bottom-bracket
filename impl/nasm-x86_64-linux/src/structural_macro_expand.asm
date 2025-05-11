@@ -13,7 +13,7 @@ extern _relative_to_abs
 
 extern macro_stack_structural
 
-extern macro_stack_call_by_name
+extern kv_stack_call_by_key
 
 extern write_as_base
 extern write_char
@@ -156,7 +156,7 @@ structural_macro_expand_relptr:
   mov rsi, qword[r12+8]           ; name barray (first element of this parray)
   mov rdx, r12                    ; arg1 (*data) TODO: remove first element?
   mov rcx, rbx                    ; output buffer
-  call macro_stack_call_by_name
+  call kv_stack_call_by_key
   mov r15, rax ; r15 = expanded macro (if it expanded)
   cmp r15, -1
   je .expand_parray_nothing

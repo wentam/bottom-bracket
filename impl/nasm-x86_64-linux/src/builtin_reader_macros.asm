@@ -20,7 +20,7 @@
 ;; to the read function.
 ;;
 ;; TODO instead of needing to push a barray for code, builtins would be cleaner
-;; if the macro_stack allowed you to simply specify a pointer to already valid
+;; if the kv_stack allowed you to simply specify a pointer to already valid
 ;; memory (and maybe a length if it needs that).
 ;;
 ;; TODO barrays that contain a semicolon include the comment
@@ -32,8 +32,8 @@ global push_builtin_reader_macros
 global barray_invalid_chars
 
 extern macro_stack_reader
-extern macro_stack_push
-extern macro_stack_push_range
+extern kv_stack_push
+extern kv_stack_push_range
 
 extern BUFFERED_READER_EOF
 extern error_exit
@@ -103,28 +103,28 @@ push_builtin_reader_macros:
   mov rsi, barray_literal_macro_name ; macro name
   mov rdx, barray_literal            ; code
   mov rcx, (barray_literal_end - barray_literal)
-  call macro_stack_push_range
+  call kv_stack_push_range
 
   ;; push comment literal macro
   mov rdi, qword[macro_stack_reader] ; macro stack
   mov rsi, comment_literal_macro_name ; macro name
   mov rdx, comment_literal            ; code
   mov rcx, (comment_literal_end - comment_literal) ; length
-  call macro_stack_push_range
+  call kv_stack_push_range
 
   ;; push parray literal macro
   mov rdi, qword[macro_stack_reader] ; macro stack
   mov rsi, parray_literal_macro_name ; macro name
   mov rdx, parray_literal            ; code
   mov rcx, (parray_literal_end - parray_literal) ; length
-  call macro_stack_push_range
+  call kv_stack_push_range
 
   ;; push byte_string literal macro
   mov rdi, qword[macro_stack_reader]       ; macro stack
   mov rsi, byte_string_macro_name          ; macro name
   mov rdx, byte_string                     ; code
   mov rcx, (byte_string_end - byte_string) ; length
-  call macro_stack_push_range
+  call kv_stack_push_range
 
   add rsp, 8
   ret

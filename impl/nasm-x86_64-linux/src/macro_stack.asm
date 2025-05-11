@@ -1,15 +1,31 @@
-section .tex
-global macro_stack_new
-global macro_stack_free
-global macro_stack_push
-global macro_stack_push_range
-global macro_stack_pop
-; TODO fixme first global macro_stack_pop_by_name
-global macro_stack_pop_by_id
-global macro_stack_peek
-global macro_stack_peek_by_name
-global macro_stack_bindump_buffers
-global macro_stack_call_by_name
+;;; Label stack: a stack-like data structure with key-value store properties
+;;;   * optionally executable TODO make this actually optional and don't always allocate executable
+;;;   * useful if you need a key-value store
+;;;   * useful if you need a stack
+;;;   * definitely useful when you want something with both properties. This is the;;;     case with aarrp's macro system.
+
+;;; TODO should the macro definition code optionally be a pointer specified
+;;; as [-length, ptr]? Sometimes there's no reason to copy the macro
+;;;
+;;; TODO instead of the stack directly containing the code, it would probably
+;;; be much more efficient if we maintained a central pool of macro definitions
+;;; that never go away - then simply push and pop pointers to them.
+;;;
+;;; TODO it might be beneficial to have a hashmap index for fast by-name lookups
+;;; TODO it might be beneficial to have a hashmap index for fast by-id lookups
+
+section .text
+global kv_stack_new
+global kv_stack_free
+global kv_stack_push
+global kv_stack_push_range
+global kv_stack_pop
+; TODO fixme first: global kv_stack_pop_by_key
+global kv_stack_pop_by_id
+global kv_stack_peek
+global kv_stack_peek_by_key
+global kv_stack_bindump_buffers
+global kv_stack_call_by_key
 
 extern malloc
 extern free
@@ -39,68 +55,67 @@ section .rodata
 
 section .text
 
-;;; TODO should you 'push' a macro definition struct instead?
-;;; Seems like that might be a more consistant interface,
-;;; but maybe harder to use. Needs to be thought about carefully as
-;;; this is a public interface.
+;;; TODO it might be cleaner to have frames fixed in width, like:
+;;; struct frame {
+;;;   size_t id
+;;;   barray* key
+;;;   barray* value
+;;; }
 ;;;
-;;; TODO should the macro definition code optionally be a pointer specified
-;;; as [-length, ptr]? Sometimes there's no reason to copy the macro
+;;; The actual barrays could be stored in a big byte buffer to handle the allocation.
 ;;;
-;;; TODO instead of the stack directly containing the code, it would probably
-;;; be much more efficient if we maintained a central pool of macro definitions
-;;; that never go away - then simply push and pop pointers to them.
+;;; This would allow us to quick access frames by index.
 
-;;; struct macro_definition {
+;;; struct frame {
 ;;;   size_t  id
-;;;   barray  name // flat in struct
-;;;   barray  code // flat in struct
+;;;   barray  key   // flat in struct
+;;;   barray  value // flat in struct
 ;;; }
 
-;;; struct macro_stack {
-;;;   byte_buffer* pbuffer;         // array of relative pointers to macro definitions
-;;;   byte_buffer* dbuffer;         // macro definitions
+;;; struct kv_stack {
+;;;   byte_buffer* pbuffer;         // array of relpointers to frames in dbuffer
+;;;   byte_buffer* dbuffer;         // frames
 ;;; }
 
-%define MACRO_STACK_PBUFFER_OFFSET  0
-%define MACRO_STACK_DBUFFER_OFFSET 8
+%define KV_STACK_PBUFFER_OFFSET  0
+%define KV_STACK_DBUFFER_OFFSET 8
 
-%define MACRO_STACK_STRUCT_SIZE 16
+%define KV_STACK_STRUCT_SIZE 16
 
-;;; macro_stack_new()
-;;;   Makes a new macro stack.
+;;; kv_stack_new()
+;;;   Makes a new kv stack.
 ;;;
-;;;   You must free the macro stack with macro_stack_free when done.
-macro_stack_new:
+;;;   You must free the kv stack with kv_stack_free when done.
+kv_stack_new:
   push r12
-  mov rdi, MACRO_STACK_STRUCT_SIZE
+  mov rdi, KV_STACK_STRUCT_SIZE
   call malloc
   mov r12, rax ; move new struct into r12
 
   call byte_buffer_new
-  mov qword[r12+MACRO_STACK_PBUFFER_OFFSET], rax
+  mov qword[r12+KV_STACK_PBUFFER_OFFSET], rax
 
   call byte_buffer_new
-  mov qword[r12+MACRO_STACK_DBUFFER_OFFSET], rax
+  mov qword[r12+KV_STACK_DBUFFER_OFFSET], rax
 
   mov rax, r12 ; Return new struct
   pop r12
   ret
 
-;;; macro_stack_free(*macro_stack)
-;;;   Frees a macro stack.
-macro_stack_free:
+;;; kn_stack_free(*kv_stack)
+;;;   Frees a kv stack.
+kv_stack_free:
   push r12
-  mov r12, rdi ; the macro stack struct
+  mov r12, rdi ; the kv stack struct
 
   %ifdef ASSERT_STACK_ALIGNMENT
   call assert_stack_aligned
   %endif
 
-  mov rdi, qword[r12+MACRO_STACK_PBUFFER_OFFSET]
+  mov rdi, qword[r12+KV_STACK_PBUFFER_OFFSET]
   call byte_buffer_free
 
-  mov rdi, qword[r12+MACRO_STACK_DBUFFER_OFFSET]
+  mov rdi, qword[r12+KV_STACK_DBUFFER_OFFSET]
   call byte_buffer_free
 
   mov rdi, r12
@@ -108,34 +123,34 @@ macro_stack_free:
   pop r12
   ret
 
-;;; macro_stack_push_range(*macro_stack, *macro_name, *code_start, code length)
-;;;   Like macro_stack_push, but code is specified via pointer-and-length
+;;; kv_stack_push_range(*kv_stack, *key, *value_start, value_length)
+;;;   Like kv_stack_push, but value is specified via pointer-and-length
 ;;;   instead of a barray.
 ;;;
-;;;   Returns a unique id of the macro pushed
-macro_stack_push_range:
+;;;   Returns a unique id of the frame pushed
+kv_stack_push_range:
   push r12
   push r13
   push r14
   push r15
   push rbx
 
-  mov r12, rdi ; macro stack
-  mov r13, rsi ; macro name
-  mov r14, rdx ; code start
-  mov r15, rcx ; code length
+  mov r12, rdi ; kv stack
+  mov r13, rsi ; key
+  mov r14, rdx ; value start
+  mov r15, rcx ; value length
 
-  ;; Create a new barray with this code in it
+  ;; Create a new barray with this value in it
   mov rdi, r15
   mov rsi, r14
   call barray_new
   mov rbx, rax
 
-  ;; Push the macro the normal barray way
-  mov rdi, r12          ; macro stack
-  mov rsi, r13          ; macro name
-  mov rdx, rbx          ; code barray
-  call macro_stack_push
+  ;; Push the frame the normal barray way
+  mov rdi, r12          ; kv stack
+  mov rsi, r13          ; key
+  mov rdx, rbx          ; value barray
+  call kv_stack_push
 
   push rax
   sub rsp, 8
@@ -154,60 +169,60 @@ macro_stack_push_range:
   pop r12
   ret
 
-;;; macro_stack_push(*macro_stack, *macro_name, *code)
-;;;   Pushes a macro onto the macro stack.
+;;; kv_stack_push(*kv_stack, *key, *value)
+;;;   Pushes a frame onto the kv stack.
 ;;;
-;;;   *macro_name should be a barray of the desired macro name.
-;;;   The memory at *macro_name doesn't need to remain valid after this returns.
+;;;   *key should be a barray
+;;;   The memory at *key doesn't need to remain valid after this returns.
 ;;;
-;;;   *code should be a barray of the macro code.
-;;;   The memory at *code doesn't need to remain valid after this returns.
+;;;   *value should be a barray of the value.
+;;;   The memory at *value doesn't need to remain valid after this returns.
 ;;;
-;;;   Returns a unique id of the macro pushed
-macro_stack_push:
+;;;   Returns a unique id of the frame
+kv_stack_push:
   push r12
   push r13
   push r14
   push r15
   push rbx
-  mov r15, rdi ; Pointer to macro stack struct
-  mov r12, rsi ; Pointer to macro name barray
-  mov r13, qword[r12] ; Length of macro name
-  mov r14, rdx ; Pointer to code barray
+  mov r15, rdi ; Pointer to kv stack struct
+  mov r12, rsi ; Pointer to key barray
+  mov r13, qword[r12] ; Length of key
+  mov r14, rdx ; Pointer to value barray
 
   %ifdef ASSERT_STACK_ALIGNMENT
   call assert_stack_aligned
   %endif
 
   ;; Save the current data length in dbuffer to use as a relative pointer
-  ;; to the macro definition
-  mov rdi, qword[r15+MACRO_STACK_DBUFFER_OFFSET]
+  ;; to the frame
+  mov rdi, qword[r15+KV_STACK_DBUFFER_OFFSET]
   call byte_buffer_get_data_length
-  mov rbx, rax ; rbx = relative pointer to the code we're about to write
+  mov rbx, rax ; rbx = relative pointer to the value we're about to write
 
   ;; Grab current highest id used on this stack
   mov rdi, r15
-  call macro_stack_highest_id
+  call kv_stack_highest_id
   inc rax
   push rax
   sub rsp, 8
 
   ;; Write id to dbuffer (highest id + 1)
-  mov rdi, qword[r15+MACRO_STACK_DBUFFER_OFFSET]
+  mov rdi, qword[r15+KV_STACK_DBUFFER_OFFSET]
   mov rsi, rax
   call byte_buffer_push_int64
 
-  ;; Copy the name and code barrays into the dbuffer
-  mov rdi, qword[r15+MACRO_STACK_DBUFFER_OFFSET]
+  ;; Copy the key and value barrays into the dbuffer
+  mov rdi, qword[r15+KV_STACK_DBUFFER_OFFSET]
   mov rsi, r12
   call byte_buffer_push_barray
 
-  mov rdi, qword[r15+MACRO_STACK_DBUFFER_OFFSET]
+  mov rdi, qword[r15+KV_STACK_DBUFFER_OFFSET]
   mov rsi, r14
   call byte_buffer_push_barray
 
   ;; Write a relative pointer to this definition into the pbuffer
-  mov rdi, qword[r15+MACRO_STACK_PBUFFER_OFFSET]
+  mov rdi, qword[r15+KV_STACK_PBUFFER_OFFSET]
   mov rsi, rbx
   call byte_buffer_push_int64
 
@@ -221,51 +236,51 @@ macro_stack_push:
   pop r12
   ret
 
-;;; macro_stack_pop(*macro_stack) -> *macro_definition
-;;;   Removes the most recently pushed macro from the stack.
+;;; kv_stack_pop(*kv_stack) -> *frame
+;;;   Removes the most recently pushed frame from the stack.
 ;;;
-;;;   Returns a pointer to the macro definition in the format of
-;;;   the macro_definition struct above. Pushing to the macro
-;;;   stack invalidates the returned pointer (copy the data if you need
+;;;   Returns a pointer to the frame in the format of
+;;;   the frame struct above. Pushing to the kv stack
+;;;   invalidates the returned pointer (copy the data if you need
 ;;;   to keep it).
-macro_stack_pop:
+kv_stack_pop:
   push r12
   push r13
   push rbx
   push r14
   sub rsp, 8
-  mov r12, rdi ; macro stack
+  mov r12, rdi ; kv stack
 
   %ifdef ASSERT_STACK_ALIGNMENT
   call assert_stack_aligned
   %endif
 
-  ;; Pop pointer to this macro definition off pbuffer
-  mov rdi, qword[r12+MACRO_STACK_PBUFFER_OFFSET]
+  ;; Pop pointer to this frame off pbuffer
+  mov rdi, qword[r12+KV_STACK_PBUFFER_OFFSET]
   call byte_buffer_pop_int64
   mov rbx, rax ; rbx = pointer to definition
 
   ;; Obtain name length from dbuffer via the pointer
-  mov rdi, qword[r12+MACRO_STACK_DBUFFER_OFFSET]
+  mov rdi, qword[r12+KV_STACK_DBUFFER_OFFSET]
   mov rsi, rbx
   mov rsi, 8 ; move past id
   call byte_buffer_read_int64
   mov r14, rax
 
-  ;; Obtain macro length from dbuffer via the pointer+8(id)+8(name length int)+name length
+  ;; Obtain frame length from dbuffer via the pointer+8(id)+8(name length int)+name length
   mov rcx, rbx
   add rcx, r14
   add rcx, 16
-  mov rdi, qword[r12+MACRO_STACK_DBUFFER_OFFSET]
+  mov rdi, qword[r12+KV_STACK_DBUFFER_OFFSET]
   mov rsi, rcx
   call byte_buffer_read_int64
 
-  ;; Calculate total byte length of this macro definition from the above
+  ;; Calculate total byte length of this frame from the above
   add r14, rax
-  add r14, 24 ; (name length int)+(code length int)+(id)
+  add r14, 24 ; (name length int)+(value length int)+(id)
 
   ;; Pop the bytes off the dbuffer
-  mov rdi, qword[r12+MACRO_STACK_DBUFFER_OFFSET]
+  mov rdi, qword[r12+KV_STACK_DBUFFER_OFFSET]
   mov rsi, r14
   call byte_buffer_pop_bytes
 
@@ -279,24 +294,24 @@ macro_stack_pop:
   ret
 
 ;;; TODO use this in pop
-;;; _macro_stack_macro_definition_len(*macro_stack, *macro_definition_relptr) -> int64
-_macro_stack_macro_definiton_len:
+;;; _kv_stack_frame_len(*kv_stack, *frame_relptr) -> int64
+_kv_stack_frame_len:
   push r12
   push r13
   push r14
 
-  mov r12, rdi ; r12 = macro stack
+  mov r12, rdi ; r12 = kv stack
   mov r13, rsi ; r13 = relptr
 
   ;; r14 = name length
-  mov rdi, qword[r12+MACRO_STACK_DBUFFER_OFFSET]
+  mov rdi, qword[r12+KV_STACK_DBUFFER_OFFSET]
   mov rsi, r13
   mov rsi, 8 ; move past id
   call byte_buffer_read_int64
   mov r14, rax
 
-  ;; Obtain macro length from dbuffer via the pointer+8(id)+8(name length int)+name length
-  mov rdi, qword[r12+MACRO_STACK_DBUFFER_OFFSET]
+  ;; Obtain length from dbuffer via the pointer+8(id)+8(name length int)+name length
+  mov rdi, qword[r12+KV_STACK_DBUFFER_OFFSET]
   mov rsi, r13
   add rsi, r14
   add rsi, 16
@@ -304,18 +319,18 @@ _macro_stack_macro_definiton_len:
 
   ;; Calculate final length
   add rax, r14
-  add rax, 24 ; id+name_length_int+code_length_int
+  add rax, 24 ; id+name_length_int+value_length_int
 
   pop r14
   pop r13
   pop r12
   ret
 
-;;; macro_stack_pop_by_id(*macro_stack, id)
-;;;   Removes the macro on the stack with the given id. After you do this, your
-;;;   id is invalid and may end up referring to a new, different macro pushed
-;;;   to the stack (or no macro at all).
-macro_stack_pop_by_id:
+;;; kv_stack_pop_by_id(*kv_stack, id)
+;;;   Removes the frame on the stack with the given id. After you do this, your
+;;;   id is invalid and may end up referring to a new, different frame pushed
+;;;   to the stack (or no frame at all).
+kv_stack_pop_by_id:
   push r12
   push r13
   push r14
@@ -324,11 +339,11 @@ macro_stack_pop_by_id:
   push rbp
   sub rsp, 8
 
-  mov r12, rdi ; r12 = macro stack
+  mov r12, rdi ; r12 = kv stack
   mov r13, rsi ; r13 = id
 
   ;; Get length of pbuffer
-  mov rdi, qword[r12+MACRO_STACK_PBUFFER_OFFSET]
+  mov rdi, qword[r12+KV_STACK_PBUFFER_OFFSET]
   call byte_buffer_get_data_length
   mov r14, rax ; r14 = pbuffer data length
   mov r15, rax ; r15 = pbuffer data length (preserved for later)
@@ -339,13 +354,13 @@ macro_stack_pop_by_id:
   jle .pbuffer_loop_notfound
 
   ;; Read an id
-  mov rdi, qword[r12+MACRO_STACK_PBUFFER_OFFSET]
+  mov rdi, qword[r12+KV_STACK_PBUFFER_OFFSET]
   mov rsi, r14
   sub rsi, 8
   call byte_buffer_read_int64
-  mov rbx, rax ; rbx = pointer to macro definiton
+  mov rbx, rax ; rbx = pointer to frame
 
-  mov rdi, qword[r12+MACRO_STACK_DBUFFER_OFFSET]
+  mov rdi, qword[r12+KV_STACK_DBUFFER_OFFSET]
   mov rsi, rbx
   call byte_buffer_read_int64
 
@@ -364,15 +379,15 @@ macro_stack_pop_by_id:
 
   sub r14, 8 ; r14 = relptr to pbuffer relptr
 
-  ;; Get size of macro definition
+  ;; Get size of frame
   mov rdi, r12
   mov rsi, rbx
-  call _macro_stack_macro_definiton_len
+  call _kv_stack_frame_len
   mov rbp, rax
 
-  ;; Shift pointer in pbuffer out and subtract the macro definition size from
+  ;; Shift pointer in pbuffer out and subtract the frame size from
   ;; all pointers after in the stack as we go.
-  mov rdi, qword[r12+MACRO_STACK_PBUFFER_OFFSET]
+  mov rdi, qword[r12+KV_STACK_PBUFFER_OFFSET]
   call byte_buffer_get_buf
 
   sub r15, 8 ; We're shifting, so we want to stop one short
@@ -387,12 +402,12 @@ macro_stack_pop_by_id:
   .pbuffer_shift_loop_break:
 
   ;; Shrink pbuffer by 8 bytes
-  mov rdi, qword[r12+MACRO_STACK_PBUFFER_OFFSET]
+  mov rdi, qword[r12+KV_STACK_PBUFFER_OFFSET]
   mov rsi, 8
   call byte_buffer_pop_bytes
 
   ;; Delete bytes out of dbuffer
-  mov rdi, qword[r12+MACRO_STACK_DBUFFER_OFFSET]
+  mov rdi, qword[r12+KV_STACK_DBUFFER_OFFSET]
   mov rsi, rbx
   mov rdx, rbp
   call byte_buffer_delete_bytes
@@ -407,22 +422,22 @@ macro_stack_pop_by_id:
   pop r12
   ret
 
-;;; macro_stack_peek(*macro_stack) -> *macro_definition
-;;;   Returns a pointer to the most recently pushed macro definition.
+;;; kv_stack_peek(*kv_stack) -> *frame
+;;;   Returns a pointer to the most recently pushed frame.
 ;;;
-;;;   Any push or pop_by_name to the macro stack invalidates the returned
+;;;   Any push or pop_by_key to the kv stack invalidates the returned
 ;;;   pointer.
-macro_stack_peek:
+kv_stack_peek:
   push r12
   push r13
   sub rsp, 8
-  mov r12, rdi ; macro stack
+  mov r12, rdi ; kv stack
 
-  mov rdi, qword[r12+MACRO_STACK_DBUFFER_OFFSET]
+  mov rdi, qword[r12+KV_STACK_DBUFFER_OFFSET]
   call byte_buffer_get_buf
   mov r13, rax ; rax = pbuffer raw buffer pointer
 
-  mov rdi, qword[r12+MACRO_STACK_PBUFFER_OFFSET]
+  mov rdi, qword[r12+KV_STACK_PBUFFER_OFFSET]
   call byte_buffer_peek_int64
   add rax, r13
   add rsp, 8
@@ -431,31 +446,32 @@ macro_stack_peek:
   ret
 
 ;;; TODO I think this is broken: don't we need to update the pbuffer with
-;;;      DO NOT USE THIS until fixed
+;;;      DO NOT USE THIS until fixed. See pop_by_id for a reference on how
+;;;      to do this right.
 ;;;
 ;;; all new pointers after the deleted one?
-;;; macro_stack_pop_by_name(*macro_stack,*name_barray)
-;;;   Removes the most recently pushed macro that matches the name barray.
+;;; kv_stack_pop_by_key(*kv_stack,*name_barray)
+;;;   Removes the most recently pushed frame that matches the name barray.
 ;;;
 ;;;   Returns nothing.
 ;;;
 ;;;   TODO If no macros are found by the given name, returns 0 (NULL)
-macro_stack_pop_by_name:
+kv_stack_pop_by_key:
   push r12
   push r13
   push r14
-  mov r13, rdi ; macro stack
+  mov r13, rdi ; kv stack
 
   ;mov rdi, rdi
   ;mov rsi, rsi
-  call macro_stack_peek_by_name
+  call kv_stack_peek_by_key
   mov r12, rax
 
-  mov rdi, qword[r13+MACRO_STACK_DBUFFER_OFFSET]
+  mov rdi, qword[r13+KV_STACK_DBUFFER_OFFSET]
   call byte_buffer_get_buf
   mov r14, rax
 
-  mov rdi, qword[r13+MACRO_STACK_DBUFFER_OFFSET]
+  mov rdi, qword[r13+KV_STACK_DBUFFER_OFFSET]
 
   mov rdx, qword[r12+8]
   add rdx, qword[r12+rdx+16]
@@ -469,9 +485,9 @@ macro_stack_pop_by_name:
   pop r12
   ret
 
-;;; macro_stack_highest_id(*macro_stack)
+;;; kv_stack_highest_id(*kv_stack)
 ;;;   Returns the highest id currently on this stack
-macro_stack_highest_id:
+kv_stack_highest_id:
   push r12
   push r13
   push r14
@@ -480,23 +496,23 @@ macro_stack_highest_id:
   call assert_stack_aligned
   %endif
 
-  mov r12, rdi                                   ; r12 = macro stack
-  mov r13, qword[r12+MACRO_STACK_PBUFFER_OFFSET] ; r13 = pbuffer
+  mov r12, rdi                                   ; r12 = kv stack
+  mov r13, qword[r12+KV_STACK_PBUFFER_OFFSET] ; r13 = pbuffer
 
   ;; Get pbuffer data length
   mov rdi, r13
   call byte_buffer_get_data_length
   cmp rax, 0
-  je .epilogue ; If the macro stack is empty, return 0
+  je .epilogue ; If the kv stack is empty, return 0
 
-  ;; Grab pointer to highest macro definition
+  ;; Grab pointer to highest frame
   mov rdi, r13
   mov rsi, rax
   sub rsi, 8
   call byte_buffer_read_int64
 
   ;; Grab and return highest id
-  mov rdi, qword[r12+MACRO_STACK_DBUFFER_OFFSET]
+  mov rdi, qword[r12+KV_STACK_DBUFFER_OFFSET]
   mov rsi, rax
   call byte_buffer_read_int64
 
@@ -506,31 +522,31 @@ macro_stack_highest_id:
   pop r12
   ret
 
-;;; macro_stack_peek_by_name(*macro_stack,*name_barray) -> *macro_definition
-;;;   Finds the most recently pushed macro that matches the name barray.
+;;; kv_stack_peek_by_key(*kv_stack,*name_barray) -> *frame
+;;;   Finds the most recently pushed frame that matches the name barray.
 ;;;
-;;;   Returns a pointer to the macro definition. Any push or pop_by_name
-;;;   to the macro stack invalidates the returned pointer.
+;;;   Returns a pointer to the frame. Any push or pop_by_key
+;;;   to the kv stack invalidates the returned pointer.
 ;;;
-;;;   If no macros are found by the given name, returns 0 (NULL)
-macro_stack_peek_by_name:
+;;;   If no frames are found by the given name, returns 0 (NULL)
+kv_stack_peek_by_key:
   push r12
   push r13
   push r14
   push r15
   push rbx
 
-  mov r12, rdi ; macro stack struct
+  mov r12, rdi ; kv stack struct
   mov r13, rsi ; name barray
 
   %ifdef ASSERT_STACK_ALIGNMENT
   call assert_stack_aligned
   %endif
 
-  mov r14, qword[r12+MACRO_STACK_PBUFFER_OFFSET] ; pbuffer
+  mov r14, qword[r12+KV_STACK_PBUFFER_OFFSET] ; pbuffer
 
   ;; Get dbuffer buf
-  mov rdi, qword[r12+MACRO_STACK_DBUFFER_OFFSET]
+  mov rdi, qword[r12+KV_STACK_DBUFFER_OFFSET]
   call byte_buffer_get_buf
   mov rbx, rax
 
@@ -578,14 +594,15 @@ macro_stack_peek_by_name:
   pop r12
   ret
 
-;;; macro_stack_call_by_name(*macro_stack, *name_barray, arg1, arg2, arg3)
-;;;   Calls a macro in the macro stack by name. Returns the macro's
-;;;   return value.
+;;; kv_stack_call_by_key(*kv_stack, *name_barray, arg1, arg2, arg3)
+;;;   Calls a frame's data as a function in the kv stack by name.
 ;;;
-;;;   If the macro existed and we called it, rdx will be 1 at return. Else 0.
+;;;   Returns the function's return value.
+;;;
+;;;   If the frame existed and we called it, rdx will be 1 at return. Else 0.
 ;;;
 ;;;   TODO support more than 3 arguments via stack?
-macro_stack_call_by_name:
+kv_stack_call_by_key:
   push r12
   push r13
   push r14
@@ -593,7 +610,7 @@ macro_stack_call_by_name:
   mov r13, rcx
   mov r14, r8
 
-  call macro_stack_peek_by_name
+  call kv_stack_peek_by_key
   mov rdx, 0
   cmp rax, 0
   je .epilogue
@@ -603,7 +620,7 @@ macro_stack_call_by_name:
   mov rsi, r13
   mov rdx, r14
 
-  add rax, rcx ; macro_definition+name length
+  add rax, rcx ; frame+name length
   add rax, 24  ; + width of both length integers + id
   call rax
 
@@ -614,14 +631,14 @@ macro_stack_call_by_name:
   pop r12
   ret
 
-;;; macro_stack_bindump_buffers(*macro_stack, fd, base)
-;;;   bindump raw backing buffers for a macro stack (for debugging purposes)
-macro_stack_bindump_buffers:
+;;; kv_stack_bindump_buffers(*kv_stack, fd, base)
+;;;   bindump raw backing buffers for a kv stack (for debugging purposes)
+kv_stack_bindump_buffers:
   push r12
   push r13
   push r14
 
-  mov r12, rdi ; macro stack
+  mov r12, rdi ; kv stack
   mov r13, rsi ; fd
   mov r14, rdx ; base
 
@@ -630,7 +647,7 @@ macro_stack_bindump_buffers:
   %endif
 
   ;; bindump pbuffer
-  mov rdi, qword[r12+MACRO_STACK_PBUFFER_OFFSET]
+  mov rdi, qword[r12+KV_STACK_PBUFFER_OFFSET]
   mov rsi, r13
   mov rdx, r14
   call byte_buffer_bindump_buffer
@@ -641,7 +658,7 @@ macro_stack_bindump_buffers:
   call write_char
 
   ;; bindump dbuffer
-  mov rdi, qword[r12+MACRO_STACK_DBUFFER_OFFSET]
+  mov rdi, qword[r12+KV_STACK_DBUFFER_OFFSET]
   mov rsi, r13
   mov rdx, r14
   call byte_buffer_bindump_buffer

@@ -1,7 +1,21 @@
 ((aarrp/with-macros
- ((my-nothing-macro
-   (x86_64-linux (aarrp/barray-cat
-                  "\x48\xB8\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF" ; mov rax, -1
-                  "\xC3")))                                  ; ret
-  (unsupported-macro (a (aarrp/barray-cat "\xFF" (my-nothing-macro)))))
- (a b (my-nothing-macro) (aunsupported-macro))))
+   ((my-nothing-macro
+     (x86_64-linux (aarrp/barray-cat
+                    "\x48\xB8\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF" ; mov rax, -1
+
+                    (aarrp/barray-cat/label foo
+                     "foo"
+                     "bar"
+                     (aarrp/barray-cat/label bar
+                      "blah"
+                      "blargh"
+                      "ugh"
+                      (aarrp/barray-cat/label-relative-ref bar 8)
+                      "feh")
+                     "baz"
+                      (aarrp/barray-cat/label-absolute-ref foo 8)
+                     "boz")
+
+                    "\xC3")))                                  ; ret
+    (unsupported-macro (a (aarrp/barray-cat "\xFF" (my-nothing-macro)))))
+   (a b (my-nothing-macro) (aunsupported-macro))))

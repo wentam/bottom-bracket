@@ -32,10 +32,10 @@ extern error_exit
 extern parray_tail_new
 extern free
 
-extern macro_stack_push_range
-extern macro_stack_push
-extern macro_stack_pop
-extern macro_stack_pop_by_id
+extern kv_stack_push_range
+extern kv_stack_push
+extern kv_stack_pop
+extern kv_stack_pop_by_id
 
 extern macro_stack_structural
 
@@ -109,28 +109,28 @@ push_builtin_structural_macros:
   mov rsi, barray_test_macro_name          ; macro name
   mov rdx, barray_test                     ; code
   mov rcx, (barray_test_end - barray_test) ; length
-  call macro_stack_push_range
+  call kv_stack_push_range
 
   ;; Push parray-test macro
   mov rdi, qword[macro_stack_structural]   ; macro stack
   mov rsi, parray_test_macro_name          ; macro name
   mov rdx, parray_test                     ; code
   mov rcx, (parray_test_end - parray_test) ; length
-  call macro_stack_push_range
+  call kv_stack_push_range
 
   ;; Push nothing macro
   mov rdi, qword[macro_stack_structural]   ; macro stack
   mov rsi, nothing_macro_name          ; macro name
   mov rdx, nothing                     ; code
   mov rcx, (nothing_end - nothing) ; length
-  call macro_stack_push_range
+  call kv_stack_push_range
 
   ;; Push elf64_relocatable macro
   mov rdi, qword[macro_stack_structural]   ; macro stack
   mov rsi, elf64_relocatable_macro_name          ; macro name
   mov rdx, elf64_relocatable                     ; code
   mov rcx, (elf64_relocatable_end - elf64_relocatable) ; length
-  call macro_stack_push_range
+  call kv_stack_push_range
 
 
   ;; Push barray-cat macro
@@ -138,14 +138,14 @@ push_builtin_structural_macros:
   mov rsi, barray_cat_macro_name          ; macro name
   mov rdx, barray_cat                     ; code
   mov rcx, (barray_cat_end - barray_cat)  ; length
-  call macro_stack_push_range
+  call kv_stack_push_range
 
   ;; Push with-macros macro
   mov rdi, qword[macro_stack_structural]  ; macro stack
   mov rsi, with_macros_macro_name          ; macro name
   mov rdx, with_macros                    ; code
   mov rcx, (with_macros_end - with_macros)  ; length
-  call macro_stack_push_range
+  call kv_stack_push_range
 
   add rsp, 8
   ret
@@ -740,11 +740,14 @@ elf64_relocatable_end:
 
 ;;; barray_cat(structure*, output_byte_buffer*) -> output buf relative ptr
 barray_cat:
+  push rbp
+  mov rbp, rsp
   push r12
   push r13
   push r14
   push r15
   push rbx
+  sub rsp, 24
 
   mov r12, rdi ; input structure
   mov r13, rsi ; output byte buffer
@@ -752,10 +755,10 @@ barray_cat:
   ;; Macroexpand tail of our input
   mov rax, byte_buffer_new
   call rax
-  mov r14, rax ; r14 = macroexpansion backing buffer
+  mov qword[rbp-56], rax ; qword[rbp-56] = macroexpansion backing buffer
 
   mov rdi, r12
-  mov rsi, r14
+  mov rsi, qword[rbp-56]
   mov rdx, 2 ; greedy expand
   mov rax, structural_macro_expand_tail
   call rax
@@ -771,16 +774,29 @@ barray_cat:
   mov rbx, qword[r12]
   not rbx
 
-  mov r8, r12
-  add r8, 8 ; move past length
-  mov r9, 0 ; byte counter
+  mov r14, r12
+  add r14, 8 ; move past length
+  mov qword[rbp-48], 0 ; byte counter
 
   .concat_loop:
   cmp rbx, 0
   je .concat_loop_break
 
+  ;; TODO If our input item is a parray starting with aarrp/barray-cat/label, store the
+  ;; label+address pair. Proceed to next iteration.
+
+  ;; TODO If our input items is a parray starting with aarrp/barray-cat/label-relative-ref,
+  ;; output a relative reference to the label and increment qword[rbp-48] accordingly.
+  ;; Proceed to next iteration.
+  ;; TODO make sure we error if the label doesn't exist
+
+  ;; TODO If our input items is a parray starting with aarrp/barray-cat/label-absolute-ref,
+  ;; output an absolute reference to the label and increment qword[rbp-48] accordingly.
+  ;; Proceed to next iteration.
+  ;; TODO make sure we error if the label doesn't exist
+
   ;; If our input item is not a barray, error and exit
-  mov rdi, qword[r8]
+  mov rdi, qword[r14]
   cmp qword[rdi], 0
   jge .is_barray
 
@@ -791,19 +807,18 @@ barray_cat:
 
   .is_barray:
 
-  mov rdi, qword[r8]
-  add r9, qword[rdi]
+  ;; Output this barray to our result
+  mov rdi, qword[r14]
+  mov rax, qword[rdi]
+  add qword[rbp-48], rax
 
   mov rdi, r13
-  mov rsi, qword[r8]
+  mov rsi, qword[r14]
   mov rax, byte_buffer_push_barray_bytes
-  push r8
-  push r9
   call rax
-  pop r9
-  pop r8
 
-  add r8, 8
+  .concat_loop_continue:
+  add r14, 8
   dec rbx
   jmp .concat_loop
 
@@ -812,21 +827,23 @@ barray_cat:
   ;; Update output length
   mov rdi, r13
   mov rsi, 0
-  mov rdx, r9
+  mov rdx, qword[rbp-48]
   mov rax, byte_buffer_write_int64
   call rax
 
   ;; Free our macroexpansion
-  mov rdi, r14
+  mov rdi, qword[rbp-56]
   mov rax, byte_buffer_free
   call rax
 
   mov rax, 0
+  add rsp, 24
   pop rbx
   pop r15
   pop r14
   pop r13
   pop r12
+  pop rbp
   ret
 barray_cat_end:
 
@@ -891,7 +908,7 @@ _with_macros_try_push_impl:
   mov rdi, qword[macro_stack_structural] ; macro stack
   mov rsi, r12                           ; macro name barray
   mov rdx, qword[r13+16]
-  call macro_stack_push
+  call kv_stack_push
   jmp .epilogue
 
   .not_our_platform:
@@ -989,7 +1006,7 @@ _with_macros_push_macro:
   mov rsi, qword[r12+8]                   ; macro name
   mov rdx, with_macros_unsupported_platform                     ; code
   mov rcx, (with_macros_unsupported_platform_end - with_macros_unsupported_platform)  ; length
-  call macro_stack_push_range
+  call kv_stack_push_range
   ;; return id
 
   .epilogue:
@@ -1169,7 +1186,7 @@ with_macros:
 
   mov rdi, qword[macro_stack_structural] ; macro stack
   mov rsi, rax
-  mov rax, macro_stack_pop_by_id
+  mov rax, kv_stack_pop_by_id
   call rax
 
   add rsp, 8
@@ -1210,6 +1227,3 @@ with_macros_unsupported_platform:
 
   ret
 with_macros_unsupported_platform_end:
-
-
-

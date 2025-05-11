@@ -157,3 +157,7 @@ then use safe_call everywhere instead of call.
     * We probably want to fix this even though I can't think of a use-case: feels more complete and I think it's logically correct
 * We probably want a (with-masked-macros (foo bar baz) my-form) that disables those macros for my-form.
 * in my IR I should call mov cp because that makes more sense
+* We want to make sure we expose the relevant builtins in such a way that an aarrp user could create their own (macro,data,etc) stacks
+* It should be possible to implement executable macros even on a platform that doesn't support executable memory by simply writing out executable files or w/e else. This can still be abstracted away nicely in the label stack because we simply have functions in the label stack implemntation to call the value.
+* Because executable memory is not an assumed property of the platform, the publicly exposed version of malloc probably shouldn't allow executable as a flag. The public version could call malloc_linux which does have such a flag, and thus internal components could use malloc_linux on the linux platform.
+* To define build-time functions, you could use with-data and mark the data as executable.

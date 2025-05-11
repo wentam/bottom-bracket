@@ -49,14 +49,14 @@ extern macro_stack_reader
 extern macro_stack_printer
 extern macro_stack_structural
 
-extern macro_stack_new
-extern macro_stack_free
-extern macro_stack_push
-extern macro_stack_pop
-extern macro_stack_peek
-extern macro_stack_bindump_buffers
-extern macro_stack_peek_by_name
-extern macro_stack_pop_by_name
+extern kv_stack_new
+extern kv_stack_free
+extern kv_stack_push
+extern kv_stack_pop
+extern kv_stack_peek
+extern kv_stack_bindump_buffers
+extern kv_stack_peek_by_key
+extern kv_stack_pop_by_key
 extern byte_buffer_delete_bytes
 extern barray_new
 extern parray_literal
@@ -147,7 +147,7 @@ _start:
   mov rdi, qword[macro_stack_reader]
   mov rsi, stderr_fd
   mov rdx, 16
-  call macro_stack_bindump_buffers
+  call kv_stack_bindump_buffers
 
   mov rdi, printermac_msg
   mov rsi, printermac_msg_len
@@ -157,7 +157,7 @@ _start:
   mov rdi, qword[macro_stack_printer]
   mov rsi, stderr_fd
   mov rdx, 16
-  call macro_stack_bindump_buffers
+  call kv_stack_bindump_buffers
 
   mov rdi, structuralmac_msg
   mov rsi, structuralmac_msg_len
@@ -167,7 +167,7 @@ _start:
   mov rdi, qword[macro_stack_structural]
   mov rsi, stderr_fd
   mov rdx, 16
-  call macro_stack_bindump_buffers
+  call kv_stack_bindump_buffers
 
   mov rdi, stdin_fd
   call read

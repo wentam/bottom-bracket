@@ -5,10 +5,6 @@
 ;; lots of tiny fd writes are innefficient, and the output always
 ;; being an fd isn't neccessarily something we want to lock ourselves
 ;; into
-;;
-;; TODO right now the standard macro stacks are called 'macro_stack_x',
-;; which is also how macro_stack methods are named. This is a little
-;; confusing and should probably be changed.
 
 section .text
 global push_builtin_printer_macros
@@ -17,9 +13,9 @@ extern print
 extern barray_new
 extern assert_stack_aligned
 extern macro_stack_printer
-extern macro_stack_push
-extern macro_stack_push_range
-extern macro_stack_call_by_name
+extern kv_stack_push
+extern kv_stack_push_range
+extern kv_stack_call_by_key
 extern free
 extern write_char
 extern write
@@ -47,14 +43,14 @@ push_builtin_printer_macros:
   mov rsi, data_macro_name            ; macro name
   mov rdx, data                       ; code
   mov rcx, (data_end - data)          ; length
-  call macro_stack_push_range
+  call kv_stack_push_range
 
   ;; push barray macro
   mov rdi, qword[macro_stack_printer] ; macro stack
   mov rsi, barray_macro_name          ; macro name
   mov rdx, barray                     ; code
   mov rcx, (barray_end - barray)      ; length
-  call macro_stack_push_range
+  call kv_stack_push_range
 
   ;; push barray with byte-strings macro
   ;; we intentionally shadow the other barray macro such
@@ -65,14 +61,14 @@ push_builtin_printer_macros:
   mov rsi, barray_macro_name          ; macro name
   mov rdx, barray_with_byte_strings   ; code
   mov rcx, (barray_with_byte_strings_end - barray_with_byte_strings) ; length
-  call macro_stack_push_range
+  call kv_stack_push_range
 
   ;; push parray macro
   mov rdi, qword[macro_stack_printer] ; macro stack
   mov rsi, parray_macro_name          ; macro name
   mov rdx, parray                     ; code
   mov rcx, (parray_end - parray)      ; length
-  call macro_stack_push_range
+  call kv_stack_push_range
 
   pop r12
   ret
@@ -100,7 +96,7 @@ data:
   mov rsi, parray_macro_name
   mov rdx, r12
   mov rcx, r13
-  mov rax, macro_stack_call_by_name
+  mov rax, kv_stack_call_by_key
   call rax
   jmp .epilogue
 
@@ -110,7 +106,7 @@ data:
   mov rsi, barray_macro_name
   mov rdx, r12
   mov rcx, r13
-  mov rax, macro_stack_call_by_name
+  mov rax, kv_stack_call_by_key
   call rax
 
   .epilogue:
