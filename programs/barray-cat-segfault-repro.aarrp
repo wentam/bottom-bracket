@@ -1,0 +1,8 @@
+(aarrp/barray-cat
+  (label-scope
+    (label inside-scope))
+
+  (label after)
+
+  (label-scope
+    (label another)))

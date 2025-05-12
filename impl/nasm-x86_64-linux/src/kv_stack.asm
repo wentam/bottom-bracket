@@ -264,7 +264,7 @@ kv_stack_pop:
   ;; Obtain name length from dbuffer via the pointer
   mov rdi, qword[r12+KV_STACK_DBUFFER_OFFSET]
   mov rsi, rbx
-  mov rsi, 8 ; move past id
+  add rsi, 8 ; move past id
   call byte_buffer_read_int64
   mov r14, rax
 
@@ -307,7 +307,7 @@ _kv_stack_frame_len:
   ;; r14 = name length
   mov rdi, qword[r12+KV_STACK_DBUFFER_OFFSET]
   mov rsi, r13
-  mov rsi, 8 ; move past id
+  add rsi, 8 ; move past id
   call byte_buffer_read_int64
   mov r14, rax
 
@@ -406,6 +406,12 @@ kv_stack_pop_by_id:
   mov rdi, qword[r12+KV_STACK_PBUFFER_OFFSET]
   mov rsi, 8
   call byte_buffer_pop_bytes
+
+  ;mov rdi, rbp
+  ;mov rsi, 10
+  ;mov rdx, 2
+  ;mov rcx, 0
+  ;call write_as_base
 
   ;; Delete bytes out of dbuffer
   mov rdi, qword[r12+KV_STACK_DBUFFER_OFFSET]

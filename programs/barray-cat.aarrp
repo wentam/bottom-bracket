@@ -29,6 +29,12 @@
     (label-abs-ref bar 8 LE)
     (label-abs-ref baz 8 LE)
     "boz")
+  (label after)
+
+  (label-scope
+    "1"
+    (label another)
+    "2")
 
   "lorem"
   (global-label baz)

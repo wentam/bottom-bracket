@@ -1,6 +1,3 @@
-* implement a way to have labels in machine code, perhaps via a macro like aarrp/barry-cat-with-labels or maybe there's a way to make arbitrary "label scopes" independent from cat
-* barray-cat support local labels - either with explicit push-and-pop or maybe like nasm
-  * I currently favour nasm's design for ergonomics but this might be technically less flexible
 * implement aarrp/with-data and aarrp/data-address
   * make sure it can support arbitrary aarrp structures, see notes/misc.md
   * make sure we can still easily reference a barray value as raw bytes, not a barray (maybe at definition time or maybe at reference time)

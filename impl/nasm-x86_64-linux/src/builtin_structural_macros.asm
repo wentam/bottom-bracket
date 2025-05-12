@@ -57,6 +57,7 @@ nothing_macro_name: db 7,0,0,0,0,0,0,0,"nothing"
 elf64_relocatable_macro_name: db 17,0,0,0,0,0,0,0,"elf64-relocatable"
 barray_cat_macro_name: db 16,0,0,0,0,0,0,0,"aarrp/barray-cat"
 with_macros_macro_name: db 17,0,0,0,0,0,0,0,"aarrp/with-macros"
+builtin_bb_push_int64_macro_name: db 46,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-push-int64"
 
 barray_literal_macro_name: db 17,0,0,0,0,0,0,0,"test_macro_barray"
 barray_test_expansion: db 17,0,0,0,0,0,0,0,"test_macro_barray"
@@ -136,6 +137,15 @@ push_builtin_structural_macros:
   mov rcx, (barray_test_end - barray_test) ; length
   call kv_stack_push_range
 
+  ;; Push builtin_bb_push_int64 macro
+  mov rdi, qword[macro_stack_structural]   ; macro stack
+  mov rsi, builtin_bb_push_int64_macro_name          ; macro name
+  mov rdx, builtin_bb_push_int64                     ; code
+  mov rcx, (builtin_bb_push_int64_end - builtin_bb_push_int64) ; length
+  call kv_stack_push_range
+
+;builtin_bb_push_int64
+
   ;; Push parray-test macro
   mov rdi, qword[macro_stack_structural]   ; macro stack
   mov rsi, parray_test_macro_name          ; macro name
@@ -196,6 +206,26 @@ barray_test:
   pop r12
   ret
 barray_test_end:
+
+  ;; TODO doc
+builtin_bb_push_int64:
+  push r12
+  mov r12, rsi
+
+  mov rdi, r12
+  mov rsi, 8
+  mov rax, byte_buffer_push_int64
+  call rax
+
+  mov rdi, r12
+  mov rsi, byte_buffer_push_int64
+  mov rax, byte_buffer_push_int64
+  call rax
+  mov rax, 0
+
+  pop r12
+  ret
+builtin_bb_push_int64_end:
 
 ;;; parray_test(*structure, *output_byte_buffer) -> output buf relative pointer
 ;;;   Test macro that produces a static parray
@@ -1175,6 +1205,12 @@ _barray_cat_push_layer_content:
   sub rax, 8
 
   sub qword[rbp-48], rax ; = -current-pos
+
+  mov rdi, qword[r15+24]
+  mov rsi, 10
+  call parse_uint
+  sub qword[rbp-48], rax
+
   .is_ref:
 
   mov rdi, qword[r15+32]

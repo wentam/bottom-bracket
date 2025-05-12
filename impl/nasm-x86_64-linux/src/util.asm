@@ -21,7 +21,7 @@ stderr_fd: equ 2
 %define MAP_PRIVATE    0x02
 %define PROT_READ      0x1
 %define PROT_WRITE     0x2
-%define PROT_EXEC     0x4
+%define PROT_EXEC      0x4
 %define MREMAP_MAYMOVE 0x1
 
 section .text
@@ -413,6 +413,7 @@ parse_uint:
     call ascii_to_digit
 
     ;; TODO error if digit >= base?
+    ;; TODO error if digit < 0?
 
     ;; Multiply digit by multiplier (digit*base*position)
     mul rbx

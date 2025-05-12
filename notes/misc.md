@@ -4,6 +4,11 @@ Try to re-read this occassionaly when working on aarrp so we remember important 
 
 When reading these notes, note that the macro stack was renamed to kv stack later on, and many of these notes predate this change.
 
+
+Aarrp: What if we did not inherit our abstractions, but derived them?
+
+"first-principles reductionist simulator"
+
 * We need structural macros like (with-popped-printer-macros (barray) (my-form)) that expand (my-form) without
 specific printer macros present
 * There should be no command line arguments to the aarrp binary whatsoever to avoid the platform-dependent and implementation-dependent nature of that, and the fact that we want everything to be standardized. See some of the points below on how this can be avoided. Also see tag [A] in this file.
@@ -148,6 +153,7 @@ then use safe_call everywhere instead of call.
 * We might need a way for macros to expand into a "spliced" list - AKA (foo (my-macro)) expanding into (foo a b c).
     * This also might be logically broken: what if you call a splice macro at the top level?
     * Wanting to use this also generally implies you're making assumptions on who your parent macro is, which is wrong.
+    * You could probably work around the lack of this in general by using a parray-cat macro
 * We need to think about how build-time macro libraries could be distributed.
     * They could potentially be distributed as .so files that contain a function you can call to push all of it's macros - or simple all of it's macros listed as data with a symbol to reference them (a "global"). aarrp could have a standard way of loading these with (load-so-macros).
         * This is fancy because you could include both runtime library components and buildtime components in a single .so file.
@@ -184,3 +190,12 @@ then use safe_call everywhere instead of call.
 * We might do better implementing the ELF macro in smaller steps: implement an (elf/relocatable/header ) macro that expands into an ELF header for example.
     * To be able to reference things like symbol values, we would probably need the barray-cat absolute label ref thing, as well as add and subtract macros to make them relative to the right thing.
 * Add macro that adds binary values of n-byte width, as well as a macro to convert ascii numbers to binary values and a macro to negate binary values so you can subtract using the add macro.
+* Right now we have barray-cat to have label-rel-ref in barray-cat produce values relative to it's RHS. This is because that's what x86_64 instruction encoding wants. We probably want to make it configurable though as a flag because
+  not everything will work that way.
+* TODO we probably want binary literals like \b00000001 in byte strings
+* comments at the top of a file prevent the reader from getting to the first form
+* I don't think we need overly-complex dispatching rules for reader macros like regex or anything: when what we have isn't flexible enough, you can just implement a catchall reader macro that consumes everything and resolves it all internally.
+* random thought regarding register assignment
+You could allocate a register like (allocate rax "my code") that would reserve that register for the duration of your code. If anything inside your code allocates that register, that register is automatically pushed out of the way and popped afterwards. You only ever use registers that you've allocated.
+
+functions you call could still, of course, nuke non callee-preserve registers.
