@@ -164,19 +164,19 @@
        "\x48\x89\xF8"                                      ; mov rax, rdi
 
        "\x48\x83\xF8\x39"                                  ; cmp rax, 57
-       ;"\x0F\x8F" (label-rel-ref as-uppercase-letter 4 LE) ; jg as-uppercase-letter
+       "\x0F\x8F" (label-rel-ref as-uppercase-letter 4 LE) ; jg as-uppercase-letter
 
        "\x48\x83\xE8\d048"                                 ; sub rax, 48
        "\xC3"                                              ; ret
 
-       ;(label as-uppercase-letter)
+       (label as-uppercase-letter)
        "\x48\x83\xF8\d090"                                 ; cmp rax, 90
-      ; "\x0F\x8F" (label-rel-ref as-lowercase-letter 4 LE) ; jg as-lowercase-letter
+       "\x0F\x8F" (label-rel-ref as-lowercase-letter 4 LE) ; jg as-lowercase-letter
 
        "\x48\x83\xE8\d055"                                 ; sub rax, 55
        "\xC3"                                              ; ret
 
-      ; (label as-lowercase-letter)
+      (label as-lowercase-letter)
        "\x48\x83\xE8\d087"                                 ; sub rax, 87
        "\xC3")))))                                         ; ret
- (imm64 -5))
+ (imm64 500))
