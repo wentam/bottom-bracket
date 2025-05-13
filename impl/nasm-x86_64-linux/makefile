@@ -7,7 +7,8 @@ release: NASMFLAGS:= -Ox
 release: build/aarrp
 
 .PHONY: debug
-debug: NASMFLAGS := -DASSERT_STACK_ALIGNMENT -g
+#debug: NASMFLAGS := -DASSERT_STACK_ALIGNMENT -g
+debug: NASMFLAGS := -g
 debug: build/aarrp
 
 build/%.o: src/%.asm

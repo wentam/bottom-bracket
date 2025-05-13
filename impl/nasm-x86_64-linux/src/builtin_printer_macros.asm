@@ -9,13 +9,12 @@
 section .text
 global push_builtin_printer_macros
 
+extern kv_stack_value_by_key
 extern print
 extern barray_new
 extern assert_stack_aligned
 extern macro_stack_printer
 extern kv_stack_push
-extern kv_stack_push_range
-extern kv_stack_call_by_key
 extern free
 extern write_char
 extern write
@@ -39,36 +38,48 @@ push_builtin_printer_macros:
   %endif
 
   ;; push top-level 'data' macro
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], data
   mov rdi, qword[macro_stack_printer] ; macro stack
   mov rsi, data_macro_name            ; macro name
-  mov rdx, data                       ; code
-  mov rcx, (data_end - data)          ; length
-  call kv_stack_push_range
+  mov rdx, rsp                        ; code
+  call kv_stack_push
+  add rsp, 16
 
   ;; push barray macro
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], barray
   mov rdi, qword[macro_stack_printer] ; macro stack
   mov rsi, barray_macro_name          ; macro name
-  mov rdx, barray                     ; code
-  mov rcx, (barray_end - barray)      ; length
-  call kv_stack_push_range
+  mov rdx, rsp                        ; code
+  call kv_stack_push
+  add rsp, 16
 
   ;; push barray with byte-strings macro
   ;; we intentionally shadow the other barray macro such
   ;; that you can easily pop this one off the stack to get all barrays
   ;; printed literally
 
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], barray_with_byte_strings
   mov rdi, qword[macro_stack_printer] ; macro stack
   mov rsi, barray_macro_name          ; macro name
-  mov rdx, barray_with_byte_strings   ; code
-  mov rcx, (barray_with_byte_strings_end - barray_with_byte_strings) ; length
-  call kv_stack_push_range
+  mov rdx, rsp ; code
+  call kv_stack_push
+  add rsp, 16
 
   ;; push parray macro
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], parray
   mov rdi, qword[macro_stack_printer] ; macro stack
   mov rsi, parray_macro_name          ; macro name
-  mov rdx, parray                     ; code
-  mov rcx, (parray_end - parray)      ; length
-  call kv_stack_push_range
+  mov rdx, rsp ; code
+  call kv_stack_push
+  add rsp, 16
 
   pop r12
   ret
@@ -94,20 +105,22 @@ data:
   ;; Call parray macro
   mov rdi, qword[macro_stack_printer]
   mov rsi, parray_macro_name
-  mov rdx, r12
-  mov rcx, r13
-  mov rax, kv_stack_call_by_key
+  mov rax, kv_stack_value_by_key
   call rax
+  mov rdi, r12
+  mov rsi, r13
+  call qword[rax+8]
   jmp .epilogue
 
   .barray:
   ;; Call barray macro
   mov rdi, qword[macro_stack_printer]
   mov rsi, barray_macro_name
-  mov rdx, r12
-  mov rcx, r13
-  mov rax, kv_stack_call_by_key
+  mov rax, kv_stack_value_by_key
   call rax
+  mov rdi, r12
+  mov rsi, r13
+  call qword[rax+8]
 
   .epilogue:
   pop r15

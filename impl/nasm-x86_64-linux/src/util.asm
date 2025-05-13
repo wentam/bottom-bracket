@@ -49,7 +49,20 @@ global compare_barrays
 extern byte_buffer_new
 extern byte_buffer_free
 extern byte_buffer_push_byte
+extern byte_buffer_push_barray
 extern byte_buffer_write_contents
+
+tmpaoeu:
+
+
+      sub rsp, 16
+      mov qword[rsp], 8
+      mov qword[rsp+8], 0
+      mov rax, byte_buffer_push_barray
+      call rax
+      add rsp, 16
+
+  ret
 
 ;;; print(*string, len, fd)
 ;;;   Writes the string of bytes to fd. Returns 0 on error.

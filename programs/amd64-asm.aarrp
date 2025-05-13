@@ -1,4 +1,6 @@
 (aarrp/with-macros
+; TODO build out these comments to describe generally how to encode x86_64 instructions from
+; a table.
 
 ; REX: 0100WRXB
 ; * W: 1 = 64-bit operands, 0 = 32 bit operands
@@ -36,7 +38,7 @@
 ; * r/m (3 bits) when mod = 11 encodes another register. Refers to r8+ if REX.B = 1
 ;
 ; TODO doc how to encode memory operands
-; TODO SIB byte
+; TODO doc SIB byte
 
  ((imm64 ; Encodes imm64 literal from base-10 ASCII number
    (x86_64-linux
@@ -179,4 +181,4 @@
       (label as-lowercase-letter)
        "\x48\x83\xE8\d087"                                 ; sub rax, 87
        "\xC3")))))                                         ; ret
- (imm64 500))
+ (imm64 5))

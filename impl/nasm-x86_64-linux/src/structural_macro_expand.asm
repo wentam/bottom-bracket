@@ -13,7 +13,7 @@ extern _relative_to_abs
 
 extern macro_stack_structural
 
-extern kv_stack_call_by_key
+extern kv_stack_value_by_key
 
 extern write_as_base
 extern write_char
@@ -154,9 +154,18 @@ structural_macro_expand_relptr:
   ;; Try to expand this parray based on first element
   mov rdi, qword[macro_stack_structural] ; macro stack
   mov rsi, qword[r12+8]           ; name barray (first element of this parray)
-  mov rdx, r12                    ; arg1 (*data) TODO: remove first element?
-  mov rcx, rbx                    ; output buffer
-  call kv_stack_call_by_key
+  call kv_stack_value_by_key
+  mov rdi, r12                    ; arg1 (*data)
+  mov rsi, rbx                    ; output buffer
+  mov rdx, rax
+  cmp rax, 0
+  je .nullfunc
+  push rdx
+  sub rsp, 8
+  call qword[rax+8]
+  add rsp, 8
+  pop rdx
+  .nullfunc:
   mov r15, rax ; r15 = expanded macro (if it expanded)
   cmp r15, -1
   je .expand_parray_nothing

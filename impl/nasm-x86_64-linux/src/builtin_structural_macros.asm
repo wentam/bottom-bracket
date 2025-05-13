@@ -1,8 +1,4 @@
 ;; TODO: all builtin macros should be prefixed with aarrp/
-;; TODO: make sure macros always use the mov rax, foo; call foo pattern.
-;;       call foo uses relative addresses, the above pattern uses absolute.
-;;       Do this even if 'call foo' seems to work, as any time a macro moves
-;;       this will eventually break.
 
 section .text
 global push_builtin_structural_macros
@@ -17,6 +13,7 @@ extern byte_buffer_push_int64
 extern byte_buffer_push_int32
 extern byte_buffer_push_int16
 extern byte_buffer_read_int64
+extern byte_buffer_pop_int64
 extern byte_buffer_push_barray
 extern byte_buffer_write_int64
 extern byte_buffer_get_data_length
@@ -37,17 +34,22 @@ extern error_exit
 extern parray_tail_new
 extern free
 extern parse_uint
+extern barray_deposit_bytes
+extern malloc
 
 extern kv_stack_new
 extern kv_stack_pop
 extern kv_stack_free
 extern kv_stack_push
-extern kv_stack_push_range
 extern kv_stack_pop_by_id
 extern kv_stack_value_by_key
 extern kv_stack_bindump_buffers
+extern kv_stack_top_value
+extern kv_stack_value_by_id
 
 extern macro_stack_structural
+
+extern assert_stack_aligned
 
 section .rodata
 
@@ -57,7 +59,9 @@ nothing_macro_name: db 7,0,0,0,0,0,0,0,"nothing"
 elf64_relocatable_macro_name: db 17,0,0,0,0,0,0,0,"elf64-relocatable"
 barray_cat_macro_name: db 16,0,0,0,0,0,0,0,"aarrp/barray-cat"
 with_macros_macro_name: db 17,0,0,0,0,0,0,0,"aarrp/with-macros"
+with_macro_name: db 10,0,0,0,0,0,0,0,"aarrp/with"
 builtin_bb_push_int64_macro_name: db 46,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-push-int64"
+builtin_bb_push_barray_macro_name: db 47,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-push-barray"
 
 barray_literal_macro_name: db 17,0,0,0,0,0,0,0,"test_macro_barray"
 barray_test_expansion: db 17,0,0,0,0,0,0,0,"test_macro_barray"
@@ -91,6 +95,16 @@ barray_cat_element_error_len:  equ $ - barray_cat_element_error
 
 barray_cat_no_label_error: db "ERROR: Unable to find referenced label in aarrp/barray-cat",10
 barray_cat_no_label_error_len:  equ $ - barray_cat_no_label_error
+
+;;; Stuff for with macro:
+with_definitions_not_list_error: db "ERROR: Definitions list in aarrp/with is not a parray. Should be a parray. Try (aarrp/with ((my-thing foo) (my-other-thing foo)) my-shit)",10
+with_definitions_not_list_error_len:  equ $ - with_definitions_not_list_error
+
+with_definition_not_2_error: db "ERROR: A definition in aarrp/with isn't a parray of length 2. It must be.",10
+with_definition_not_2_error_len:  equ $ - with_definition_not_2_error
+
+with_definition_not_barray_error: db "ERROR: A definition in aarrp/with doesn't start with a barray (as the name). It must.",10
+with_definition_not_barray_error_len:  equ $ - with_definition_not_barray_error
 
 ;;; Stuff for with-macros macro:
 
@@ -131,56 +145,94 @@ push_builtin_structural_macros:
   sub rsp, 8
 
   ;; Push barray-test macro
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], barray_test
   mov rdi, qword[macro_stack_structural]   ; macro stack
   mov rsi, barray_test_macro_name          ; macro name
-  mov rdx, barray_test                     ; code
-  mov rcx, (barray_test_end - barray_test) ; length
-  call kv_stack_push_range
+  mov rdx, rsp                             ; code
+  call kv_stack_push
+  add rsp, 16
 
   ;; Push builtin_bb_push_int64 macro
-  mov rdi, qword[macro_stack_structural]   ; macro stack
-  mov rsi, builtin_bb_push_int64_macro_name          ; macro name
-  mov rdx, builtin_bb_push_int64                     ; code
-  mov rcx, (builtin_bb_push_int64_end - builtin_bb_push_int64) ; length
-  call kv_stack_push_range
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], builtin_bb_push_int64
+  mov rdi, qword[macro_stack_structural]    ; macro stack
+  mov rsi, builtin_bb_push_int64_macro_name ; macro name
+  mov rdx, rsp                              ; code
+  call kv_stack_push
+  add rsp, 16
 
-;builtin_bb_push_int64
+  ;; Push builtin_bb_push_barray macro
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], builtin_bb_push_barray
+  mov rdi, qword[macro_stack_structural]     ; macro stack
+  mov rsi, builtin_bb_push_barray_macro_name ; macro name
+  mov rdx, rsp                               ; code
+  call kv_stack_push
+  add rsp, 16
 
   ;; Push parray-test macro
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], parray_test
   mov rdi, qword[macro_stack_structural]   ; macro stack
   mov rsi, parray_test_macro_name          ; macro name
-  mov rdx, parray_test                     ; code
-  mov rcx, (parray_test_end - parray_test) ; length
-  call kv_stack_push_range
+  mov rdx, rsp                             ; code
+  call kv_stack_push
+  add rsp, 16
 
   ;; Push nothing macro
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], nothing
   mov rdi, qword[macro_stack_structural]   ; macro stack
   mov rsi, nothing_macro_name          ; macro name
-  mov rdx, nothing                     ; code
-  mov rcx, (nothing_end - nothing) ; length
-  call kv_stack_push_range
+  mov rdx, rsp                     ; code
+  call kv_stack_push
+  add rsp, 16
 
   ;; Push elf64_relocatable macro
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], elf64_relocatable
   mov rdi, qword[macro_stack_structural]   ; macro stack
   mov rsi, elf64_relocatable_macro_name          ; macro name
-  mov rdx, elf64_relocatable                     ; code
-  mov rcx, (elf64_relocatable_end - elf64_relocatable) ; length
-  call kv_stack_push_range
-
+  mov rdx, rsp                             ; code
+  call kv_stack_push
+  add rsp, 16
 
   ;; Push barray-cat macro
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], barray_cat
   mov rdi, qword[macro_stack_structural]  ; macro stack
   mov rsi, barray_cat_macro_name          ; macro name
-  mov rdx, barray_cat                     ; code
-  mov rcx, (barray_cat_end - barray_cat)  ; length
-  call kv_stack_push_range
+  mov rdx, rsp                            ; code
+  call kv_stack_push
+  add rsp, 16
 
   ;; Push with-macros macro
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], with_macros
   mov rdi, qword[macro_stack_structural]  ; macro stack
   mov rsi, with_macros_macro_name          ; macro name
-  mov rdx, with_macros                    ; code
-  mov rcx, (with_macros_end - with_macros)  ; length
-  call kv_stack_push_range
+  mov rdx, rsp                    ; code
+  call kv_stack_push
+  add rsp, 16
+
+  ;; Push with macro
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], with_
+  mov rdi, qword[macro_stack_structural]  ; macro stack
+  mov rsi, with_macro_name          ; macro name
+  mov rdx, rsp                    ; code
+  call kv_stack_push
+  add rsp, 16
 
   add rsp, 8
   ret
@@ -226,6 +278,26 @@ builtin_bb_push_int64:
   pop r12
   ret
 builtin_bb_push_int64_end:
+
+  ;; TODO doc
+builtin_bb_push_barray:
+  push r12
+  mov r12, rsi
+
+  mov rdi, r12
+  mov rsi, 8
+  mov rax, byte_buffer_push_int64
+  call rax
+
+  mov rdi, r12
+  mov rsi, byte_buffer_push_barray
+  mov rax, byte_buffer_push_int64
+  call rax
+  mov rax, 0
+
+  pop r12
+  ret
+builtin_bb_push_barray_end:
 
 ;;; parray_test(*structure, *output_byte_buffer) -> output buf relative pointer
 ;;;   Test macro that produces a static parray
@@ -1363,6 +1435,8 @@ _with_macros_try_push_impl:
   push r12
   push r13
   push r14
+  push r15
+  push rbx
 
   mov r12, rdi ; r12 = macro name barray
   mov r13, rsi ; r13 = impl_spec* parray
@@ -1410,16 +1484,34 @@ _with_macros_try_push_impl:
   cmp rax, 0
   je .not_our_platform
 
+  ; malloc enough space to store our code
+  mov rdx, qword[r13+16]
+  mov rdi, qword[rdx]
+  call malloc
+  mov r15, rax ; r15 = our space for code
+
+  ; Copy our barray into that space
+  mov rdi, qword[r13+16]
+  mov rsi, r15
+  call barray_deposit_bytes
+
+  ; push the macro
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], r15
   mov rdi, qword[macro_stack_structural] ; macro stack
   mov rsi, r12                           ; macro name barray
-  mov rdx, qword[r13+16]
+  mov rdx, rsp
   call kv_stack_push
+  add rsp, 16
   jmp .epilogue
 
   .not_our_platform:
 
   mov rax, -1
   .epilogue:
+  pop rbx
+  pop r15
   pop r14
   pop r13
   pop r12
@@ -1507,11 +1599,14 @@ _with_macros_push_macro:
   ;; We failed to push an implementation, push our error-producing macro in it's place so
   ;; any attempt to use this macro fails with an error.
 
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], with_macros_unsupported_platform
   mov rdi, qword[macro_stack_structural]  ; macro stack
   mov rsi, qword[r12+8]                   ; macro name
-  mov rdx, with_macros_unsupported_platform                     ; code
-  mov rcx, (with_macros_unsupported_platform_end - with_macros_unsupported_platform)  ; length
-  call kv_stack_push_range
+  mov rdx, rsp                     ; code
+  call kv_stack_push
+  add rsp, 16
   ;; return id
 
   .epilogue:
@@ -1694,6 +1789,10 @@ with_macros:
   mov rax, kv_stack_pop_by_id
   call rax
 
+  ; free the macro - we malloc'd it
+  mov rdi, rax
+  call free
+
   add rsp, 8
   pop rax
 
@@ -1732,3 +1831,352 @@ with_macros_unsupported_platform:
 
   ret
 with_macros_unsupported_platform_end:
+
+
+;; TODO
+_with_template_macro:
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+
+  mov r12, rdi ; input structure
+  mov r13, rsi ; output byte buffer
+
+  mov r14, qword[rel _with_template_macro_end]
+  _with_template_macro_data_ptr: ; This allows us to replace the above with our data addr
+
+  ;; TODO tmp
+  mov rdi, r13
+  mov rsi, 8
+  mov rax, byte_buffer_push_int64
+  call rax
+
+  mov rdi, r13
+  mov rsi, r14
+  mov rax, byte_buffer_push_int64
+  call rax
+
+  mov rax, 0
+
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  ret
+_with_template_macro_end:
+
+
+;;; _with_push_macro(def-parray*, id_byte_buffer*, data_byte_buffer*)
+_with_push_macro:
+  push rbp
+  mov rbp, rsp
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+  sub rsp, 8
+
+  mov r12, rdi ; definition parray
+  mov r13, rsi ; id byte buffer
+  mov r14, rdx ; data byte buffer
+
+  ;; Error if the definition is not a parray of 2 elements
+  cmp qword[r12], -3
+  je .correct_input_size
+
+  mov rdi, with_definition_not_2_error
+  mov rsi, with_definition_not_2_error_len
+  call error_exit
+
+  .correct_input_size:
+
+  ;; Error if the first element is not a barray
+  mov rax, qword[r12+8]
+  cmp qword[rax], 0
+  jge .first_is_barray
+
+  mov rdi, with_definition_not_barray_error
+  mov rsi, with_definition_not_barray_error_len
+  call error_exit
+
+  .first_is_barray:
+
+  ;; Init byte buffer to store our data
+  ;;
+  ;; We do this in our own buffer because we need to point absolute pointers here and
+  ;; putting everything directly in the data byte buffer - which grows and reallocs -
+  ;; would invalidate those pointers
+  mov rax, byte_buffer_new
+  call rax
+  mov rbx, rax ; rbx = our data byte buffer
+
+  ;; Copy this definition's data to our new byte buffer using macroexpand in cp mode
+  mov rdi, qword[r12+16]
+  mov rsi, rax
+  mov rdx, 0 ; cp
+  call structural_macro_expand
+
+  ;; Push a pointer to our byte buffer to the data byte buffer
+  mov rdi, r14
+  mov rsi, rbx
+  mov rax, byte_buffer_push_int64
+  call rax
+
+  ;; Malloc space for template macro
+  mov rdi, (_with_template_macro_end - _with_template_macro)
+  add rdi, 8 ; for our data pointer at the end
+  call malloc
+  mov qword[rbp-48], rax ; qword[rbp-48] = template macro codespace
+
+  ;; Write our template macro to the allocation
+  mov rax, _with_template_macro ; rax = source ptr
+  mov rdi, qword[rbp-48] ; rdi = destination ptr
+  .template_copy_loop:
+  cmp rax, _with_template_macro_end
+  jge .template_copy_loop_break
+
+  mov cl, byte[rax]
+  mov byte[rdi], cl
+
+  inc rdi
+  inc rax
+  jmp .template_copy_loop
+  .template_copy_loop_break:
+
+  ;; Push our template macro to the macro stack
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov rax, qword[rbp-48]
+  mov qword[rsp+8], rax
+  mov rdi, qword[macro_stack_structural]  ; macro stack
+  mov rsi, qword[r12+8]          ; macro name
+  mov rdx, rsp                    ; code
+  call kv_stack_push
+  add rsp, 16
+
+  ;; Push our template macro's id to the id byte buffer
+  mov rdi, r13
+  mov rsi, rax
+  call byte_buffer_push_int64
+
+  ;; Modify our macro code to replace it's pointer to the definition data
+  mov rdi, rbx
+  call byte_buffer_get_buf
+
+  mov rcx, qword[rbp-48]
+  mov qword[rcx+(_with_template_macro_end - _with_template_macro)], rax
+
+  add rsp, 8
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  pop rbp
+  ret
+
+;;; _with_push_macros(def-list-parray*, id_byte_buffer*, data_byte_buffer*)
+_with_push_macros:
+  push rbp
+  mov rbp, rsp
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+  sub rsp, 8
+
+  mov r12, rdi ; r12 = definition list parray
+  mov r13, rsi ; r13 = macro id byte buffer
+  mov r14, rdx ; r14 = data byte buffer
+
+  mov rdi, qword[rbp+8]
+  mov rsi, 16
+  mov rdx, 2
+  mov rcx, 0
+  call write_as_base
+
+  mov rdi, 10
+  mov rsi, 2
+  call write_char
+
+  ;; Error if our input is not a parray
+  cmp qword[r12], 0
+  jl .is_parray
+
+  mov rdi, with_definitions_not_list_error
+  mov rsi, with_definitions_not_list_error_len
+  call error_exit
+
+  .is_parray:
+
+  ;; Iterate over definitions in definition parray
+  mov rbx, r12
+  add rbx, 8 ; move past length
+
+  mov r15, qword[r12]
+  not r15 ; r15 = definition count
+  .definition_loop:
+  cmp r15, 0
+  jle .definition_loop_break
+
+  ;; Create greedy expansion byte buffer
+  call byte_buffer_new
+  mov qword[rbp-48], rax ; qword[rbp-48] = greedy expansion buffer
+
+  ;; Greedy macroexpand the definition
+  mov rdi, qword[rbx] ; rdi = pointer to definition parray
+  mov rsi, qword[rbp-48]
+  mov rdx, 2 ; greedy
+  call structural_macro_expand
+
+  ;; Push our access/reference macro referencing the byte buffer
+  mov rdi, rax ; rdi = greedy macro expansion of definition
+  mov rsi, r13
+  mov rdx, r14
+  call _with_push_macro
+
+  ;; Free the greedy expansion byte buffer
+  mov rdi, qword[rbp-48]
+  call byte_buffer_free
+
+  add rbx, 8
+  dec r15
+  jmp .definition_loop
+  .definition_loop_break:
+
+  add rsp, 8
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  pop rbp
+  ret
+
+;;; with(structure*, output_byte_buffer*) -> output buf relptr
+with_:
+  push rbp
+  mov rbp, rsp
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+  sub rsp, 24
+
+  mov r12, rdi ; r12 = input structure
+  mov r13, rsi ; r13 = output byte buffer
+
+  ;; Return -1 for no expansion if we have < 3 elements in our input structure
+  cmp qword[r12], -4
+  mov rax, -1
+  jg .epilogue
+
+  ;; Init byte buffers for shy macroexpand, to store our data entries, to store our macro ids
+  mov rax, byte_buffer_new
+  call rax
+  mov r14, rax ; r14 = shy macroexpand buffer
+
+  mov rax, byte_buffer_new
+  call rax
+  mov r15, rax ; r15 = data entry buffer
+
+  mov rax, byte_buffer_new
+  call rax
+  mov rbx, rax ; rbx = macro id buffer
+
+  ;; Shy macroexpand our definition list
+  mov rdi, qword[r12+16]
+  mov rsi, r14
+  mov rdx, 1 ; shy
+  mov rax, structural_macro_expand
+  call rax
+  mov qword[rbp-48], rax ; qword[rbp-48] = shy expansion of definition list
+
+  ;; Push macros for accessing/referencing our data
+  mov rdi, qword[rbp-48] ; shy expansion of definition list
+  mov rsi, rbx           ; id byte buffer
+  mov rdx, r15           ; data byte buffer
+  mov rax, _with_push_macros
+  call rax
+
+  ;; Greedy macroexpand our output (3rd item in input structure parray)
+  mov rdi, qword[r12+24] ; 3rd item from input structure
+  mov rsi, r13           ; output byte buffer
+  mov rdx, 2             ; greedy
+  mov rax, structural_macro_expand
+  call rax
+  mov qword[rbp-56], rax ; qword[rbp-56] = abs pointer to output
+
+  mov rdi, r13 ; output byte buffer
+  mov rax, byte_buffer_get_buf
+  call rax
+  sub qword[rbp-56], rax ; qword[rbp-56] = relative pointer to result
+
+  ;; Pop access/reference macros by ids in id byte buffer
+  mov rdi, rbx
+  mov rax, byte_buffer_get_data_length
+  call rax
+  mov qword[rbp-64], rax
+
+  .pop_loop:
+  cmp qword[rbp-64], 0
+  jle .pop_loop_break
+
+  mov rdi, rbx
+  mov rax, byte_buffer_pop_int64
+  call rax
+
+  push rax
+  sub rsp, 8
+
+  mov rdi, qword[macro_stack_structural] ; macro stack
+  mov rsi, rax
+  call kv_stack_value_by_id
+  mov rdi, qword[rax+8]
+  call free
+
+  add rsp, 8
+  pop rax
+
+  mov rdi, qword[macro_stack_structural] ; macro stack
+  mov rsi, rax
+  call kv_stack_pop_by_id
+
+  sub qword[rbp-64], 8
+  jmp .pop_loop
+  .pop_loop_break:
+
+  ;; Free each byte buffer in data byte buffer (it's a buffer of pointers to byte buffers)
+
+  ;; Free id list byte buffer, data byte buffer, and shy macroexpand byte buffer
+  mov rdi, rbx
+  mov rax, byte_buffer_free
+  call rax
+
+  mov rdi, r15
+  mov rax, byte_buffer_free
+  call rax
+
+  mov rdi, r14
+  mov rax, byte_buffer_free
+  call rax
+
+  ;; Return buffer-relative pointer to result
+  mov rax, qword[rbp-56]
+
+  .epilogue:
+  add rsp, 24
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  pop rbp
+  ret
+with_end:

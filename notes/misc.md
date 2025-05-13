@@ -154,6 +154,7 @@ then use safe_call everywhere instead of call.
     * This also might be logically broken: what if you call a splice macro at the top level?
     * Wanting to use this also generally implies you're making assumptions on who your parent macro is, which is wrong.
     * You could probably work around the lack of this in general by using a parray-cat macro
+    * this would also break our "shy macro expand" pattern in stuff like with and with-macros
 * We need to think about how build-time macro libraries could be distributed.
     * They could potentially be distributed as .so files that contain a function you can call to push all of it's macros - or simple all of it's macros listed as data with a symbol to reference them (a "global"). aarrp could have a standard way of loading these with (load-so-macros).
         * This is fancy because you could include both runtime library components and buildtime components in a single .so file.
@@ -196,6 +197,75 @@ then use safe_call everywhere instead of call.
 * comments at the top of a file prevent the reader from getting to the first form
 * I don't think we need overly-complex dispatching rules for reader macros like regex or anything: when what we have isn't flexible enough, you can just implement a catchall reader macro that consumes everything and resolves it all internally.
 * random thought regarding register assignment
+
 You could allocate a register like (allocate rax "my code") that would reserve that register for the duration of your code. If anything inside your code allocates that register, that register is automatically pushed out of the way and popped afterwards. You only ever use registers that you've allocated.
 
 functions you call could still, of course, nuke non callee-preserve registers.
+
+UPDATE LATER: actually, allocate could push/pop your allocated register around function calls.
+
+* Or perhaps you don't allocate a specific register, but *any* register. It's up to the register
+allocation macro what register to give you depending on it's content. More likely to give you
+a callee preserve register if you call functions.
+
+Allocate could push/pop your allocated register around function calls if it's not a callee preserve register though. As an optimization in this case, it could instead choose to use a memory location to avoid push/pop.
+
+This really makes it more like "allocate a slot" that may or may not be a register.
+
+The biggest problem with the "use a memory location" optimization is that not all instructions can use memory in place of a register. Thus, the allocate macro would have to be "smart", recognize this situation, and automatically use a temporary register. To do this, it would probably expand into an explicit allocate-register macro that *always* gives you a register even if you need to push/pop.
+
+Thus, an allocate-register macro that only does registers (but no particular register) is still needed first and the basis of this. This is awesome because it "simulates" having infinite registers in a reasonably optimized way.
+
+This macro could be step 1 in working our way up towards an IR.
+
+obviously would need to be surrounded by (x86_64-asm/with-register-allocator (list-of-callee-preserve-registers) my-code)
+
+It's arch-specific because the allocator needs to understand stuff like what a function call looks like, what instructions allow memory operands etc.
+
+Because pushing/popping a register around function calls can misalign the stack - and we don't want to waste the extra sub rsp,8 add rsp, 8 instructions when we dont need to - the top-level macro should probably sneak in and align the stack before all function calls.
+
+Or maybe aligning the stack around function calls is a separate macro altogether - could be interesting.
+
+Because of the scope with (with-register-allocator), you could assign callee preserve registers based on something like who has the most function calls of all the allocators. The optimal implementation of this is clearly scope-wide. Because of this, perhaps
+the allocate-slot and allocate-register guys are not macros. Thinking about it, I think that makes the most sense.
+
+I think the condition in which we want to start using memory locations is when we're out of callee-preserve registers and our allocation covers 2 or more function calls. With 1 function call it's probably better to just push/pop around it.
+
+Beware of situations like:
+
+(allocate-register my-reg1
+  mov my-reg, 5
+  (allocate-register my-reg2
+    mov my-reg2, 7
+    add my-reg2, myreg1))
+
+It's important the allocator doesn't give both of these the same register. Even with push/pop, there's no way to make it work right without separate registers or memory locations.
+
+This isn't true of all nesting, just nestings where the inner uses a register from the outer in it's content. In other words, I think it's something like:
+When allocating a register for an allocate-register block, all registers used inside the block that parents have allocated cannot be the choice for my own register.
+
+Interestingly, that means that even with this design there are certain situations where you can run out of registers with allocate-register alone, highlighting the absolute necessity of allocate-slot.
+
+* disassembler macros?
+* do we want to support barray macros, not just parray? (as in macros where a barray directly expands into another structure)
+    * It feels like to be generally flexible the answer is probably "yes". It would be simple to add as well.
+    * Any user who disagrees can simply not use it.
+    * Use case example would be build-time "variables"
+* Does the macro stack need to be global? What if the with-macros macro simply created a macro stack? Yes, we would have nested macro stacks, but we don't expand everything at once.
+    * Puts even more behavior exclusively in the macros - which users can define - and thus less builtin "magic"
+    * Smaller relevant search space for stack operations.
+    * Would still need to be a top-level macro stack for builtin macros to expand.
+    * structural_macro_expand would need yet another argument
+* If you just build a language with macros that implements your language's behavior entirely at aarrp expansion time, you have a JIT-compiled language
+    * Also worth observing that at build-time in a compiled language, you're still working with a JIT language.
+    * This means you could build a javascript JIT implementation inside aarrp (I wonder about building a JS engine, maybe use it w/ ladybird browser).
+* In fact, aarrp can cleanly serve as all 3, making this a truely universal language-building tool:
+    * ahead-of-time compilation: macros expand into machine code and written to ELF via ELF macro
+    * interpreted: use macros for their side effects
+    * "eager" JIT (compile at function definiton time): just like ahead-of-time, except your code expands into a macro instead of an ELF to define a function. Using the macro (inside another macro definition) is calling the function.
+        * This means when you build your ahead-of-time language, you can simply just use it like a JIT language without modifications.
+    * "lazy JIT" (compile at first function use): create your own with-macros macro that doesn't macroexpand the macro until it's used.
+        * Optionally inline the macro instead
+* When trying to optimize codegen, I'd like to look at what existing compilers output for the same thing, but *don't* look at how they do it. I want to explore my own bottom-up way. Things like my allocate-register macro described here are a good example why.
+* the first optimizer worth implementing is probably a recursive inliner. Ideally this would be done at the IR level (by having an inliner macro that inputs IR and expands to IR with inlining done).
+* If an optimization can be done at the IR level, it should probably be done at the IR level (by having optimizer macros input IR and expand to IR with the optimization in place) rather than assembly or higher-level language.

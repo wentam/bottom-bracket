@@ -43,8 +43,9 @@ extern byte_buffer_get_data_length
 extern byte_buffer_get_buf
 extern byte_buffer_bindump_buffer
 
-extern kv_stack_call_by_key
 extern macro_stack_reader
+
+extern kv_stack_value_by_key
 
 section .rodata
 ;;; Syscall numbers
@@ -255,7 +256,7 @@ _read:
   push r13
   push r14
   push r15
-  sub rsp, 8
+  push rbx
   mov r12, rdi ; Preserve buffered reader
   mov r14, rsi ; Preserve output buffer
 
@@ -278,25 +279,36 @@ _read:
   push rax
   mov rcx, 1
   push rcx
-  mov rdx, r12
-  mov rcx, r14
   mov rdi, qword[macro_stack_reader]
   mov rsi, rsp
-  call kv_stack_call_by_key
+  call kv_stack_value_by_key
+  mov rdi, r12
+  mov rsi, r14
+  mov rbx, rax
+  cmp rax, 0
+  je .nullfunc
+  call qword[rax+8]
+  .nullfunc:
+
   pop rcx
   pop rcx
 
-  cmp rdx, 0
+  cmp rbx, 0
   jne .epilogue
 
   ;; No direct macro matches, try for the catchall macro
   mov rdi, qword[macro_stack_reader]
   mov rsi, catchall_macro_name
-  mov rdx, r12
-  mov rcx, r14
-  call kv_stack_call_by_key
+  call kv_stack_value_by_key
+  mov rdi, r12
+  mov rsi, r14
+  mov rbx, rax
+  cmp rax, 0
+  je .nullfunc2
+  call qword[rax+8]
+  .nullfunc2:
 
-  cmp rdx, 0
+  cmp rbx, 0
   je .no_macro
 
   jmp .epilogue ; Return. rax is already a pointer to the barray.
@@ -313,7 +325,7 @@ _read:
 
   .epilogue:
 
-  add rsp, 8
+  pop rbx
   pop r15
   pop r14
   pop r13

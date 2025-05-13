@@ -33,7 +33,6 @@ global barray_invalid_chars
 
 extern macro_stack_reader
 extern kv_stack_push
-extern kv_stack_push_range
 
 extern BUFFERED_READER_EOF
 extern error_exit
@@ -99,32 +98,44 @@ push_builtin_reader_macros:
   sub rsp, 8
 
   ;; push barray literal macro
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], barray_literal
   mov rdi, qword[macro_stack_reader] ; macro stack
   mov rsi, barray_literal_macro_name ; macro name
-  mov rdx, barray_literal            ; code
-  mov rcx, (barray_literal_end - barray_literal)
-  call kv_stack_push_range
+  mov rdx, rsp                       ; code
+  call kv_stack_push
+  add rsp, 16
 
   ;; push comment literal macro
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], comment_literal
   mov rdi, qword[macro_stack_reader] ; macro stack
   mov rsi, comment_literal_macro_name ; macro name
-  mov rdx, comment_literal            ; code
-  mov rcx, (comment_literal_end - comment_literal) ; length
-  call kv_stack_push_range
+  mov rdx, rsp                        ; code
+  call kv_stack_push
+  add rsp, 16
 
   ;; push parray literal macro
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], parray_literal
   mov rdi, qword[macro_stack_reader] ; macro stack
   mov rsi, parray_literal_macro_name ; macro name
-  mov rdx, parray_literal            ; code
-  mov rcx, (parray_literal_end - parray_literal) ; length
-  call kv_stack_push_range
+  mov rdx, rsp            ; code
+  call kv_stack_push
+  add rsp, 16
 
   ;; push byte_string literal macro
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], byte_string
   mov rdi, qword[macro_stack_reader]       ; macro stack
   mov rsi, byte_string_macro_name          ; macro name
-  mov rdx, byte_string                     ; code
-  mov rcx, (byte_string_end - byte_string) ; length
-  call kv_stack_push_range
+  mov rdx, rsp                            ; code
+  call kv_stack_push
+  add rsp, 16
 
   add rsp, 8
   ret

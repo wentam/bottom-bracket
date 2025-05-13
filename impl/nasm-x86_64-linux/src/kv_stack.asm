@@ -4,13 +4,6 @@
 ;;;   * useful if you need a stack
 ;;;   * definitely useful when you want something with both properties. This is the;;;     case with aarrp's macro system.
 
-;;; TODO should the macro definition code optionally be a pointer specified
-;;; as [-length, ptr]? Sometimes there's no reason to copy the macro
-;;;
-;;; TODO instead of the stack directly containing the code, it would probably
-;;; be much more efficient if we maintained a central pool of macro definitions
-;;; that never go away - then simply push and pop pointers to them.
-;;;
 ;;; TODO it might be beneficial to have a hashmap index for fast by-name lookups
 ;;; TODO it might be beneficial to have a hashmap index for fast by-id lookups
 
@@ -25,8 +18,9 @@ global kv_stack_pop_by_id
 global kv_stack_peek
 global kv_stack_peek_by_key
 global kv_stack_bindump_buffers
-global kv_stack_call_by_key
 global kv_stack_value_by_key
+global kv_stack_value_by_id
+global kv_stack_top_value
 
 extern malloc
 extern free
@@ -327,6 +321,72 @@ _kv_stack_frame_len:
   pop r12
   ret
 
+;;; kv_stack_value_by_id(*kv_stack, id) -> pointer to value barray
+;;;   returns NULL if not found
+kv_stack_value_by_id:
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+
+  mov r12, rdi ; r12 = kv stack
+  mov r13, rsi ; r13 = id
+
+  ;; Get length of pbuffer
+  mov rdi, qword[r12+KV_STACK_PBUFFER_OFFSET]
+  call byte_buffer_get_data_length
+  mov r14, rax ; r14 = pbuffer data length
+
+  ;; Walk backwards through the pbuffer
+  .pbuffer_loop:
+  cmp r14, 0
+  jle .pbuffer_loop_notfound
+
+  ;; Read an id
+  mov rdi, qword[r12+KV_STACK_PBUFFER_OFFSET]
+  mov rsi, r14
+  sub rsi, 8
+  call byte_buffer_read_int64
+  mov rbx, rax ; rbx = pointer to frame
+
+  mov rdi, qword[r12+KV_STACK_DBUFFER_OFFSET]
+  mov rsi, rbx
+  call byte_buffer_read_int64
+
+  ;; Break if this id is a match
+  cmp rax, r13
+  je .pbuffer_loop_found
+
+  sub r14, 8
+  jmp .pbuffer_loop
+
+  .pbuffer_loop_notfound:
+  ;; ID not found, return NULL
+  mov rax, 0
+  jmp .epilogue
+
+  .pbuffer_loop_found:
+
+  mov rdi, qword[r12+KV_STACK_DBUFFER_OFFSET]
+  call byte_buffer_get_buf
+  add rbx, rax
+
+  ; rbx now equals frame pointer
+  add rbx, 8          ; move past id
+  add rbx, qword[rbx] ; move past key
+  add rbx, 8          ; move past key length
+
+  mov rax, rbx
+
+  .epilogue:
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  ret
+
 ;;; kv_stack_pop_by_id(*kv_stack, id)
 ;;;   Removes the frame on the stack with the given id. After you do this, your
 ;;;   id is invalid and may end up referring to a new, different frame pushed
@@ -613,44 +673,16 @@ kv_stack_value_by_key:
   add rax, rcx ; frame+name length
   add rax, 16  ; + width of name length integer + id
 
-  .done
+  .done:
   ret
 
-;;; kv_stack_call_by_key(*kv_stack, *name_barray, arg1, arg2, arg3)
-;;;   Calls a frame's data as a function in the kv stack by name.
-;;;
-;;;   Returns the function's return value.
-;;;
-;;;   If the frame existed and we called it, rdx will be 1 at return. Else 0.
-;;;
-;;;   TODO support more than 3 arguments via stack?
-kv_stack_call_by_key:
-  push r12
-  push r13
-  push r14
-  mov r12, rdx
-  mov r13, rcx
-  mov r14, r8
-
-  call kv_stack_peek_by_key
-  mov rdx, 0
-  cmp rax, 0
-  je .epilogue
+;;; kv_stack_top_value(*kv_stack) -> pointer to higest frame's value barray
+kv_stack_top_value:
+  call kv_stack_peek
   mov rcx, qword[rax+8] ; rdi = name length
-
-  mov rdi, r12
-  mov rsi, r13
-  mov rdx, r14
-
   add rax, rcx ; frame+name length
-  add rax, 24  ; + width of both length integers + id
-  call rax
-
-  mov rdx, 1
-  .epilogue:
-  pop r14
-  pop r13
-  pop r12
+  add rax, 16  ; + width of name length int + id
+  .done:
   ret
 
 ;;; kv_stack_bindump_buffers(*kv_stack, fd, base)
