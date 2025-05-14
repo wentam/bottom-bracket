@@ -1,3 +1,4 @@
 aarrp
 *.o
 build/
+vgcore*
