@@ -1,11 +1,9 @@
 (aarrp/with
  ((my-thing "foo")
-  (my-thing-2 "foo2")
-  ;(my-other-thing (a (a b) b))
-  ;(internal-ref (my-thing))
-  )
+  (my-other-thing (a (a b) b))
+  (internal-ref (my-thing)))
 
- (;(internal-ref)                    ; expands into "foo" barray
+ ((internal-ref)                    ; expands into "foo" barray
   (my-thing)                        ; expands into "foo" barray
   (my-other-thing)                  ; expands into (a (a b) b) parray structure
   (my-thing addr 8 LE)              ; expands into pointer to "foo" barray

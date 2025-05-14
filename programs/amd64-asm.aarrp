@@ -40,82 +40,53 @@
 ; TODO doc how to encode memory operands
 ; TODO doc SIB byte
 
- ((imm64 ; Encodes imm64 literal from base-10 ASCII number
-   (x86_64-linux
-     (aarrp/barray-cat
-      "\x41\x54"     ; push r12
-      "\x41\x55"     ; push r13
-      "\x41\x56"     ; push r14
+ (aarrp/with
 
-      "\x49\x89\xFD" ; mov r13, rdi
-      "\x49\x89\xF4" ; mov r12, rsi
+   ;;; --- Utility funtions ---
 
-      ;; If we got an invalid argument count (anything != 2), just expand to 0
-      ;; TODO after we get error management functions in aarrp-land,
-      ;;      error and exit instead
-      "\x48\x83\x3F\xFD"                                 ; cmp qword[rdi], -3
-      "\x0F\x84" (label-rel-ref correct-arg-count 4 LE)  ; je correct-arg-count
+    ;; Converts a single ascii char to the digit it represents. Works up to base 36.
+   ((ascii-to-digit-fn
+      (aarrp/barray-cat
+        "\x48\x89\xF8"                                      ; mov rax, rdi
 
-      "\x4C\x89\xE7"                                               ; mov rdi, r12
-      "\x48\xC7\xC6\x08\x00\x00\x00"                               ; mov rsi, 8
-      "\x48\xB8" (aarrp/builtin-func-addr/byte-buffer-push-int64)  ; mov rax, byte_buffer_push_int64
-      "\xFF\xD0"                                                   ; call rax
+        "\x48\x83\xF8\x39"                                  ; cmp rax, 57
+        "\x0F\x8F" (label-rel-ref as-uppercase-letter 4 LE) ; jg as-uppercase-letter
 
-      "\x4C\x89\xE7"                                               ; mov rdi, r12
-      "\x48\xC7\xC6\x00\x00\x00\x00"                               ; mov rsi, 0
-      "\x48\xB8" (aarrp/builtin-func-addr/byte-buffer-push-int64)  ; mov rax, byte_buffer_push_int64
-      "\xFF\xD0"                                                   ; call rax
+        "\x48\x83\xE8\d048"                                 ; sub rax, 48
+        "\xC3"                                              ; ret
 
-      "\x48\xB8\x00\x00\x00\x00\x00\x00\x00\x00" ; mov rax, 0
-      "\xE9" (label-rel-ref epilogue 4 LE)       ; jmp epilogue
+        (label as-uppercase-letter)
+        "\x48\x83\xF8\d090"                                 ; cmp rax, 90
+        "\x0F\x8F" (label-rel-ref as-lowercase-letter 4 LE) ; jg as-lowercase-letter
 
-      (label correct-arg-count)
+        "\x48\x83\xE8\d055"                                 ; sub rax, 55
+        "\xC3"                                              ; ret
 
-      ;; Parse 2nd item in parray as signed base 10 ASCII integer, write integer to output
+        (label as-lowercase-letter)
+        "\x48\x83\xE8\d087"                                 ; sub rax, 87
+        "\xC3"))                                            ; ret
 
-      "\x4C\x89\xE7"                                               ; mov rdi, r12
-      "\x48\xC7\xC6\x08\x00\x00\x00"                               ; mov rsi, 8
-      "\x48\xB8" (aarrp/builtin-func-addr/byte-buffer-push-int64)  ; mov rax, byte_buffer_push_int64
-      "\xFF\xD0"                                                   ; call rax
+    ;; parses a signed ascii integer from barray in rdi assuming it is in base rsi
+    (parse-int-fn
+      (aarrp/barray-cat
+        "\x41\x54"     ; push r12
+        "\x41\x55"     ; push r13
+        "\x41\x56"     ; push r14
+        "\x41\x57"     ; push r15
+        "\x53"         ; push rbx
 
-      "\x49\x8B\x7D\x10"                                           ; mov rdi, qword[r13+16]
-      "\x48\xC7\xC6\x0A\x00\x00\x00"                               ; mov rsi, 10
-      "\xE8" (label-rel-ref parse-int 4 LE)                        ; call parse-int
+        "\x49\x89\xFC" ; mov r12, rdi - r12 = input barray
+        "\x49\x89\xF5" ; mov r13, rsi - r13 = base
 
-      "\x4C\x89\xE7"                                               ; mov rdi, r12
-      "\x48\x89\xC6"                                               ; mov rsi, rax
-      "\x48\xB8" (aarrp/builtin-func-addr/byte-buffer-push-int64)  ; mov rax, byte_buffer_push_int64
-      "\xFF\xD0"                                                   ; call rax
+        "\x4D\x8B\x3C\x24"     ; mov r15, qword[r12] - r15 = barray length
+        "\x49\x83\xC4\x08"     ; add r12, 8 - move past length
 
-      "\x48\xB8\x00\x00\x00\x00\x00\x00\x00\x00" ; mov rax, 0
+        ;; Loop working right-to-left
+        "\x4D\x31\xF6"                 ; xor r14, r14 - result
+        "\x48\xC7\xC3\x01\x00\x00\x00" ; mov rbx, 1   - multiplier
 
-      (label epilogue)
-      "\x41\x5E" ; pop r14
-      "\x41\x5D" ; pop r13
-      "\x41\x5C" ; pop r12
-      "\xC3"     ; ret
-
-      ;;; parses a signed ascii integer from barray in rdi assuming it is in base rsi
-      (label parse-int)
-      (label-scope
-       "\x41\x54"     ; push r12
-       "\x41\x55"     ; push r13
-       "\x41\x56"     ; push r14
-       "\x41\x57"     ; push r15
-       "\x53"         ; push rbx
-
-       "\x49\x89\xFC" ; mov r12, rdi - r12 = input barray
-       "\x49\x89\xF5" ; mov r13, rsi - r13 = base
-
-       "\x4D\x8B\x3C\x24"     ; mov r15, qword[r12] - r15 = barray length
-       "\x49\x83\xC4\x08"     ; add r12, 8 - move past length
-
-       ;; Loop working right-to-left
-       "\x4D\x31\xF6"                 ; xor r14, r14 - result
-       "\x48\xC7\xC3\x01\x00\x00\x00" ; mov rbx, 1   - multiplier
-
-       (label loop)
-       (label-scope
+        (label loop)
+        (label-scope
          "\x49\x83\xFF\x00"                         ; cmp r15, 0
          "\x0F\x84" (label-rel-ref loop-break 4 LE) ; je loop-break
 
@@ -134,7 +105,8 @@
          ;; Parse digit
          "\x48\x31\xFF"         ; xor rdi, rdi
          "\x43\x8A\x7C\x3C\xFF" ; mov dil, byte[r12+r15-1]
-         "\xE8" (label-rel-ref ascii-to-digit 4 LE) ; call ascii-to-digit
+         "\x48\xB8" (ascii-to-digit-fn barray-raw-addr 8 LE)  ; mov rax, ascii-to-digit-fn
+         "\xFF\xD0"                                                   ; call rax
 
          ;; TODO error if digit >= base?
          ;; TODO error if digit < 0?
@@ -149,36 +121,71 @@
 
          "\x49\xFF\xCF" ; dec r15
          "\xE9" (label-rel-ref loop 4 LE)) ; jmp loop
-       (label loop-break)
+        (label loop-break)
 
-       "\x4C\x89\xF0" ; mov rax, r14
-       "\x5B"     ; pop rbx
-       "\x41\x5F" ; pop r15
-       "\x41\x5E" ; pop r14
-       "\x41\x5D" ; pop r13
-       "\x41\x5C" ; pop r12
-       "\xC3") ; ret
+        "\x4C\x89\xF0" ; mov rax, r14
+        "\x5B"     ; pop rbx
+        "\x41\x5F" ; pop r15
+        "\x41\x5E" ; pop r14
+        "\x41\x5D" ; pop r13
+        "\x41\x5C" ; pop r12
+        "\xC3")))  ; ret
 
-      ;;; Converts a single ascii char to the digit it represents.
-      ;;; Works up to base 36.
-      (label ascii-to-digit)
-      (label-scope
-       "\x48\x89\xF8"                                      ; mov rax, rdi
+   ;;; --- Macros ---
 
-       "\x48\x83\xF8\x39"                                  ; cmp rax, 57
-       "\x0F\x8F" (label-rel-ref as-uppercase-letter 4 LE) ; jg as-uppercase-letter
+   ((imm64 ; Encodes imm64 literal from base-10 ASCII number
+      (x86_64-linux
+        (aarrp/barray-cat
+          "\x41\x54"     ; push r12
+          "\x41\x55"     ; push r13
+          "\x41\x56"     ; push r14
 
-       "\x48\x83\xE8\d048"                                 ; sub rax, 48
-       "\xC3"                                              ; ret
+          "\x49\x89\xFD" ; mov r13, rdi
+          "\x49\x89\xF4" ; mov r12, rsi
 
-       (label as-uppercase-letter)
-       "\x48\x83\xF8\d090"                                 ; cmp rax, 90
-       "\x0F\x8F" (label-rel-ref as-lowercase-letter 4 LE) ; jg as-lowercase-letter
+          ;; If we got an invalid argument count (anything != 2), just expand to 0
+          ;; TODO after we get error management functions in aarrp-land,
+          ;;      error and exit instead
+          "\x48\x83\x3F\xFD"                                 ; cmp qword[rdi], -3
+          "\x0F\x84" (label-rel-ref correct-arg-count 4 LE)  ; je correct-arg-count
 
-       "\x48\x83\xE8\d055"                                 ; sub rax, 55
-       "\xC3"                                              ; ret
+          "\x4C\x89\xE7"                                               ; mov rdi, r12
+          "\x48\xC7\xC6\x08\x00\x00\x00"                               ; mov rsi, 8
+          "\x48\xB8" (aarrp/builtin-func-addr/byte-buffer-push-int64)  ; mov rax, byte_buffer_push_int64
+          "\xFF\xD0"                                                   ; call rax
 
-      (label as-lowercase-letter)
-       "\x48\x83\xE8\d087"                                 ; sub rax, 87
-       "\xC3")))))                                         ; ret
- (imm64 5))
+          "\x4C\x89\xE7"                                               ; mov rdi, r12
+          "\x48\xC7\xC6\x00\x00\x00\x00"                               ; mov rsi, 0
+          "\x48\xB8" (aarrp/builtin-func-addr/byte-buffer-push-int64)  ; mov rax, byte_buffer_push_int64
+          "\xFF\xD0"                                                   ; call rax
+
+          "\x48\xB8\x00\x00\x00\x00\x00\x00\x00\x00" ; mov rax, 0
+          "\xE9" (label-rel-ref epilogue 4 LE)       ; jmp epilogue
+
+          (label correct-arg-count)
+
+          ;; Parse 2nd item in parray as signed base 10 ASCII integer, write integer to output
+
+          "\x4C\x89\xE7"                                               ; mov rdi, r12
+          "\x48\xC7\xC6\x08\x00\x00\x00"                               ; mov rsi, 8
+          "\x48\xB8" (aarrp/builtin-func-addr/byte-buffer-push-int64)  ; mov rax, byte_buffer_push_int64
+          "\xFF\xD0"                                                   ; call rax
+
+          "\x49\x8B\x7D\x10"                                           ; mov rdi, qword[r13+16]
+          "\x48\xC7\xC6\x0A\x00\x00\x00"                               ; mov rsi, 10
+          "\x48\xB8" (parse-int-fn barray-raw-addr 8 LE)               ; mov rax, parse-int
+          "\xFF\xD0"                                                   ; call rax
+
+          "\x4C\x89\xE7"                                               ; mov rdi, r12
+          "\x48\x89\xC6"                                               ; mov rsi, rax
+          "\x48\xB8" (aarrp/builtin-func-addr/byte-buffer-push-int64)  ; mov rax, byte_buffer_push_int64
+          "\xFF\xD0"                                                   ; call rax
+
+          "\x48\xB8\x00\x00\x00\x00\x00\x00\x00\x00" ; mov rax, 0
+
+          (label epilogue)
+          "\x41\x5E"  ; pop r14
+          "\x41\x5D"  ; pop r13
+          "\x41\x5C"  ; pop r12
+          "\xC3"))))) ; ret
+ (imm64 2))

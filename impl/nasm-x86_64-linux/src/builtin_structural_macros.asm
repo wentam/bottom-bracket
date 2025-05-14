@@ -106,6 +106,18 @@ with_definition_not_2_error_len:  equ $ - with_definition_not_2_error
 with_definition_not_barray_error: db "ERROR: A definition in aarrp/with doesn't start with a barray (as the name). It must.",10
 with_definition_not_barray_error_len:  equ $ - with_definition_not_barray_error
 
+
+with_rawref_not_barray_error: db "ERROR: Accessor using barray-raw-addr references value that's not a barray. barray-raw-addr only works with barray values.",10
+with_rawref_not_barray_error_len:  equ $ - with_rawref_not_barray_error
+
+with_access_bad_form_error: db "ERROR: Accessor macro call (from aarrp/with) has invalid form.",10
+with_access_bad_form_error_len:  equ $ - with_access_bad_form_error
+
+
+with_be_name: db 2,0,0,0,0,0,0,0,"BE"
+with_addr_name: db 4,0,0,0,0,0,0,0,"addr"
+with_baddr_name: db 15,0,0,0,0,0,0,0,"barray-raw-addr"
+
 ;;; Stuff for with-macros macro:
 
 with_macros_need_parray_error: db "ERROR: Got barray for the macro list in aarrp/with-macros. Must be parray of macro specifiers.",10
@@ -1833,7 +1845,6 @@ with_macros_unsupported_platform:
 with_macros_unsupported_platform_end:
 
 
-;; TODO
 _with_template_macro:
   push r12
   push r13
@@ -1844,22 +1855,160 @@ _with_template_macro:
   mov r12, rdi ; input structure
   mov r13, rsi ; output byte buffer
 
-  mov r14, qword[rel _with_template_macro_end]
-  _with_template_macro_data_ptr: ; This allows us to replace the above with our data addr
+  mov r14, qword[rel _with_template_macro_end] ; A pointer to our data has been written right after
+                                               ; this function in the heap.
 
-  ;; TODO tmp
+  ;; If our input parray has just 1 element, just expand into the value structure directly.
+  cmp qword[r12], -2
+  jne .not_one_el
+
+  mov rdi, r14
+  mov rsi, r13
+  mov rdx, 0 ; copy mode
+  mov rax, structural_macro_expand
+  call rax
+  mov rbx, rax ; rbx = absolute pointer to our expansion
+
   mov rdi, r13
-  mov rsi, 8
+  mov rax, byte_buffer_get_buf
+  call rax
+  sub rbx, rax ; rbx = relative pointer to our expansion
+
+  mov rax, rbx
+  jmp .epilogue
+  .not_one_el:
+
+  ;; If our input parray has 4 elements and the second is a barray of value 'addr',
+  ;; expand into an address as described by the next two elements
+  cmp qword[r12], -5
+  jne .not_addr
+
+  mov rdi, qword[r12+16]
+  mov rsi, with_addr_name
+  mov rax, compare_barrays
+  call rax
+  cmp rax, 1
+  jne .not_addr
+
+  ;; Parse our width int
+  mov rdi, qword[r12+24]
+  mov rsi, 10
+  mov rax, parse_uint
+  call rax
+  mov rbx, rax ; rbx = width int
+
+  ;; Write barray length (our width)
+  mov rdi, r13
+  mov rsi, rbx
   mov rax, byte_buffer_push_int64
   call rax
+
+  mov rdi, qword[r12+32]
+  mov rsi, with_be_name
+  mov rax, compare_barrays
+  call rax
+  cmp rax, 1
+  je .is_BE
+
+  .is_LE:
 
   mov rdi, r13
   mov rsi, r14
-  mov rax, byte_buffer_push_int64
+  mov rdx, rbx
+  mov rax, byte_buffer_push_int_as_width_LE
   call rax
 
   mov rax, 0
+  jmp .epilogue
 
+  .is_BE:
+  mov rdi, r13
+  mov rsi, r14
+  mov rdx, rbx
+  mov rax, byte_buffer_push_int_as_width_BE
+  call rax
+
+  mov rax, 0
+  jmp .epilogue
+
+  .not_addr:
+
+  ;; If our input parray has 4 elements and the second is a barray of value 'barray-raw-addr',
+  ;;      expand into a pointer to the raw bytes of our value. If our value is not a barray, error.
+  cmp qword[r12], -5
+  jne .not_baddr
+
+  mov rdi, qword[r12+16]
+  mov rsi, with_baddr_name
+  mov rax, compare_barrays
+  call rax
+  cmp rax, 1
+  jne .not_baddr
+
+  ;; Error if the value isn't a barray
+  cmp qword[r14], 0
+  jge .val_is_barray
+
+  mov rdi, with_rawref_not_barray_error
+  mov rsi, with_rawref_not_barray_error_len
+  mov rax, error_exit
+  call rax
+
+  .val_is_barray:
+
+  ;; Parse our width int
+  mov rdi, qword[r12+24]
+  mov rsi, 10
+  mov rax, parse_uint
+  call rax
+  mov rbx, rax ; rbx = width int
+
+  ;; Write barray length (our width)
+  mov rdi, r13
+  mov rsi, rbx
+  mov rax, byte_buffer_push_int64
+  call rax
+
+  mov rdi, qword[r12+32]
+  mov rsi, with_be_name
+  mov rax, compare_barrays
+  call rax
+  cmp rax, 1
+  je .is_BE2
+
+  .is_LE2:
+
+  mov rdi, r13
+  mov rsi, r14
+  add rsi, 8
+  mov rdx, rbx
+  mov rax, byte_buffer_push_int_as_width_LE
+  call rax
+
+  mov rax, 0
+  jmp .epilogue
+
+  .is_BE2:
+  mov rdi, r13
+  mov rsi, r14
+  add rsi, 8
+  mov rdx, rbx
+  mov rax, byte_buffer_push_int_as_width_BE
+  call rax
+
+  mov rax, 0
+  jmp .epilogue
+
+  .not_baddr
+
+  ;; Error if we got here, we found no valid accessor forms
+  mov rdi, with_access_bad_form_error
+  mov rsi, with_access_bad_form_error_len
+  mov rax, error_exit
+  call rax
+
+  mov rax, -1
+  .epilogue:
   pop rbx
   pop r15
   pop r14
@@ -1878,7 +2027,7 @@ _with_push_macro:
   push r14
   push r15
   push rbx
-  sub rsp, 8
+  sub rsp, 24
 
   mov r12, rdi ; definition parray
   mov r13, rsi ; id byte buffer
@@ -1919,6 +2068,7 @@ _with_push_macro:
   mov rsi, rax
   mov rdx, 0 ; cp
   call structural_macro_expand
+  mov qword[rbp-56], rax
 
   ;; Push a pointer to our byte buffer to the data byte buffer
   mov rdi, r14
@@ -1964,13 +2114,11 @@ _with_push_macro:
   call byte_buffer_push_int64
 
   ;; Modify our macro code to replace it's pointer to the definition data
-  mov rdi, rbx
-  call byte_buffer_get_buf
-
   mov rcx, qword[rbp-48]
+  mov rax, qword[rbp-56]
   mov qword[rcx+(_with_template_macro_end - _with_template_macro)], rax
 
-  add rsp, 8
+  add rsp, 24
   pop rbx
   pop r15
   pop r14

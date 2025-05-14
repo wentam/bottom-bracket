@@ -269,3 +269,4 @@ Interestingly, that means that even with this design there are certain situation
 * When trying to optimize codegen, I'd like to look at what existing compilers output for the same thing, but *don't* look at how they do it. I want to explore my own bottom-up way. Things like my allocate-register macro described here are a good example why.
 * the first optimizer worth implementing is probably a recursive inliner. Ideally this would be done at the IR level (by having an inliner macro that inputs IR and expands to IR with inlining done).
 * If an optimization can be done at the IR level, it should probably be done at the IR level (by having optimizer macros input IR and expand to IR with the optimization in place) rather than assembly or higher-level language.
+* Idea: re-implement nasm inside aarrp. Now we're self-hosting without actually having a separate impl.
