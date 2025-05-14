@@ -79,9 +79,10 @@ section .text
 ;;;
 ;;;   Returns NULL if the read result is nothing.
 read:
-  push r14 ; Preserve
-  push r13 ; Preserve
-  push r12 ; Preserve
+  push r15
+  push r14
+  push r13
+  push r12
 
   %ifdef ASSERT_STACK_ALIGNMENT
   call assert_stack_aligned
@@ -98,12 +99,28 @@ read:
   call byte_buffer_new
   mov r14, rax
 
+  ;; TODO put _read in a loop:
+  ;;        * Call _read
+  ;;        * If it returns -1 and the next char is not EOF, repeat
+  ;;        * Else break loop
+  .rloop:
+
   ;; Call recursive implementation
   mov rdi, r13
   mov rsi, r14
   call _read
-  push rax
-  sub rsp, 8
+  mov r15, rax
+
+  cmp rax, -1
+  jne .rloop_break
+
+  mov rdi, r13
+  call buffered_fd_reader_consume_leading_whitespace
+  cmp rax, BUFFERED_READER_EOF
+  je .rloop_break
+
+  jmp .rloop
+  .rloop_break:
 
   ;; Free buffered reader
   mov rdi, r13
@@ -134,9 +151,8 @@ read:
   pop rdi
   mov qword[rax+rdi-8], r14
 
-  add rsp, 8
 
-  pop rax
+  mov rax, r15
   mov r12, rax
 
   cmp rax, -1
@@ -164,6 +180,7 @@ read:
   pop r12 ; Restore
   pop r13 ; Restore
   pop r14 ; Restore
+  pop r15
   ret
 
 ;;; free_read_result(*read_result)

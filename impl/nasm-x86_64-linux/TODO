@@ -1,22 +1,17 @@
-* fix macro stack memory management by storing each macro's code in a separate malloc'd chunk and then only storing pointers on the macro stack.
 * now that builtin macros are called directly, not on the heap, we should be able to call directly everywhere instead of mov rax, foo; call foo
 * make with_macros free all of it's macroexpansions, currently leaking
-* implement aarrp/with-data and aarrp/data-address
-  * make sure it can support arbitrary aarrp structures, see notes/misc.md
-  * make sure we can still easily reference a barray value as raw bytes, not a barray (maybe at definition time or maybe at reference time)
-  * reference data by pointer or by copying in entire raw data both. Perhaps raw data access is indirect through a deref macro.
-* implement aarrp/include (as a builtin probably)
 * implement x86_64 assembler (not as a builtin, and in machine code)
+* implement aarrp/include (as a builtin probably)
+  * probably use buffered_fd_reader
 * implement elf64-relocatable (or maybe just elf-relocatable?)
-* implement with-functions
-  * or maybe just make with-data allow you to flag something as executable since it's the same thing!
 * don't always malloc executable, make sure macro stack mallocs executable except when serving as data stack
 * rework macro interface and all builtins to not use byte_buffer?
-* allow macros to expand into a "spliced" parray?: (a b (splicy macro)) -> (a b c d e). More notes in notes/misc.md
 * are compare_barrays and barray_equalp the same function? We need to either remove one or document the difference.
 * Put barray utility functions into a barray.asm, not util.asm
 * make malloc not always executable (split into malloc and malloc_linux as per notes so that public malloc is never executable)
 * make macro stack not always executable
 * fix kv_stack_pop_by_key
-* fix comments above form at top of file causes no expansion. Probably do this by having the reader recurse or repeat if it finds no "real" input (before macroexpansion time)
 * parray-cat
+* implement macroexpand-1 in structural_macro_expand
+* build macroexpand "walker" macro that allows you to tap spacebar to macroexpand-1 repeatedly.
+   * problem: if I macroexpand-1 a 'with' macro, he greedy macroexpands his children so you can't really watch it go very well. I really want to try to come up with a way to do this nicely. Maybe simply allow you to put aarrp into a mode where structural_macro_expand always stops prints and waits for spacebar after each expansion. This could be exposed via a (with-macroexpand-walker my-stuff) macro that enters and exits this mode around my-stuff.

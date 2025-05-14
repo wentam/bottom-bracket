@@ -270,3 +270,8 @@ Interestingly, that means that even with this design there are certain situation
 * the first optimizer worth implementing is probably a recursive inliner. Ideally this would be done at the IR level (by having an inliner macro that inputs IR and expands to IR with inlining done).
 * If an optimization can be done at the IR level, it should probably be done at the IR level (by having optimizer macros input IR and expand to IR with the optimization in place) rather than assembly or higher-level language.
 * Idea: re-implement nasm inside aarrp. Now we're self-hosting without actually having a separate impl.
+* Pretty early on, we probably want to implement aarrp and some of our abstractions on a few different platforms to make sure we're doing portability right:
+    * something not 64-bit, but with an OS (x86?)
+    * something with a different OS (windows maybe?)
+    * something embedded (8-bit AVR probably to represent the minimal case)
+    * andy bots game (RISC-V and represents simplified virtual platforms)

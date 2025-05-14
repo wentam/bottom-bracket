@@ -1,4 +1,3 @@
-(aarrp/with-macros
 ; TODO build out these comments to describe generally how to encode x86_64 instructions from
 ; a table.
 
@@ -40,6 +39,7 @@
 ; TODO doc how to encode memory operands
 ; TODO doc SIB byte
 
+(aarrp/with-macros
  (aarrp/with
 
    ;;; --- Utility funtions ---
@@ -133,6 +133,9 @@
 
    ;;; --- Macros ---
 
+   ;;; TODO: maybe imm* macros could accept stuff like (imm64 0xFF) along with base 10 version.
+   ;;  Would just need to change the parse-int function.
+
    ((imm64 ; Encodes imm64 literal from base-10 ASCII number
       (x86_64-linux
         (aarrp/barray-cat
@@ -146,8 +149,8 @@
           ;; If we got an invalid argument count (anything != 2), just expand to 0
           ;; TODO after we get error management functions in aarrp-land,
           ;;      error and exit instead
-          "\x48\x83\x3F\xFD"                                 ; cmp qword[rdi], -3
-          "\x0F\x84" (label-rel-ref correct-arg-count 4 LE)  ; je correct-arg-count
+          "\x48\x83\x3F\xFD"                                           ; cmp qword[rdi], -3
+          "\x0F\x84" (label-rel-ref correct-arg-count 4 LE)            ; je correct-arg-count
 
           "\x4C\x89\xE7"                                               ; mov rdi, r12
           "\x48\xC7\xC6\x08\x00\x00\x00"                               ; mov rsi, 8
@@ -159,8 +162,8 @@
           "\x48\xB8" (aarrp/builtin-func-addr/byte-buffer-push-int64)  ; mov rax, byte_buffer_push_int64
           "\xFF\xD0"                                                   ; call rax
 
-          "\x48\xB8\x00\x00\x00\x00\x00\x00\x00\x00" ; mov rax, 0
-          "\xE9" (label-rel-ref epilogue 4 LE)       ; jmp epilogue
+          "\x48\xB8\x00\x00\x00\x00\x00\x00\x00\x00"                   ; mov rax, 0
+          "\xE9" (label-rel-ref epilogue 4 LE)                         ; jmp epilogue
 
           (label correct-arg-count)
 

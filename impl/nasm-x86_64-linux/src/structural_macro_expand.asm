@@ -69,6 +69,7 @@ structural_macro_expand:
 ;;;   If cp_shy_greedy is cp (0), nothing will be expanded and we act as a recursive copy.
 ;;;   If cp_shy_greedy is shy (1), we will only expand the first element of each parray.
 ;;;   If cp_shy_greedy is greedy (2), everything will be expanded.
+;;;   TODO make it so if it's 3, we do macroexpand-1
 ;;;
 ;;;   If you're not sure, you probably want a greedy expand.
 ;;;
