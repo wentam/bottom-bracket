@@ -160,7 +160,7 @@ then use safe_call everywhere instead of call.
         * This is fancy because you could include both runtime library components and buildtime components in a single .so file.
     * They could be distributed as raw .aarrp files of source, but that would require building all build-time dependencies from source everytime (slow)
     * They could be distributed as raw aarrp structures fully macroexpanded (compiled) in binary format, maybe call it something like file.aarrpb64.
-    * .arrpb format with the header specifying the pointer/array length sizes and (includeb) macro that can import arbitrary-sized structures.
+    * .arrpb format with the header specifying the pointer/array length sizes + endiannes and (includeb) macro that can import arbitrary-sized structures.
         * this is probably the best default approach
     * Users can always build their own solutions (though includeb makes sense as a builtin I think).
 * Right now if you do ((macro-that-expands-into-nothing-barry)), it expands literally into (nothing) even with a nothing macro defined. If this is a problem and we want to fix this, we probably want to repeat the entire macroexpansion process repeatedly until nothing expand.

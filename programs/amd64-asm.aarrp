@@ -39,32 +39,99 @@
 ; TODO doc how to encode memory operands
 ; TODO doc SIB byte
 
-(aarrp/with-macros
- (aarrp/with
+(aarrp/with
 
-   ;;; --- Utility funtions ---
+  ;;; --- Data and utility funtions ---
+  ((imm64-arg-count-error "ERROR: incorrect number of parameters passed to imm64 (should be 1).\n")
+   (REX-input-error "ERROR: Inputs to REX must be one char each of: WRXBwrxb.\n")
+   ;; writes a barray's bytes to fd (use me to print stuff to stdout/stderr)
+   (write-barray-to-fd-fn
+     (aarrp/barray-cat
+       "\x41\x54"                                   ; push r12
+       "\x41\x55"                                   ; push r13
+       "\x41\x56"                                   ; push r14
 
-    ;; Converts a single ascii char to the digit it represents. Works up to base 36.
-   ((ascii-to-digit-fn
-      (aarrp/barray-cat
-        "\x48\x89\xF8"                                      ; mov rax, rdi
+       "\x49\x89\xFD"                               ; mov r13, rdi        - barray
+       "\x49\x89\xF6"                               ; mov r14, rsi        - fd
 
-        "\x48\x83\xF8\x39"                                  ; cmp rax, 57
-        "\x0F\x8F" (label-rel-ref as-uppercase-letter 4 LE) ; jg as-uppercase-letter
+       "\x4D\x8B\x65\x00"                           ; mov r12, qword[r13] - r12 = string length
+       "\x49\x83\xC5\x08"                           ; add r13, 8          - move past length
 
-        "\x48\x83\xE8\d048"                                 ; sub rax, 48
-        "\xC3"                                              ; ret
+       (label write-loop)
+       (label-scope
+        "\x4C\x89\xE2"                              ; mov rdx, r12        - String length
+        "\x4C\x89\xEE"                              ; mov rsi, r13        - String
+        "\x4C\x89\xF7"                              ; mov rdi, r14        - Output fd
+        "\x48\xC7\xC0\x01\x00\x00\x00"              ; mov rax, 1          - syscall number for sys_write
+        "\x0F\x05"                                  ; syscall
 
-        (label as-uppercase-letter)
-        "\x48\x83\xF8\d090"                                 ; cmp rax, 90
-        "\x0F\x8F" (label-rel-ref as-lowercase-letter 4 LE) ; jg as-lowercase-letter
+        "\x48\x83\xF8\x00"                          ; cmp rax, 0
+        "\x0F\x8C" (label-rel-ref write-err 4 LE)   ; jl write-err
 
-        "\x48\x83\xE8\d055"                                 ; sub rax, 55
-        "\xC3"                                              ; ret
+        "\x49\x29\xC4"                              ; sub r12, rax
+        "\x49\x01\xC5"                              ; add r13, rax
+        "\x49\x83\xFC\x00"                          ; cmp r12, 0
+        "\x0F\x8F" (label-rel-ref write-loop 4 LE)) ; jg write-loop
 
-        (label as-lowercase-letter)
-        "\x48\x83\xE8\d087"                                 ; sub rax, 87
-        "\xC3"))                                            ; ret
+       (label epilogue)
+       "\x41\x5E"                                   ; pop r14
+       "\x41\x5D"                                   ; pop r13
+       "\x41\x5C"                                   ; pop r12
+       "\xC3"                                       ; ret
+
+       (label write-err)
+       "\x48\xC7\xC0\x00\x00\x00\x00"               ; mov rax, 0
+       "\xE9" (label-rel-ref epilogue 4 LE)))       ; jmp epilogue
+
+   ;; Prints the error barray to stderr (rdi) and exits
+   (error-exit-fn
+     (aarrp/barray-cat
+       ; rdi is already correct
+       "\x48\xC7\xC6\x02\x00\x00\x00"                          ; mov rsi, 2 - we want stderr
+       "\x48\xB8" (write-barray-to-fd-fn barray-raw-addr 8 LE) ; mov rax, write-barray-to-fd
+       "\xFF\xD0"                                              ; call rax
+
+       "\x48\xC7\xC0\x3C\x00\x00\x00"                          ; mov rax, 60 - sys_exit
+       "\x0F\x05"                                              ; syscall
+       "\xC3"
+       ))                                                ; ret
+
+   ;; Produces error and exits if the parray (rdi) doesn't have rsi elements
+   (check-arg-count-fn
+     (aarrp/barray-cat
+       "\x48\x8B\x4F\x00"                              ; mov rcx, qword[rdi]
+       "\x48\xF7\xD1"                                  ; not rcx
+       "\x48\x39\xF1"                                  ; cmp rcx, rsi
+       "\x0F\x84" (label-rel-ref good 4 LE)            ; je good
+
+       "\x48\xBF" (imm64-arg-count-error addr 8 LE)    ; mov rdi, error-barray-addr
+       "\x48\xB8" (error-exit-fn barray-raw-addr 8 LE) ; mov rax, error-exit-fn
+       "\xFF\xD0"                                      ; call rax
+
+       (label good)
+       "\xC3"))                                        ; ret
+
+   ;; Converts a single ascii char to the digit it represents. Works up to base 36.
+   (ascii-to-digit-fn
+     (aarrp/barray-cat
+       "\x48\x89\xF8"                                      ; mov rax, rdi
+
+       "\x48\x83\xF8\x39"                                  ; cmp rax, 57
+       "\x0F\x8F" (label-rel-ref as-uppercase-letter 4 LE) ; jg as-uppercase-letter
+
+       "\x48\x83\xE8\d048"                                 ; sub rax, 48
+       "\xC3"                                              ; ret
+
+       (label as-uppercase-letter)
+       "\x48\x83\xF8\d090"                                 ; cmp rax, 90
+       "\x0F\x8F" (label-rel-ref as-lowercase-letter 4 LE) ; jg as-lowercase-letter
+
+       "\x48\x83\xE8\d055"                                 ; sub rax, 55
+       "\xC3"                                              ; ret
+
+       (label as-lowercase-letter)
+       "\x48\x83\xE8\d087"                                 ; sub rax, 87
+       "\xC3"))                                            ; ret
 
     ;; parses a signed ascii integer from barray in rdi assuming it is in base rsi
     (parse-int-fn
@@ -131,13 +198,135 @@
         "\x41\x5C" ; pop r12
         "\xC3")))  ; ret
 
-   ;;; --- Macros ---
+  (aarrp/with-macros
+    ;;; --- Macros ---
 
-   ;;; TODO: maybe imm* macros could accept stuff like (imm64 0xFF) along with base 10 version.
-   ;;  Would just need to change the parse-int function.
+    ;;; TODO: maybe imm* macros could accept stuff like (imm64 0xFF) along with base 10 version.
+    ;;; (imm64 0cb) for chars?
+    ;;;  Would just need to change the parse-int function.
+    ;;; default to base 10.
 
-   ((imm64 ; Encodes imm64 literal from base-10 ASCII number
-      (x86_64-linux
+    ;; Encodes imm32 literal from base-10 ASCII number
+    ((imm32
+       (x86_64-linux
+         (aarrp/barray-cat
+           "\x41\x54"     ; push r12
+           "\x41\x55"     ; push r13
+           "\x41\x56"     ; push r14
+
+
+           "\x49\x89\xFD" ; mov r13, rdi
+           "\x49\x89\xF4" ; mov r12, rsi
+
+           ;; Error if wrong argument count (!= 2)
+           "\x48\xC7\xC6\x02\x00\x00\x00"                               ; mov rsi, 2 (rdi already good)
+           "\x48\xB8" (check-arg-count-fn barray-raw-addr 8 LE)         ; mov rax, check-arg-count-fn
+           "\xFF\xD0"                                                   ; call rax
+
+           ;; Parse 2nd item in parray as signed base 10 ASCII integer, write integer to output
+           "\x4C\x89\xE7"                                               ; mov rdi, r12
+           "\x48\xC7\xC6\x04\x00\x00\x00"                               ; mov rsi, 4
+           "\x48\xB8" (aarrp/builtin-func-addr/byte-buffer-push-int64)  ; mov rax, byte_buffer_push_int64
+           "\xFF\xD0"                                                   ; call rax
+
+           "\x49\x8B\x7D\x10"                                           ; mov rdi, qword[r13+16]
+           "\x48\xC7\xC6\x0A\x00\x00\x00"                               ; mov rsi, 10
+           "\x48\xB8" (parse-int-fn barray-raw-addr 8 LE)               ; mov rax, parse-int
+           "\xFF\xD0"                                                   ; call rax
+
+           "\x4C\x89\xE7"                                               ; mov rdi, r12
+           "\x48\x89\xC6"                                               ; mov rsi, rax
+           "\x48\xB8" (aarrp/builtin-func-addr/byte-buffer-push-int32)  ; mov rax, byte_buffer_push_int32
+           "\xFF\xD0"                                                   ; call rax
+
+           "\x48\xC7\xC0\x00\x00\x00\x00"                               ; mov rax, 0
+           (label epilogue)
+           "\x41\x5E"  ; pop r14
+           "\x41\x5D"  ; pop r13
+           "\x41\x5C"  ; pop r12
+           "\xC3")))
+
+    ;; Encodes imm16 literal from base-10 ASCII number
+    (imm8
+       (x86_64-linux
+         (aarrp/barray-cat
+           "\x41\x54"     ; push r12
+           "\x41\x55"     ; push r13
+           "\x41\x56"     ; push r14
+
+           "\x49\x89\xFD" ; mov r13, rdi
+           "\x49\x89\xF4" ; mov r12, rsi
+
+           ;; Error if wrong argument count (!= 2)
+           "\x48\xC7\xC6"(imm32 2)                                      ; mov rsi, 2 (rdi already good)
+           "\x48\xB8" (check-arg-count-fn barray-raw-addr 8 LE)         ; mov rax, check-arg-count-fn
+           "\xFF\xD0"                                                   ; call rax
+
+           ;; Parse 2nd item in parray as signed base 10 ASCII integer, write integer to output
+           "\x4C\x89\xE7"                                               ; mov rdi, r12
+           "\x48\xC7\xC6"(imm32 1)                                      ; mov rsi, 1
+           "\x48\xB8" (aarrp/builtin-func-addr/byte-buffer-push-int64)  ; mov rax, byte_buffer_push_int64
+           "\xFF\xD0"                                                   ; call rax
+
+           "\x49\x8B\x7D\x10"                                           ; mov rdi, qword[r13+16]
+           "\x48\xC7\xC6"(imm32 10)                                     ; mov rsi, 10
+           "\x48\xB8" (parse-int-fn barray-raw-addr 8 LE)               ; mov rax, parse-int
+           "\xFF\xD0"                                                   ; call rax
+
+           "\x4C\x89\xE7"                                               ; mov rdi, r12
+           "\x48\x89\xC6"                                               ; mov rsi, rax
+           "\x48\xB8" (aarrp/builtin-func-addr/byte-buffer-push-int8)  ; mov rax, byte_buffer_push_int8
+           "\xFF\xD0"                                                   ; call rax
+
+           "\x48\xC7\xC0"(imm32 0)                                      ; mov rax, 0
+           (label epilogue)
+           "\x41\x5E"  ; pop r14
+           "\x41\x5D"  ; pop r13
+           "\x41\x5C"  ; pop r12
+           "\xC3")))
+
+    ;; Encodes imm16 literal from base-10 ASCII number
+    (imm16
+       (x86_64-linux
+         (aarrp/barray-cat
+           "\x41\x54"     ; push r12
+           "\x41\x55"     ; push r13
+           "\x41\x56"     ; push r14
+
+           "\x49\x89\xFD" ; mov r13, rdi
+           "\x49\x89\xF4" ; mov r12, rsi
+
+           ;; Error if wrong argument count (!= 2)
+           "\x48\xC7\xC6"(imm32 2)                                      ; mov rsi, 2 (rdi already good)
+           "\x48\xB8" (check-arg-count-fn barray-raw-addr 8 LE)         ; mov rax, check-arg-count-fn
+           "\xFF\xD0"                                                   ; call rax
+
+           ;; Parse 2nd item in parray as signed base 10 ASCII integer, write integer to output
+           "\x4C\x89\xE7"                                               ; mov rdi, r12
+           "\x48\xC7\xC6"(imm32 2)                                      ; mov rsi, 2
+           "\x48\xB8" (aarrp/builtin-func-addr/byte-buffer-push-int64)  ; mov rax, byte_buffer_push_int64
+           "\xFF\xD0"                                                   ; call rax
+
+           "\x49\x8B\x7D\x10"                                           ; mov rdi, qword[r13+16]
+           "\x48\xC7\xC6"(imm32 10)                                     ; mov rsi, 10
+           "\x48\xB8" (parse-int-fn barray-raw-addr 8 LE)               ; mov rax, parse-int
+           "\xFF\xD0"                                                   ; call rax
+
+           "\x4C\x89\xE7"                                               ; mov rdi, r12
+           "\x48\x89\xC6"                                               ; mov rsi, rax
+           "\x48\xB8" (aarrp/builtin-func-addr/byte-buffer-push-int16)  ; mov rax, byte_buffer_push_int16
+           "\xFF\xD0"                                                   ; call rax
+
+           "\x48\xC7\xC0"(imm32 0)                                      ; mov rax, 0
+           (label epilogue)
+           "\x41\x5E"  ; pop r14
+           "\x41\x5D"  ; pop r13
+           "\x41\x5C"  ; pop r12
+           "\xC3")))
+
+     ;; Encodes imm64 literal from base-10 ASCII number
+     (imm64
+       (x86_64-linux
         (aarrp/barray-cat
           "\x41\x54"     ; push r12
           "\x41\x55"     ; push r13
@@ -146,36 +335,19 @@
           "\x49\x89\xFD" ; mov r13, rdi
           "\x49\x89\xF4" ; mov r12, rsi
 
-          ;; If we got an invalid argument count (anything != 2), just expand to 0
-          ;; TODO after we get error management functions in aarrp-land,
-          ;;      error and exit instead
-          "\x48\x83\x3F\xFD"                                           ; cmp qword[rdi], -3
-          "\x0F\x84" (label-rel-ref correct-arg-count 4 LE)            ; je correct-arg-count
-
-          "\x4C\x89\xE7"                                               ; mov rdi, r12
-          "\x48\xC7\xC6\x08\x00\x00\x00"                               ; mov rsi, 8
-          "\x48\xB8" (aarrp/builtin-func-addr/byte-buffer-push-int64)  ; mov rax, byte_buffer_push_int64
+          ;; Error if wrong argument count (!= 2)
+          "\x48\xC7\xC6"(imm32 2)                                      ; mov rsi, 2 (rdi already good)
+          "\x48\xB8" (check-arg-count-fn barray-raw-addr 8 LE)         ; mov rax, check-arg-count-fn
           "\xFF\xD0"                                                   ; call rax
-
-          "\x4C\x89\xE7"                                               ; mov rdi, r12
-          "\x48\xC7\xC6\x00\x00\x00\x00"                               ; mov rsi, 0
-          "\x48\xB8" (aarrp/builtin-func-addr/byte-buffer-push-int64)  ; mov rax, byte_buffer_push_int64
-          "\xFF\xD0"                                                   ; call rax
-
-          "\x48\xB8\x00\x00\x00\x00\x00\x00\x00\x00"                   ; mov rax, 0
-          "\xE9" (label-rel-ref epilogue 4 LE)                         ; jmp epilogue
-
-          (label correct-arg-count)
 
           ;; Parse 2nd item in parray as signed base 10 ASCII integer, write integer to output
-
           "\x4C\x89\xE7"                                               ; mov rdi, r12
-          "\x48\xC7\xC6\x08\x00\x00\x00"                               ; mov rsi, 8
+          "\x48\xC7\xC6"(imm32 8)                                      ; mov rsi, 8
           "\x48\xB8" (aarrp/builtin-func-addr/byte-buffer-push-int64)  ; mov rax, byte_buffer_push_int64
           "\xFF\xD0"                                                   ; call rax
 
           "\x49\x8B\x7D\x10"                                           ; mov rdi, qword[r13+16]
-          "\x48\xC7\xC6\x0A\x00\x00\x00"                               ; mov rsi, 10
+          "\x48\xC7\xC6"(imm32 10)                                     ; mov rsi, 10
           "\x48\xB8" (parse-int-fn barray-raw-addr 8 LE)               ; mov rax, parse-int
           "\xFF\xD0"                                                   ; call rax
 
@@ -184,11 +356,131 @@
           "\x48\xB8" (aarrp/builtin-func-addr/byte-buffer-push-int64)  ; mov rax, byte_buffer_push_int64
           "\xFF\xD0"                                                   ; call rax
 
-          "\x48\xB8\x00\x00\x00\x00\x00\x00\x00\x00" ; mov rax, 0
+          "\x48\xC7\xC0"(imm32 0)                                      ; mov rax, 0
 
           (label epilogue)
           "\x41\x5E"  ; pop r14
           "\x41\x5D"  ; pop r13
           "\x41\x5C"  ; pop r12
-          "\xC3"))))) ; ret
- (imm64 2))
+          "\xC3")))   ; ret
+
+      (REX
+        (x86_64-linux
+          (aarrp/barray-cat
+           "\x41\x54"     ; push r12
+           "\x41\x55"     ; push r13
+           "\x41\x56"     ; push r14
+           "\x41\x57"     ; push r15
+           "\x53"         ; push rbx
+
+           "\x49\x89\xFC"                 ; mov r12, rdi  - input structure
+           "\x49\x89\xF5"                 ; mov r13, rsi  - output byte buffer
+           "\x49\xC7\xC6\x40\x00\x00\x00" ; mov r14, 0x40 - init output number to 0100 0000
+
+           "\x4C\x8B\x7F\x00" ; mov r15, qword[rdi]
+           "\x49\xF7\xD7"     ; not r15
+           "\x49\xFF\xCF"     ; dec r15 - r15 = input parray length - 1
+
+           "\x48\x89\xFB"     ; mov rbx, rdi
+           "\x48\x83\xC3\x10" ; add rbx, 16 - move past length and first element
+
+           ;; Iterate over elements of our input structure excluding first
+           (label element-loop)
+           (label-scope
+            "\x49\x83\xFF\x00" ; cmp r15, 0
+            "\x0F\x84" (label-rel-ref element-loop-break 4 LE) ; je element-loop-break
+
+            "\x48\x8B\x4B\x00" ; mov rcx, qword[rbx] - rcx = pointer to element
+            "\x48\xC7\xC2"(imm32 8) ; mov rdx, 8
+
+            ;; if the element isn't a barray of length 1, error
+            "\x48\x83\x39"(imm8 1)                     ; cmp qword[rcx], 1
+            "\x0F\x84" (label-rel-ref good-input 4 LE) ; je good-input
+
+            "\x48\xBF" (REX-input-error addr 8 LE) ; mov rdi, REX-input-error
+            "\x48\xB8" (error-exit-fn barray-raw-addr 8 LE) ; mov rax, error-exit-fn
+            "\xFF\xD0" ; call rax
+
+            (label good-input)
+
+            ;; If the barray is 'W' or 'w', set the 1st bit
+            "\x80\x79\x08" W                       ; cmp byte[rcx+8], 'W'
+            "\x0F\x84" (label-rel-ref is-w 4 LE)   ; je is-w
+            "\x80\x79\x08" w                       ; cmp byte[rcx+8], 'w'
+            "\x0F\x84" (label-rel-ref is-w 4 LE)   ; je is-w
+            "\xE9" (label-rel-ref is-not-w 4 LE)   ; jmp is-not-w
+            (label is-w)
+            "\x49\x09\xD6"                         ; or r14, rdx
+            "\xE9" (label-rel-ref continue 4 LE)   ; jmp continue
+            (label is-not-w)
+
+            "\x48\xD1\xEA" ; shr rdx
+
+            ;; If the barray is 'R' or 'r', set the 2nd bit
+            "\x80\x79\x08" R                       ; cmp byte[rcx+8], 'R'
+            "\x0F\x84" (label-rel-ref is-r 4 LE)   ; je is-r
+            "\x80\x79\x08" r                       ; cmp byte[rcx+8], 'r'
+            "\x0F\x84" (label-rel-ref is-r 4 LE)   ; je is-r
+            "\xE9" (label-rel-ref is-not-r 4 LE)   ; jmp is-not-r
+            (label is-r)
+            "\x49\x09\xD6"                         ; or r14, rdx
+            "\xE9" (label-rel-ref continue 4 LE)   ; jmp continue
+            (label is-not-r)
+
+            "\x48\xD1\xEA" ; shr rdx
+
+            ;; If the barray is 'X' or 'x', set the 3rd bit
+            "\x80\x79\x08" X                       ; cmp byte[rcx+8], 'X'
+            "\x0F\x84" (label-rel-ref is-x 4 LE)   ; je is-x
+            "\x80\x79\x08" x                       ; cmp byte[rcx+8], 'x'
+            "\x0F\x84" (label-rel-ref is-x 4 LE)   ; je is-x
+            "\xE9" (label-rel-ref is-not-x 4 LE)   ; jmp is-not-x
+            (label is-x)
+            "\x49\x09\xD6"                         ; or r14, rdx
+            "\xE9" (label-rel-ref continue 4 LE)   ; jmp continue
+            (label is-not-x)
+
+            "\x48\xD1\xEA" ; shr rdx
+
+            ;; If the barray is 'B' or 'b', set the 4th bit
+            "\x80\x79\x08" B                       ; cmp byte[rcx+8], 'B'
+            "\x0F\x84" (label-rel-ref is-b 4 LE)   ; je is-b
+            "\x80\x79\x08" b                       ; cmp byte[rcx+8], 'b'
+            "\x0F\x84" (label-rel-ref is-b 4 LE)   ; je is-b
+            "\xE9" (label-rel-ref is-not-b 4 LE)   ; jmp is-not-b
+            (label is-b)
+            "\x49\x09\xD6"                         ; or r14, rdx
+            "\xE9" (label-rel-ref continue 4 LE)   ; jmp continue
+            (label is-not-b)
+
+            ;; If we get here, error
+            "\x48\xBF" (REX-input-error addr 8 LE) ; mov rdi, REX-input-error
+            "\x48\xB8" (error-exit-fn barray-raw-addr 8 LE) ; mov rax, error-exit-fn
+            "\xFF\xD0" ; call rax
+
+            (label continue)
+            "\x48\x83\xC3"(imm8 8)                   ; add rbx, 8
+            "\x49\xFF\xCF"                           ; dec r15
+            "\xE9" (label-rel-ref element-loop 4 LE)) ; jmp element-loop
+           (label element-loop-break)
+
+           ;; Write our output number to output byte buffer as 1-byte barray
+           "\x4C\x89\xEF" ; mov rdi, r13
+           "\x48\xC7\xC6"(imm32 1)                                      ; mov rsi, 1
+           "\x48\xB8" (aarrp/builtin-func-addr/byte-buffer-push-int64)  ; mov rax, byte_buffer_push_int64
+           "\xFF\xD0"                                                   ; call rax
+
+           "\x4C\x89\xEF" ; mov rdi, r13
+           "\x4c\x89\xF6"                                               ; mov rsi, r14
+           "\x48\xB8" (aarrp/builtin-func-addr/byte-buffer-push-int8)   ; mov rax, byte_buffer_push_byte
+           "\xFF\xD0"                                                   ; call rax
+
+           "\x48\xC7\xC0\x00\x00\x00\x00" ; mov rax, 0
+
+           "\x5B"      ; pop rbx
+           "\x41\x5F"  ; pop r15
+           "\x41\x5E"  ; pop r14
+           "\x41\x5D"  ; pop r13
+           "\x41\x5C"  ; pop r12
+           "\xC3"))))  ; ret
+    (REX W)))

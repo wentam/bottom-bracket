@@ -666,6 +666,8 @@ kv_stack_peek_by_key:
 ;;;
 ;;;   Returns a pointer to the value barray or NULL if it doesn't exist.
 kv_stack_value_by_key:
+  push r12
+
   call kv_stack_peek_by_key
   cmp rax, 0
   je .done
@@ -674,6 +676,8 @@ kv_stack_value_by_key:
   add rax, 16  ; + width of name length integer + id
 
   .done:
+
+  pop r12
   ret
 
 ;;; kv_stack_top_value(*kv_stack) -> pointer to higest frame's value barray

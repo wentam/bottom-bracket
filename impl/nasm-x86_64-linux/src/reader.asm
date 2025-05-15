@@ -83,6 +83,7 @@ read:
   push r14
   push r13
   push r12
+  sub rsp, 8
 
   %ifdef ASSERT_STACK_ALIGNMENT
   call assert_stack_aligned
@@ -177,6 +178,7 @@ read:
   add rsp, 8
   pop rax
 
+  add rsp, 8
   pop r12 ; Restore
   pop r13 ; Restore
   pop r14 ; Restore

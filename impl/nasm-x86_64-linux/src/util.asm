@@ -53,14 +53,7 @@ extern byte_buffer_push_barray
 extern byte_buffer_write_contents
 
 tmpaoeu:
-
-
-      sub rsp, 16
-      mov qword[rsp], 8
-      mov qword[rsp+8], 0
-      mov rax, byte_buffer_push_barray
-      call rax
-      add rsp, 16
+  cmp byte[rcx+8], 'W'
 
   ret
 
@@ -839,9 +832,21 @@ bindump:
 ;;;   If it's not, will print an error message and 'int 3' to trigger a
 ;;;   break (or exit if no debugger is attached)
 assert_stack_aligned:
-  sub rsp, 8 ; Make sure we're not un-aligning the stack ourselves.
-             ; 'call' pushes a pointer to the stack, so we only need
-             ; to sub 8 here.
+  push rbp
+  push rax
+  push rcx
+  push rdx
+  push rbx
+  push rsi
+  push rdi
+  push r8
+  push r9
+  push r10
+  push r11
+  push r12
+  push r13
+  push r14
+  push r15
 
   ;; ((15 & rsp) == 0) -> stack aligned
   mov rax, 15
@@ -858,7 +863,21 @@ assert_stack_aligned:
 
   .aligned:
 
-  add rsp, 8
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  pop r11
+  pop r10
+  pop r9
+  pop r8
+  pop rdi
+  pop rsi
+  pop rbx
+  pop rdx
+  pop rcx
+  pop rax
+  pop rbp
   ret
 
 ;;; TODO
