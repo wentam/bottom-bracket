@@ -36,6 +36,7 @@ extern free
 extern parse_uint
 extern barray_deposit_bytes
 extern malloc
+extern barray_equalp
 
 extern kv_stack_new
 extern kv_stack_pop
@@ -65,6 +66,7 @@ builtin_bb_push_int32_macro_name: db 46,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/b
 builtin_bb_push_int16_macro_name: db 46,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-push-int16"
 builtin_bb_push_int8_macro_name: db 45,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-push-int8"
 builtin_bb_push_barray_macro_name: db 47,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-push-barray"
+builtin_barray_equalp_macro_name: db 37,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/barray-equalp"
 
 barray_literal_macro_name: db 17,0,0,0,0,0,0,0,"test_macro_barray"
 barray_test_expansion: db 17,0,0,0,0,0,0,0,"test_macro_barray"
@@ -195,6 +197,16 @@ push_builtin_structural_macros:
   mov qword[rsp+8], builtin_bb_push_int16
   mov rdi, qword[macro_stack_structural]    ; macro stack
   mov rsi, builtin_bb_push_int16_macro_name ; macro name
+  mov rdx, rsp                              ; code
+  call kv_stack_push
+  add rsp, 16
+
+  ;; Push builtin_barray_equalp macro
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], builtin_barray_equalp
+  mov rdi, qword[macro_stack_structural]    ; macro stack
+  mov rsi, builtin_barray_equalp_macro_name ; macro name
   mov rdx, rsp                              ; code
   call kv_stack_push
   add rsp, 16
@@ -362,6 +374,25 @@ builtin_bb_push_int16:
   pop r12
   ret
 builtin_bb_push_int16_end:
+
+builtin_barray_equalp:
+  push r12
+  mov r12, rsi
+
+  mov rdi, r12
+  mov rsi, 8
+  mov rax, byte_buffer_push_int64
+  call rax
+
+  mov rdi, r12
+  mov rsi, barray_equalp
+  mov rax, byte_buffer_push_int64
+  call rax
+  mov rax, 0
+
+  pop r12
+  ret
+builtin_barray_equalp_end:
 
 builtin_bb_push_int8:
   push r12

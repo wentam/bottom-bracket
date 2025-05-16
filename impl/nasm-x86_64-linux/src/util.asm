@@ -39,7 +39,6 @@ global digit_to_ascii
 global ascii_to_digit
 global assert_stack_aligned
 global bindump
-global barray_equalp
 global alpha36p
 global alpha10p
 global byte_in_barray_p
@@ -52,8 +51,8 @@ extern byte_buffer_push_byte
 extern byte_buffer_push_barray
 extern byte_buffer_write_contents
 
+;; This is my spot for having nasm assemble random things for me lel
 tmpaoeu:
-  cmp byte[rcx+8], 'W'
 
   ret
 
@@ -238,43 +237,6 @@ realloc:
 
     add rsp, 8
     ret
-
-;;; barray_equalp(*barray, *barray) -> 0 or 1
-;;;   Compares two barrays. Returns 1 if they are identical in both
-;;;   length and contents. 0 otherwise.
-barray_equalp:
-  mov r8, qword[rdi] ; barray1 length
-  mov r9, qword[rsi] ; barray2 length
-
-  ;; Unless we otherwise determine it, we return 0
-  mov rax, 0
-
-  ;; Move past barray lengths
-  add rdi, 8
-  add rsi, 8
-
-  cmp r8, r9
-  jne .epilogue
-
-  .byte_loop:
-    cmp r8, 0
-    je .byte_loop_break
-
-    ;; Compare the byte
-    mov cl, byte[rdi+r8-1]
-    cmp byte[rsi+r8-1], cl
-    jne .epilogue
-
-    dec r8
-    jmp .byte_loop
-
-  .byte_loop_break:
-
-  ;; If we ran out the loop - then we found no differences. result is 1.
-  mov rax, 1
-
-  .epilogue:
-  ret
 
 ;;; digit_to_ascii(int) -> char
 ;;;   Converts any numeric value representing a digit (up to base 36) to ASCII
