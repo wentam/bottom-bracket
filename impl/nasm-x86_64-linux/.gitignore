@@ -2,3 +2,5 @@ aarrp
 *.o
 build/
 vgcore*
+callgrind*
+perf.data

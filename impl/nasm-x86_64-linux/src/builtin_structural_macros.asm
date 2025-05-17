@@ -66,6 +66,9 @@ builtin_bb_push_int32_macro_name: db 46,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/b
 builtin_bb_push_int16_macro_name: db 46,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-push-int16"
 builtin_bb_push_int8_macro_name: db 45,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-push-int8"
 builtin_bb_push_barray_macro_name: db 47,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-push-barray"
+builtin_bb_data_len_macro_name: db 51,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-get-data-length"
+builtin_bb_get_buf_macro_name: db 43,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-get-buf"
+builtin_bb_write_int64_macro_name: db 47,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-write-int64"
 builtin_barray_equalp_macro_name: db 37,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/barray-equalp"
 
 barray_literal_macro_name: db 17,0,0,0,0,0,0,0,"test_macro_barray"
@@ -117,7 +120,6 @@ with_rawref_not_barray_error_len:  equ $ - with_rawref_not_barray_error
 
 with_access_bad_form_error: db "ERROR: Accessor macro call (from aarrp/with) has invalid form.",10
 with_access_bad_form_error_len:  equ $ - with_access_bad_form_error
-
 
 with_be_name: db 2,0,0,0,0,0,0,0,"BE"
 with_addr_name: db 4,0,0,0,0,0,0,0,"addr"
@@ -197,6 +199,36 @@ push_builtin_structural_macros:
   mov qword[rsp+8], builtin_bb_push_int16
   mov rdi, qword[macro_stack_structural]    ; macro stack
   mov rsi, builtin_bb_push_int16_macro_name ; macro name
+  mov rdx, rsp                              ; code
+  call kv_stack_push
+  add rsp, 16
+
+  ;; Push builtin_bb_get_buf macro
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], builtin_bb_get_buf
+  mov rdi, qword[macro_stack_structural]    ; macro stack
+  mov rsi, builtin_bb_get_buf_macro_name ; macro name
+  mov rdx, rsp                              ; code
+  call kv_stack_push
+  add rsp, 16
+
+  ;; Push builtin_bb_write_int64 macro
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], builtin_bb_write_int64
+  mov rdi, qword[macro_stack_structural]    ; macro stack
+  mov rsi, builtin_bb_write_int64_macro_name ; macro name
+  mov rdx, rsp                              ; code
+  call kv_stack_push
+  add rsp, 16
+
+  ;; Push builtin_bb_data_len macro
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], builtin_bb_data_len
+  mov rdi, qword[macro_stack_structural]    ; macro stack
+  mov rsi, builtin_bb_data_len_macro_name ; macro name
   mov rdx, rsp                              ; code
   call kv_stack_push
   add rsp, 16
@@ -374,6 +406,63 @@ builtin_bb_push_int16:
   pop r12
   ret
 builtin_bb_push_int16_end:
+
+builtin_bb_get_buf:
+  push r12
+  mov r12, rsi
+
+  mov rdi, r12
+  mov rsi, 8
+  mov rax, byte_buffer_push_int64
+  call rax
+
+  mov rdi, r12
+  mov rsi, byte_buffer_get_buf
+  mov rax, byte_buffer_push_int64
+  call rax
+  mov rax, 0
+
+  pop r12
+  ret
+builtin_bb_get_buf_end:
+
+builtin_bb_write_int64:
+  push r12
+  mov r12, rsi
+
+  mov rdi, r12
+  mov rsi, 8
+  mov rax, byte_buffer_push_int64
+  call rax
+
+  mov rdi, r12
+  mov rsi, byte_buffer_write_int64
+  mov rax, byte_buffer_push_int64
+  call rax
+  mov rax, 0
+
+  pop r12
+  ret
+builtin_bb_write_int64_end:
+
+builtin_bb_data_len:
+  push r12
+  mov r12, rsi
+
+  mov rdi, r12
+  mov rsi, 8
+  mov rax, byte_buffer_push_int64
+  call rax
+
+  mov rdi, r12
+  mov rsi, byte_buffer_get_data_length
+  mov rax, byte_buffer_push_int64
+  call rax
+  mov rax, 0
+
+  pop r12
+  ret
+builtin_bb_data_len_end:
 
 builtin_barray_equalp:
   push r12
@@ -2263,16 +2352,6 @@ _with_push_macros:
   mov r12, rdi ; r12 = definition list parray
   mov r13, rsi ; r13 = macro id byte buffer
   mov r14, rdx ; r14 = data byte buffer
-
-  mov rdi, qword[rbp+8]
-  mov rsi, 16
-  mov rdx, 2
-  mov rcx, 0
-  call write_as_base
-
-  mov rdi, 10
-  mov rsi, 2
-  call write_char
 
   ;; Error if our input is not a parray
   cmp qword[r12], 0

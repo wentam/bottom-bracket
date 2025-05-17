@@ -51,11 +51,6 @@ extern byte_buffer_push_byte
 extern byte_buffer_push_barray
 extern byte_buffer_write_contents
 
-;; This is my spot for having nasm assemble random things for me lel
-tmpaoeu:
-
-  ret
-
 ;;; print(*string, len, fd)
 ;;;   Writes the string of bytes to fd. Returns 0 on error.
 write:
@@ -880,5 +875,10 @@ compare_barrays:
 
   .epilogue:
   add rsp, 8
+  ret
+
+;; This is my spot for having nasm assemble random things for me lel
+tmpaoeu:
+  or rsi, r15
   ret
 

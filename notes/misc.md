@@ -275,3 +275,9 @@ Interestingly, that means that even with this design there are certain situation
     * something with a different OS (windows maybe?)
     * something embedded (8-bit AVR probably to represent the minimal case)
     * andy bots game (RISC-V and represents simplified virtual platforms)
+* Should barray-cat allow you to "splice" a macro that expands into a parray? like (arrp/barray-cat foo bar (splice (some-macro foo)) baz) where some-macro expands into a parray whose elements get semantically spliced into the barray-cat.
+    * Another example: (arrp/barray-cat foo bar (splice (1 2 3)) baz) is semantically the same as (arrp/barray-cat foo bar 1 2 3 baz)
+    * Using this, an assembler implementation could have a 'mov' macro that works as follows: (mov rdi (label-ref foo)) -> ("\xFF\xFF" (label-rel-ref foo 4 LE)), then you can splice it in.
+        * Could go even further: (mov rdi (label-ref foo)) -> (splice ("\xFF\xFF" (label-rel-ref foo 4 LE)))
+        * It's debatable if this is a good design for an assembler though, as in this case we're making the assumption that the instruction is ending up inside a barray-cat - and making assumptions about our expansion environment is usually a bad
+          design.

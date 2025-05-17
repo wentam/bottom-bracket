@@ -139,78 +139,82 @@ _start:
 
   call init_macro_stacks
 
-  mov rdi, readermac_msg
-  mov rsi, readermac_msg_len
-  mov rdx, stderr_fd
-  call write
+  ;; Dump reader macro stack
+  ;mov rdi, readermac_msg
+  ;mov rsi, readermac_msg_len
+  ;mov rdx, stderr_fd
+  ;call write
 
-  mov rdi, qword[macro_stack_reader]
-  mov rsi, stderr_fd
-  mov rdx, 16
-  call kv_stack_bindump_buffers
+  ;mov rdi, qword[macro_stack_reader]
+  ;mov rsi, stderr_fd
+  ;mov rdx, 16
+  ;call kv_stack_bindump_buffers
 
-  mov rdi, printermac_msg
-  mov rsi, printermac_msg_len
-  mov rdx, stderr_fd
-  call write
+  ;; Dump printer macro stack
+  ;mov rdi, printermac_msg
+  ;mov rsi, printermac_msg_len
+  ;mov rdx, stderr_fd
+  ;call write
 
-  mov rdi, qword[macro_stack_printer]
-  mov rsi, stderr_fd
-  mov rdx, 16
-  call kv_stack_bindump_buffers
+  ;mov rdi, qword[macro_stack_printer]
+  ;mov rsi, stderr_fd
+  ;mov rdx, 16
+  ;call kv_stack_bindump_buffers
 
-  mov rdi, structuralmac_msg
-  mov rsi, structuralmac_msg_len
-  mov rdx, stderr_fd
-  call write
+  ;; Dump structural macro stack
+  ;mov rdi, structuralmac_msg
+  ;mov rsi, structuralmac_msg_len
+  ;mov rdx, stderr_fd
+  ;call write
 
-  mov rdi, qword[macro_stack_structural]
-  mov rsi, stderr_fd
-  mov rdx, 16
-  call kv_stack_bindump_buffers
+  ;mov rdi, qword[macro_stack_structural]
+  ;mov rsi, stderr_fd
+  ;mov rdx, 16
+  ;call kv_stack_bindump_buffers
 
   mov rdi, stdin_fd
   call read
   mov r12, rax
 
-  mov rdi, buffer_msg
-  mov rsi, buffer_msg_len
-  mov rdx, stderr_fd
-  call write
+  ;; Dump read result
+  ;mov rdi, buffer_msg
+  ;mov rsi, buffer_msg_len
+  ;mov rdx, stderr_fd
+  ;call write
 
-  mov rdi, r12
-  mov rsi, stderr_fd
-  mov rdx, 16
-  call dump_read_result_buffer
+  ;mov rdi, r12
+  ;mov rsi, stderr_fd
+  ;mov rdx, 16
+  ;call dump_read_result_buffer
 
-  mov rdi, result_msg
-  mov rsi, result_msg_len
-  mov rdx, stderr_fd
-  call write
+  ;mov rdi, result_msg
+  ;mov rsi, result_msg_len
+  ;mov rdx, stderr_fd
+  ;call write
 
-  mov rdi, r12
-  mov rsi, stderr_fd
-  mov rdx, 16
-  call dump_read_result
+  ;mov rdi, r12
+  ;mov rsi, stderr_fd
+  ;mov rdx, 16
+  ;call dump_read_result
 
   ;; Print pre-expanded read
-  mov rdi, print_msg
-  mov rsi, print_msg_len
-  mov rdx, stderr_fd
-  call write
+  ;mov rdi, print_msg
+  ;mov rsi, print_msg_len
+  ;mov rdx, stderr_fd
+  ;call write
 
-  mov rdi, r12
-  mov rsi, stderr_fd
-  call print
+  ;mov rdi, r12
+  ;mov rsi, stderr_fd
+  ;call print
 
   ;; Create macroexpansion backing buffer
   call byte_buffer_new
   mov r14, rax
 
   ;; Newline
-  mov rdi, 10
-  mov rsi, stderr_fd
-  call write_char
+  ;mov rdi, 10
+  ;mov rsi, stderr_fd
+  ;call write_char
 
   ;; Macroexpand
   mov rdi, r12
@@ -245,21 +249,21 @@ _start:
 
 
   ;; Dump macroexpansion backing buffer
-  mov rdi, me_msg
-  mov rsi, me_msg_len
-  mov rdx, stderr_fd
-  call write
+  ;mov rdi, me_msg
+  ;mov rsi, me_msg_len
+  ;mov rdx, stderr_fd
+  ;call write
 
-  mov rdi, r14
-  mov rsi, stderr_fd
-  mov rdx, 16
-  call byte_buffer_bindump_buffer
+  ;mov rdi, r14
+  ;mov rsi, stderr_fd
+  ;mov rdx, 16
+  ;call byte_buffer_bindump_buffer
 
   ;; Print post-expanded read
-  mov rdi, print2_msg
-  mov rsi, print2_msg_len
-  mov rdx, stderr_fd
-  call write
+  ;mov rdi, print2_msg
+  ;mov rsi, print2_msg_len
+  ;mov rdx, stderr_fd
+  ;call write
 
   mov rdi, r15
   mov rsi, stdout_fd
