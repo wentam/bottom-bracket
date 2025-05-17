@@ -14,7 +14,7 @@
 ;   * 10 = mem+disp32
 ;   * 11 = register direct
 ;   * When mod = 00 and r/m = 101, it's absolute 32-bit address or RIP-relative addressing (which?)
-;   * When r/m = 100, it's always SIB
+;   * When r/m = 100, it's always SIB unless mod=11
 ; * reg (3 bits):
 ;   * 000 rax/eax
 ;   * 001 rcx/ecx
@@ -752,6 +752,178 @@
       "\x41\x5E" ; pop r14
       "\x41\x5D" ; pop r13
       "\x41\x5C" ; pop r12
+      "\xC3"))   ; ret
+
+  (RM-try-encode-mem+sib-fn
+    (aarrp/barray-cat
+      "\x41\x54" ; push r12
+      "\x41\x55" ; push r13
+      "\x41\x56" ; push r14
+      "\x41\x57" ; push r15
+      "\x53"     ; push rbx
+
+      "\x49\x89\xFC" ; mov r12, rdi - memory operand
+      "\x49\x89\xF5" ; mov r13, rsi - output byte buffer
+
+      ;; If base != ascii_0 && index != register_4, we can encode this memory operand
+      ;; with an SIB byte (and displacement if present).
+
+      ;; If our input is not a parray of length 5, goto nope
+      "\x49\x83\x3C\x24\xFA"              ; cmp qword[r12], -6
+      "\x0F\x85"(label-rel-ref nope 4 LE) ; jne nope
+
+      ;; If base isn't a valid register name, goto nope
+      "\x49\x8B\x7C\x24\x10"                                     ; mov rdi, qword[r12+16]
+      "\x48\xB8" (valid-register-name-p-fn barray-raw-addr 8 LE) ; mov rax, valid-register-name-p
+      "\xFF\xD0"                                                 ; call rax
+      "\x48\x83\xF8\x01"                                         ; cmp rax, 1
+      "\x0F\x85" (label-rel-ref nope 4 LE)                       ; jne nope
+
+      ;; index != ascii_0 && If reg-name-to-num(index) == 4, goto nope (we can't do rsp and
+      ;; friends for index)
+      "\x49\x8B\x7C\x24\x18"                            ; mov rdi, qword[r12+24]
+      "\x48\xBE"(zero addr 8 LE)                        ; mov rsi, zero
+      "\x48\xB8"(aarrp/builtin-func-addr/barray-equalp) ; mov rax, barray-equalp
+      "\xFF\xD0"                                        ; call rax
+      "\x48\x83\xF8\x01"                                ; cmp rax, 1
+      "\x0F\x84" (label-rel-ref is-zero 4 LE)           ; je is-zero
+
+      "\x49\x8B\x7C\x24\x18"                           ; mov rdi, qword[r12+24]
+      "\x48\xB8"(reg-name-to-num barray-raw-addr 8 LE) ; mov rax, reg-name-to-num
+      "\xFF\xD0"                                       ; call rax
+      "\x48\x83\xF8\x04"                               ; cmp rax, 4
+      "\x0F\x84" (label-rel-ref nope 4 LE)             ; je nope
+      (label is-zero)
+
+      ;; If scale isn't 1, 2, 4 or 8, goto nope (anything else is invalid input)
+      "\x49\x8B\x7C\x24\x20"                        ; mov rdi, qword[r12+32]
+      "\xBE\x0A\x00\x00\x00"                        ; mov rsi, 10
+      "\x48\xB8"(parse-int-fn barray-raw-addr 8 LE) ; mov rax, parse-int-fn
+      "\xFF\xD0"                                    ; call rax
+      "\x48\x85\xC0"                                ; test rax, rax
+      "\x0F\x84"(label-rel-ref nope 4 LE)           ; jz nope
+      "\x48\x89\xC6"                                ; mov rsi, rax
+      "\x48\xFF\xCE"                                ; dec rsi
+      "\x48\x85\xF0"                                ; test rax, rsi
+      "\x0F\x85"(label-rel-ref nope 4 LE)           ; jnz nope
+      "\x48\x83\xF8\x08"                            ; cmp rax, 8
+      "\x0F\x87"(label-rel-ref nope 4 LE)           ; ja nope
+
+      ;; If we got here, we can do it!
+
+      "\x41\xBE\x04\x00\x00\x00" ; mov r14, 4 - we will encode our MODRM byte here, 4 sets SIB mode
+      "\x41\xBF\x00\x00\x00\x00" ; mov r15, 0 - we will encode our SIB byte here 2-3-3 S-I-B
+
+      ;; Determine if we're doing disp0, disp8 or disp32.
+      ;;   * update MODRM accordingly and emit the MODRM byte
+      "\x49\x8B\x7C\x24\x28"                        ; mov rdi, qword[r12+40]
+      "\xBE\x0A\x00\x00\x00"                        ; mov rsi, 10
+      "\x48\xB8"(parse-int-fn barray-raw-addr 8 LE) ; mov rax, parse-int-fn
+      "\xFF\xD0"                                    ; call rax
+      "\x48\x89\xC3"                                ; mov rbx, rax - rbx = displacement
+
+      "\x48\x83\xFB\x00"                            ; cmp rbx, 0
+      "\x0F\x84" (label-rel-ref disp-done 4 LE)     ; je disp-done
+      "\x48\x83\xFB\x7F"                            ; cmp rbx, 127
+      "\x0F\x8F" (label-rel-ref disp32 4 LE)        ; jg disp32
+      "\x48\x83\xFB\x80"                            ; cmp rbx, -128
+      "\x0F\x8C" (label-rel-ref disp32 4 LE)        ; jl disp32
+
+      (label disp8)
+      "\x41\x80\xCE\x40"                            ; or r14b, 64
+      "\xE9" (label-rel-ref disp-done 4 LE)         ; jmp disp-done
+      (label disp32)
+      "\x41\x80\xCE\x80"                            ; or r14b, 128
+
+      (label disp-done)
+
+      "\x4C\x89\xEF"                                            ; mov rdi, r13
+      "\x4C\x89\xF6"                                            ; mov rsi, r14
+      "\x48\xB8"(aarrp/builtin-func-addr/byte-buffer-push-int8) ; mov rax, bb_push_int8
+      "\xFF\xD0"                                                ; call rax
+
+      ;; Work out 'base' part of SIB
+      "\x49\x8B\x7C\x24\x10"                           ; mov rdi, qword[r12+16]
+      "\x48\xB8"(reg-name-to-num barray-raw-addr 8 LE) ; mov rax, reg-name-to-num
+      "\xFF\xD0"                                       ; call rax
+      "\x41\x08\xC7"                                   ; or r15b, al
+
+      ;; Work out 'index' part of SIB
+      ;;        * If index != ascii 0, it's a register name
+      ;;        * If index == ascii 0, write 100 to the field (this is why no rsp and friends)
+      "\x49\x8B\x7C\x24\x18"                            ; mov rdi, qword[r12+24]
+      "\x48\xBE"(zero addr 8 LE)                        ; mov rsi, zero
+      "\x48\xB8"(aarrp/builtin-func-addr/barray-equalp) ; mov rax, barray-equalp
+      "\xFF\xD0"                                        ; call rax
+      "\x48\x83\xF8\x01"                                ; cmp rax, 1
+      "\x0F\x84" (label-rel-ref index-none 4 LE)        ; je index-none
+
+      ;; Index != ascii 0
+      "\x49\x8B\x7C\x24\x18"                           ; mov rdi, qword[r12+24]
+      "\x48\xB8"(reg-name-to-num barray-raw-addr 8 LE) ; mov rax, reg-name-to-num
+      "\xFF\xD0"                                       ; call rax
+      "\x48\xC1\xE0\x03"                               ; shl rax, 3
+      "\x41\x08\xC7"                                   ; or r15b, al
+
+      "\xE9"(label-rel-ref index-done 4 LE)            ; jmp index-done
+      (label index-none)
+
+      ;; Index == ascii 0
+      "\x40\xB7\x04"     ; mov dil, 4
+      "\x40\xC0\xE7\x03" ; shl dil, 3
+      "\x41\x08\xFF"     ; or r15b, dil
+
+      (label index-done)
+
+      ;; Work out 'scale' part of SIB
+      "\x49\x8B\x7C\x24\x20"                        ; mov rdi, qword[r12+32]
+      "\xBE\x0A\x00\x00\x00"                        ; mov rsi, 10
+      "\x48\xB8"(parse-int-fn barray-raw-addr 8 LE) ; mov rax, parse-int-fn
+      "\xFF\xD0"                                    ; call rax
+      "\x48\x0F\xBD\xC0"                            ; bsr rax, rax
+      "\x48\xC1\xE0\x06"                            ; shl rax, 6
+      "\x41\x08\xC7"                                ; or r15b, al
+
+      ;; Emit the SIB byte
+      "\x4C\x89\xEF"                                            ; mov rdi, r13
+      "\x4C\x89\xFE"                                            ; mov rsi, r15
+      "\x48\xB8"(aarrp/builtin-func-addr/byte-buffer-push-int8) ; mov rax, bb_push_int8
+      "\xFF\xD0"                                                ; call rax
+
+      ;; Encode displacement accordingly in branches for disp0 disp8 disp32
+      "\x48\x83\xFB\x00"                          ; cmp rbx, 0
+      "\x0F\x84" (label-rel-ref disp-done-2 4 LE) ; je disp-done
+      "\x48\x83\xFB\x7F"                          ; cmp rbx, 127
+      "\x0F\x8F" (label-rel-ref disp32-2 4 LE)    ; jg disp32
+      "\x48\x83\xFB\x80"                          ; cmp rbx, -128
+      "\x0F\x8C" (label-rel-ref disp32-2 4 LE)    ; jl disp32
+
+      (label disp8-2)
+      "\x4C\x89\xEF"                                            ; mov rdi, r13
+      "\x48\x89\xDE"                                            ; mov rsi, rbx
+      "\x48\xB8"(aarrp/builtin-func-addr/byte-buffer-push-int8) ; mov rax, bb_push_int8
+      "\xFF\xD0"                                                ; call rax
+      "\xE9" (label-rel-ref disp-done-2 4 LE)                   ; jmp disp-done
+      (label disp32-2)
+      "\x4C\x89\xEF"                                            ; mov rdi, r13
+      "\x48\x89\xDE"                                            ; mov rsi, rbx
+      "\x48\xB8"(aarrp/builtin-func-addr/byte-buffer-push-int32) ; mov rax, bb_push_int32
+      "\xFF\xD0"                                                ; call rax
+
+      (label disp-done-2)
+
+      "\xB8\x01\x00\x00\x00" ; mov rax, 1
+      "\xE9" (label-rel-ref epilogue 4 LE) ; jmp epilogue
+
+      (label nope)
+      "\x48\xC7\xC0\x00\x00\x00\x00" ; mov rax, 0
+
+      (label epilogue)
+      "\x5B"     ; pop rbx
+      "\x41\x5F" ; pop r15
+      "\x41\x5E" ; pop r14
+      "\x41\x5D" ; pop r13
+      "\x41\x5C" ; pop r12
       "\xC3")))  ; ret
 
   (aarrp/with-macros
@@ -1189,6 +1361,12 @@
              "\x0F\x84"(label-rel-ref mem-operand-done 4 LE)               ; je mem-operand-done
 
              ;; TODO try mem+sib+disp encoding
+             (REX W)"\x89\xDF"                                             ; mov rdi, rbx
+             (REX W R)"\x89\xEE"                                           ; mov rsi, r13
+             (REX W)"\xB8"(RM-try-encode-mem+sib-fn barray-raw-addr 8 LE)  ; mov rax, mem+sib-fn
+             "\xFF\xD0"                                                    ; call rax
+             (REX W)"\x83\xF8"(imm8 1)                                     ; cmp rax, 1
+             "\x0F\x84"(label-rel-ref mem-operand-done 4 LE)               ; je mem-operand-done
 
              ;; Error if we got here, nobody succeeded in encoding this operand
              (REX W)"\xBF"(memop-error addr 8 LE)              ; mov rdi, memop-error
@@ -1285,7 +1463,7 @@
     (
      (REX W)
      (RM rax (m64 r11 0 1 127))
-     (aarrp/barray-cat (REX W) "\x89" (RM rdi (m64 rdi 0 1 2)))
+     (aarrp/barray-cat (REX W) "\x89" (RM rdi (m64 rsp 0 2 2)))
      )))
 
 ; (m64 rdi 0 1 0)
