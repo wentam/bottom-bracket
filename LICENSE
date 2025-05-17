@@ -1,6 +1,8 @@
 arrp License v1.0
 Copyright (c) 2025 Matthew Egeler
 
+The "Original Author" referred to in this license is: Matthew Egeler.
+
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the “Software”), to use,
 copy, modify, and distribute the Software, subject to the following conditions:
@@ -20,30 +22,64 @@ copy, modify, and distribute the Software, subject to the following conditions:
    - Surveillance technology
    - Activities contributing to warfare
 
-   The Software is intended to empower individuals, foster learning, and support open
-   collaboration. Uses aligned with these values are especially welcomed.
+   The Software is intended to empower individuals, foster learning, and
+   support open community collaboration. Uses aligned with these values are
+   especially welcomed.
 
 2. Non-Commercial Use Only
 
    Use of the Software in any commercial context - including but not limited to
    selling, offering services powered by the Software, integrating into
-   proprietary systems, or using it in for-profit environments - is strictly
-   prohibited without the express written permission of the author.
+   proprietary systems, or using it in for-profit activity - is strictly
+   prohibited without the express written permission of the Original Author.
 
    Commercial licenses may be granted on a case-by-case basis. Contact the
-   author at licensing@wentam.net for inquiries regarding commercial use.
+   Original Author at licensing@wentam.net for inquiries regarding commercial
+   use.
 
-3. Attribution
+3. The arrp language specification
+
+   The arrp language specification is intended to be open and portable.
+   Independent reimplementations of the language are allowed and encouraged
+   to foster a healthy ecosystem, and may be licensed under different terms,
+   provided they do not copy from this implementation.
+
+   This license - including ethical and commercial-use restrictions - applies
+   strictly to this implementation and any code derived from it.
+
+4. Use in other work
+
+   Authors of programs written in the arrp language may choose their own
+   license terms for their own code, including permissive or copyleft licenses
+   such as MIT, GPL, or Apache. However, this freedom does not waive the
+   commercial or ethical restrictions on use of this arrp implementation or
+   associated tooling.
+
+5. Contributions
+
+   By submitting code, documentation, or other content to this project,
+   contributors agree to the terms of the Contributor License Agreement (CLA)
+   maintained by the Original Author. The CLA governs the rights granted by
+   contributors and ensures that the Original Author may continue to license
+   the Software under the terms of this license or alternative terms in the
+   future.
+
+   By submitting code or documentation to this project, contributors agree to
+   license their contributions under the same terms as this license and grant
+   the Original Author the right to relicense their contributions for any
+   future versions of the Software.
+
+6. Attribution
 
    All copies or substantial portions of the Software must include the above
    copyright notice, this list of conditions, and the following disclaimer.
 
-4. Disclaimer
+7. Disclaimer
 
    THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-   THE SOFTWARE.
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+   IN THE SOFTWARE.
