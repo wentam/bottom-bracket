@@ -25,3 +25,9 @@
   * It would only effect locally-visible forms AKA implemented recursively BEFORE macroexpansion
   * builtin because it's needed to make the language practical
 * namespace all the assembler macros
+* builtin function address macro changes:
+  * remove "builtin-" prefix - just (arrp/func-addr/foo)
+  * require the user specifies the platform they want the
+  function address for like (arrp/func-addr/foo x86_64-linux)
+  * See if there's a good way to simplify defining these macros
+  inside arrp. Maybe use a template macro.

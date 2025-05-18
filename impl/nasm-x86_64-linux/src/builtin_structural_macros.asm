@@ -69,7 +69,10 @@ builtin_bb_push_barray_macro_name: db 47,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/
 builtin_bb_data_len_macro_name: db 51,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-get-data-length"
 builtin_bb_get_buf_macro_name: db 43,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-get-buf"
 builtin_bb_write_int64_macro_name: db 47,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-write-int64"
+builtin_bb_new_macro_name: db 39,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-new"
+builtin_bb_free_macro_name: db 40,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-free"
 builtin_barray_equalp_macro_name: db 37,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/barray-equalp"
+bsumLE_macro_name: db 12,0,0,0,0,0,0,0,"aarrp/bsumLE"
 
 barray_literal_macro_name: db 17,0,0,0,0,0,0,0,"test_macro_barray"
 barray_test_expansion: db 17,0,0,0,0,0,0,0,"test_macro_barray"
@@ -199,6 +202,36 @@ push_builtin_structural_macros:
   mov qword[rsp+8], builtin_bb_push_int16
   mov rdi, qword[macro_stack_structural]    ; macro stack
   mov rsi, builtin_bb_push_int16_macro_name ; macro name
+  mov rdx, rsp                              ; code
+  call kv_stack_push
+  add rsp, 16
+
+  ;; Push bsumLE macro
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], bsumLE
+  mov rdi, qword[macro_stack_structural]    ; macro stack
+  mov rsi, bsumLE_macro_name ; macro name
+  mov rdx, rsp                              ; code
+  call kv_stack_push
+  add rsp, 16
+
+  ;; Push builtin_bb_new macro
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], builtin_bb_new
+  mov rdi, qword[macro_stack_structural]    ; macro stack
+  mov rsi, builtin_bb_new_macro_name ; macro name
+  mov rdx, rsp                              ; code
+  call kv_stack_push
+  add rsp, 16
+
+  ;; Push builtin_bb_free macro
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], builtin_bb_free
+  mov rdi, qword[macro_stack_structural]    ; macro stack
+  mov rsi, builtin_bb_free_macro_name ; macro name
   mov rdx, rsp                              ; code
   call kv_stack_push
   add rsp, 16
@@ -406,6 +439,44 @@ builtin_bb_push_int16:
   pop r12
   ret
 builtin_bb_push_int16_end:
+
+builtin_bb_free:
+  push r12
+  mov r12, rsi
+
+  mov rdi, r12
+  mov rsi, 8
+  mov rax, byte_buffer_push_int64
+  call rax
+
+  mov rdi, r12
+  mov rsi, byte_buffer_free
+  mov rax, byte_buffer_push_int64
+  call rax
+  mov rax, 0
+
+  pop r12
+  ret
+builtin_bb_free_end:
+
+builtin_bb_new:
+  push r12
+  mov r12, rsi
+
+  mov rdi, r12
+  mov rsi, 8
+  mov rax, byte_buffer_push_int64
+  call rax
+
+  mov rdi, r12
+  mov rsi, byte_buffer_new
+  mov rax, byte_buffer_push_int64
+  call rax
+  mov rax, 0
+
+  pop r12
+  ret
+builtin_bb_new_end:
 
 builtin_bb_get_buf:
   push r12
@@ -2529,3 +2600,149 @@ with_:
   pop rbp
   ret
 with_end:
+
+_bsumLE_add_to_buf:
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+
+  mov r12, rdi ; r12 = byte buffer barray number
+  mov r13, rsi ; r13 = barray to add
+
+  ;; Iterate over the bytes of our barray to add
+  mov r14, 0
+  mov r15, qword[r13] ; r15 = length of barray to add
+  add r13, 8 ; move past length
+
+  cmp r15, 0
+  je .loop_break ; nothing to do here
+
+  dec r15
+  clc ; clear carry flag
+
+  .loop_havedata:
+  mov bl, byte[r13] ; bl (rbx byte) = our byte to add
+  jmp .hd
+  .loop:
+  mov bl, 0
+  .hd:
+  pushf
+
+  ;; If a byte doesn't exist at this index yet, push a fresh byte to our output
+  mov rdi, r12
+  call byte_buffer_get_data_length
+  sub rax, 8
+  cmp rax, r14
+  jg .good_out_buf
+
+  mov rdi, r12
+  mov rsi, 0
+  call byte_buffer_push_byte
+
+  .good_out_buf:
+
+  mov rdi, r12
+  call byte_buffer_get_buf
+  add rax, 8 ; move past length
+  add rax, r14 ; move to target byte
+
+  popf
+
+  adc byte[rax], bl
+
+  lea r13, [r13+8] ; CF-preserving addition
+  inc r14
+  dec r15
+  jns .loop_havedata ; repeat if we have more input data
+  jc .loop           ; no data, but repeat if carry flag set
+  .loop_break:
+
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  ret
+
+;; Sums the integers listed - represented as barrays of bytes - and expands into
+;; a barray of bytes representing the sum. *not* ascii base-10 integers, but
+;; a raw binary sum.
+;;
+;; Supports integers of arbitrary size (bignum / greater than 8 byte works)
+;;
+;; TODO allow user to optionally specify a fixed width-output?
+bsumLE:
+  push rbp
+  mov rbp, rsp
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+  sub rsp, 8
+
+  mov r12, rdi ; input structure
+  mov r13, rsi ; output byte buffer
+
+  ;; Write placeholder barray length to our output
+  mov rdi, r13
+  mov rsi, 0
+  call byte_buffer_push_int64
+
+  ;; Macroexpand tail of our input
+  call byte_buffer_new
+  mov qword[rbp-48], rax ; qword[rbp-48] = tail macroexpansion buffer
+
+  mov rdi, r12
+  mov rsi, qword[rbp-48]
+  call structural_macro_expand_tail
+  mov rbx, rax ; rbx = tail
+
+  mov r14, qword[rbx]
+  not r14 ; r14 = length of input tail
+
+  add rbx, 8 ; move past length
+
+  ;; Iterate over the elements of our input parray, excluding the first item
+  .element_loop:
+  cmp r14, 0
+  jle .element_loop_break
+
+  mov r15, qword[rbx] ; r15 = parray element*
+
+  mov rdi, r13
+  mov rsi, r15
+  call _bsumLE_add_to_buf
+
+  dec r14
+  add rbx, 8
+  jmp .element_loop
+  .element_loop_break:
+
+  ;; TODO trim extra trailing zeros?
+
+  ;; Free tail macroexpansion
+  mov rdi, qword[rbp-48]
+  call byte_buffer_free
+
+  ;; Update our length placeholder for output barray
+  mov rdi, r13
+  call byte_buffer_get_data_length
+  sub rax, 8
+
+  mov rdi, r13
+  mov rsi, 0
+  mov rdx, rax
+  call byte_buffer_write_int64
+
+  mov rax, 0
+  add rsp, 8
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  pop rbp
+  ret

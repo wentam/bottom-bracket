@@ -1,4 +1,4 @@
-Keep these notes around even after stuff is implemented so I can remember why I did things! I often forget.
+Keep these notes around even after stuff is implemented so I can remember why I did things! I often forget. Maybe move old, less relevant notes to a diff file tho at some point.
 
 Try to re-read this occassionaly when working on aarrp so we remember important things.
 
@@ -8,6 +8,9 @@ When reading these notes, note that the macro stack was renamed to kv stack late
 Aarrp: What if we did not inherit our abstractions, but derived them?
 
 "first-principles reductionist simulator"
+
+arrp - machine language with macros.
+A language where syntax, semantics, and structure are yours to define.
 
 * We need structural macros like (with-popped-printer-macros (barray) (my-form)) that expand (my-form) without
 specific printer macros present
@@ -281,3 +284,22 @@ Interestingly, that means that even with this design there are certain situation
         * Could go even further: (mov rdi (label-ref foo)) -> (splice ("\xFF\xFF" (label-rel-ref foo 4 LE)))
         * It's debatable if this is a good design for an assembler though, as in this case we're making the assumption that the instruction is ending up inside a barray-cat - and making assumptions about our expansion environment is usually a bad
           design.
+* for better error reporting, we should maintain a "macro call stack" in memory, probably using kv_stack. Every time we call a macro, it enters the stack, removed when it returns.
+    * This means we need a standard "call structural macro" interface, don't pull it out of your kv_stack. Maybe put this in structural_macro_expand's file - and call it structural_macro_call.
+    * error-exit/error_exit should dump this stack on error.
+* Right now, builtin function addresses are provided through macros like (aarrp/builtin-func-addr/byte-buffer-new). This is pretty simply when the arrp implementation only supports one platform, but if the arrp implementation supports multiple,
+  we need to think about this a little bit.
+    * The implementation could temporarily push a different macro that expands into that platform's address format while evaluating each platform
+    * The builtin function address macros could allow you to specify the format - like (arrp/builtin-func-addr/my-func 4 LE).
+        * This is probably the most flexible solution, as we shouldn't assume you're using the function address for use in defining macros.
+        * Could make it so the old way still works, but emits a deprecation warning if you do it that way.
+    * Actually no: you care about what platform the function is for. If you have an arrp implementation that supports multiple platforms for macro execution, thus you want (arrp/func-addr/my-func x86_64-linux). This would expand with the width
+      and endianness relevant to that platform - not user-specified because we need to be able to access that whole platform's address space.
+* A fancy self-hosting implementation of arrp written from a higher level of abstraction, optimized, and supports executing macros written for a lot of different platforms through virtualization would be a nice "practicality" design choice.
+    * Just make sure it's bootstrappable always through the assembly versions
+* Our high-level language should always support at least 64-bit integers, even on platforms like AVR. Much like C. Once in the high-level language, you should be abstracted away from the target platform.
+    * Maybe bignums too, though explicitly sized integers are needed for perf as we learned in my CL work.
+    * We might want to implement this at the IR level - I lean that way.
+        * What about IR-level bignums? Language designers can choose not to compile into them.
+            * I like the idea of my high-level language having a natively supported bignum type.
+        * Probably implement through an "integer reduction" pass, IR-to-IR.

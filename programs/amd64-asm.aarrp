@@ -43,7 +43,7 @@
 ;;        * This is a proper nightmare because instructions like mov al, spl are now invalid b/c
 ;;          the REX byte promotes us to 64-bit, we need REX for spl, but no REX for al.
 ;;        * think about what happens with movzx/movsx and different operand sizes.
-;;        * probably do this directly in the with-x86_64-asm macro, don't resolve it in the DSL:
+;;        * probably do this directly in the x86_64-asm macro, don't resolve it in the DSL:
 ;;          * prepend REX byte if not there in the DSL form and one of these registers is used
 ;;          * possibly error in some invalid situations that wouldn't work out right
 ;;          * probably error if one register operand is 32 or 16 bit when these registers are used.
@@ -128,6 +128,11 @@
 ;;  Would just need to change the parse-int function.
 ;; default to base 10.
 
+;; TODO: We could define all the macros in the 'with', not 'with-macros' block, then
+;; have the with-x86_64-asm macro push those macros before assembling each instruction,
+;; then pop them. This way these macros are not 'exposed' to the user of the assembler,
+;; and we don't need to worry about namespacing them.
+
 (aarrp/with
 
   ;;; --- Data and utility funtions ---
@@ -136,6 +141,7 @@
    (MODRM-input-error     "ERROR: Bad input to RM\n")
    (memop-error           "ERROR: Incorrectly formatted or unsupported memory operand.\n")
    (reg-name-to-num-not-found-error "ERROR: invalid register specified\n")
+   (bregnum-bad-use-error "ERROR: Invalid use of of bregnum. Try (bregnum register-name).")
 
    (MODRM-reg        "reg")
    (MODRM-mem        "mem")
@@ -146,6 +152,11 @@
    (regname-r13 r13)
 
    (zero 0)
+
+   (instruction-table
+     (mov ((r64 r64)   (REX W) "\x89" (RM rdi rsi))
+          ((r64 m64)   (REX W) "\x89" (RM rdi (m64 rsi 0 1 0)))
+          ((r64 imm32) (REX W) "\xC7" (RM 0 rdi) (imm32 5))))
 
    (valid-registers (rax eax   ax    al
                      rcx ecx   cx    cl
@@ -1206,6 +1217,7 @@
            "\x41\x5C"  ; pop r12
            "\xC3")))
 
+      ;; Expands into MODRM + SIB + displacement bytes
       (RM
         (x86_64-linux
           (aarrp/barray-cat
@@ -1266,7 +1278,7 @@
            "\x0F\x8C"(label-rel-ref is-memory-operand 4 LE) ; jl is-memory-operand
 
            (label-scope
-             (REX B)"\xB6"(imm8 0) ; mov r14b, 0  - our output byte
+             (REX B)"\xB6"(imm8 192) ; mov r14b, 192  - our output byte with mod 11 set
 
              ;; If element 2 is a barray of 1 byte and < 8, or the byte in
              (REX W B)"\x8B\x7C\x24"(imm8 24)             ; mov rdi, qword[r12+24]
@@ -1360,7 +1372,7 @@
              (REX W)"\x83\xF8"(imm8 1)                                     ; cmp rax, 1
              "\x0F\x84"(label-rel-ref mem-operand-done 4 LE)               ; je mem-operand-done
 
-             ;; TODO try mem+sib+disp encoding
+             ;; Try mem+sib+disp encoding
              (REX W)"\x89\xDF"                                             ; mov rdi, rbx
              (REX W R)"\x89\xEE"                                           ; mov rsi, r13
              (REX W)"\xB8"(RM-try-encode-mem+sib-fn barray-raw-addr 8 LE)  ; mov rax, mem+sib-fn
@@ -1459,11 +1471,113 @@
            (REX B)"\x5E"  ; pop r14
            (REX B)"\x5D"  ; pop r13
            (REX B)"\x5C"  ; pop r12
-           "\xC3"))))     ; ret
-    (
-     (REX W)
-     (RM rax (m64 r11 0 1 127))
-     (aarrp/barray-cat (REX W) "\x89" (RM rdi (m64 rsp 0 2 2)))
+           "\xC3")))      ; ret
+
+      (bregnum
+        (x86_64-linux
+          (aarrp/barray-cat
+           (REX B)"\x54"     ; push r12
+           (REX B)"\x55"     ; push r13
+           (REX B)"\x56"     ; push r14
+           (REX W)"\xC7"(RM 0 rax)(imm32 -1) ;; TODO tmp
+
+           (REX W B)"\x89"(RM rdi r12)   ; mov r12, rdi - input structure*
+           (REX W B)"\x89"(RM rsi r13)   ; mov r13, rsi - output byte buffer*
+
+           ;; Error if our input structure isn't of length 2
+           (REX W B)"\x83"(RM 7 (m64 r12 0 1 0))(imm8 -3) ; cmp qword[r12], -3
+           "\x0F\x84" (label-rel-ref good-size 4 LE) ; je good-size
+
+          ;; TODO actually make error
+           (REX W)(aarrp/bsumLE "\xB8" "\x07")(bregnum-bad-use-error addr 8 LE) ; mov rdi, msg
+           "\x48\xB8"(error-exit-fn barray-raw-addr 8 LE) ; mov rax, error-exit-fn
+           "\xFF\xD0"                                       ; call rax
+
+           (label good-size)
+
+           ;; Push our length to output buffer (1)
+           (REX W R)"\x89\xEF"                                           ; mov rdi, r13
+           (REX W)"\xC7\xC6"(imm32 1)                                    ; mov rsi, 1
+           (REX W)"\xB8"(aarrp/builtin-func-addr/byte-buffer-push-int64) ; mov rax, bb_push_int64
+           "\xFF\xD0"                                                    ; call rax
+
+           (REX W B)"\x8B"(RM rdi (m64 r12 0 1 16))         ; mov rdi, qword[r12+16]
+           "\x48\xB8"(reg-name-to-num barray-raw-addr 8 LE) ; mov rax, reg-name-to-num
+           "\xFF\xD0"                                       ; call rax
+
+           ;; Push our output byte to output buffer
+           "\x4C\x89\xEF"                                             ; mov rdi, r13
+           (REX W)"\x89"(RM rax rsi)                                  ; mov rsi, rax
+           (REX W)"\xB8"(aarrp/builtin-func-addr/byte-buffer-push-int8)  ; mov rax, bb_push_int8
+           "\xFF\xD0"                                                 ; call rax
+
+           (REX W)"\xC7"(RM 0 rax)(imm32 0) ; mov rax, 0
+           (REX B)"\x5E"  ; pop r14
+           (REX B)"\x5D"  ; pop r13
+           (REX B)"\x5C"  ; pop r12
+           "\xC3")))
+
+      (asm/x86_64
+        (x86_64-linux
+          (aarrp/barray-cat
+            (REX B)"\x54"     ; push r12
+            (REX B)"\x55"     ; push r13
+            (REX B)"\x56"     ; push r14
+            (REX B)"\x57"     ; push r15
+            "\x53"            ; push rbx
+
+            (REX W B)"\x89"(RM rdi r12)   ; mov r12, rdi - input structure*
+            (REX W B)"\x89"(RM rsi r13)   ; mov r13, rsi - output byte buffer*
+
+            ;; Start a new byte buffer for our parray output
+            (REX W)(aarrp/bsumLE "\xB8" (bregnum rax))(aarrp/builtin-func-addr/byte-buffer-new) ; mov rax, bb_new
+            "\xFF"(RM 2 rax)                                       ; call rax
+            (REX W B)"\x89"(RM rax r14)                            ; mov r14, rax
+
+            ;; TODO write a placeholder parray length to our parray output byte buffer
+            ;; TOOD write a pointer to a static barray of "aarrp/barray-cat" as the first element
+            ;; of our parray output byte buffer
+            ;; TODO create input tail macroexpand byte buffer
+            ;; TODO macroexpand tail of our input into input tail buffer
+            ;; TODO iterate over our tail, producing a new parray
+            ;;        * TODO if the element is a barray:
+            ;;          * write the barray (not a pointer) to our output byte buffer
+            ;;          * write a pointer to the barray to our parray output buffer
+            ;;        * TODO if the element is a parray, scan our instruction table to see if
+            ;;          the element is an instruction.
+            ;;          * If it's not an instruction name, just output the parray to our new parray
+            ;;            * write parray bytes to output buffer (via macroexpand recursive copy)
+            ;;            * write pointer to parray output buf
+            ;;          * If it is an instruction name: 
+            ;;            * determine it's parameter types
+            ;;            * select the correct encoding entry for that instruction (error if none)
+            ;;            * push relevant access macros (param 0) (param 1)
+            ;;            * OR wrap the encoding entry with a 'arrp/with' with stuff defined?.
+            ;;            * macroexpand encoding entry
+            ;;            * pop access macros
+            ;;            * recursive copy each element in macroexpansion parray
+            ;;            * push pointer to that in parray output buf
+
+            ;; TODO update parray output buffer length (currently placeholder)
+            ;; TODO output our parray output byte buffer to our output byte buffer
+            ;; TODO free our parray output byte buffer
+            ;; TODO free our tail macroexpand buffer
+            ;; TODO return buffer-rel pointer to our parray output in the output byte buffer
+
+            (REX W)"\xC7"(RM 0 rax)(imm32 -1) ;; TODO tmp
+            "\x5B"         ; pop rbx
+            (REX B)"\x5F"  ; pop r15
+            (REX B)"\x5E"  ; pop r14
+            (REX B)"\x5D"  ; pop r13
+            (REX B)"\x5C"  ; pop r12
+            "\xC3"))))     ; ret
+    (;(RM rsi r13)
+     ;(REX W)
+     ;(RM rax (m64 r11 0 1 127))
+     ;(aarrp/barray-cat (REX W) "\x89" (RM rdi (m64 rsp rdi 2 10)))
+      (bregnum rsp)
+     (asm/x86_64
+       (mov rdi rsi))
      )))
 
 ; (m64 rdi 0 1 0)
