@@ -48,6 +48,9 @@
 ;;          * possibly error in some invalid situations that wouldn't work out right
 ;;          * probably error if one register operand is 32 or 16 bit when these registers are used.
 ;;        * make sure stuff like mov al, spl produces an error
+;;        * one way to handle this might be to treat these registers as their own 'type'
+;;          in the instruction table. instead of (r8 r8) you need an entry for (rs8 rs8) -
+;;          'really special 8'. As usual, this means more instruction table enumeration.
 
 ;; TODO special case: to encode a qword[rsp] operand, we *must* use an SIB byte with base=rsp
 ;;      even if we're not using scale etc. This is because an r/m value of 100 - rsp's register
@@ -153,10 +156,52 @@
 
    (zero 0)
 
+   ;; TODO - make these comments true!
+   ;;
+   ;; Encodings are defined with a mini-DSL composed of macros. This allows for arbitrarily complex
+   ;; behavior in encoding each form (if you need a new behavior, implement a new macro).
+   ;;
+   ;; X86_64 is a mess and pretty inconsistent with plenty of special cases, so this level
+   ;; of flexibility is needed to nicely handle all cases.
+   ;;
+   ;; The encoding process is to simply:
+   ;;   * push some relevant macros to the stack
+   ;;   * macroexpand your encoding
+   ;;   * pop those extra macros.
+   ;;
+   ;; Entry format:
+   ;; (instruction-name (((accepted types for param 0) (accepted types for param 1)) encoding)
+   ;;                    (another possible encoding))
+   ;;
+   ;; barrays in your encoding will be forward directly, so use byte strings to provide literals.
+   ;;
+   ;; Operand types:
+   ;; re*  = extended register
+   ;; r*   = non-extended register
+   ;; m*   = memory operand
+   ;; me*  = memory operand using extended registers (base or index)
+   ;; s8   = spl, bpl, sil, or dil (these registers have special encoding rules)
+   ;; imm* = immediate values. May include labels (but imm* macros will resolve labels)
+   ;;
+   ;; Some relevant macros (though if you need something more - just define a new macro)
+   ;;   * (REX [W] [R] [X] [B])             - encodes a REX byte
+   ;;   * (RM reg reg/mem)                  - encode a MODRM, SIB, and displacement
+   ;;   * (imm8), (imm16), (imm32), (imm64) - encodes immediate values
+   ;;
+   ;; p* macros represent parameters.
+   ;;   * (p*) expands to the parameter (memory operand, register etc)
+   ;;   * (p* R-if-ext) expands to 'R' if it's an extended register, else nothing
+   ;;   * (p* X-if-ext) expands to 'X' if it's an extended register, else nothing
+   ;;   * (p* B-if-ext) expands to 'B' if it's an extended register, else nothing
+   ;;
+   ;; Tips:
+   ;;   * The arrp/bsumLE macro with bregnum can be used to offset base opcodes with a register num
    (instruction-table
-     (mov ((r64 r64)   (REX W) "\x89" (RM rdi rsi))
-          ((r64 m64)   (REX W) "\x89" (RM rdi (m64 rsi 0 1 0)))
-          ((r64 imm32) (REX W) "\xC7" (RM 0 rdi) (imm32 5))))
+     (mov (((r64 re64) (r64 re64)) (REX W) "\x89" (RM rdi rsi))
+          (((r64 re64) (m64 me64)) (REX W) "\x89" (RM rdi (m64 rsi 0 1 0)))
+          (((r64 re64) (imm32)   ) (REX W) "\xC7" (RM 0 rdi) (imm32 5))))
+
+        ; (((r64 re64) (r64 re64)) (REX W (p1 R-if-ext) (p0 B-if-ext)) "\x89" (RM (p1) (p0)))
 
    (valid-registers (rax eax   ax    al
                      rcx ecx   cx    cl
@@ -1488,34 +1533,42 @@
            (REX W B)"\x83"(RM 7 (m64 r12 0 1 0))(imm8 -3) ; cmp qword[r12], -3
            "\x0F\x84" (label-rel-ref good-size 4 LE) ; je good-size
 
-          ;; TODO actually make error
            (REX W)(aarrp/bsumLE "\xB8" "\x07")(bregnum-bad-use-error addr 8 LE) ; mov rdi, msg
-           "\x48\xB8"(error-exit-fn barray-raw-addr 8 LE) ; mov rax, error-exit-fn
-           "\xFF\xD0"                                       ; call rax
+           (REX W)"\xB8"(error-exit-fn barray-raw-addr 8 LE) ; mov rax, error-exit-fn
+            "\xFF"(RM 2 rax)                                              ; call rax
 
            (label good-size)
 
            ;; Push our length to output buffer (1)
-           (REX W R)"\x89\xEF"                                           ; mov rdi, r13
+           (REX W R)"\x89"(RM r13 rdi)                                   ; mov rdi, r13
            (REX W)"\xC7\xC6"(imm32 1)                                    ; mov rsi, 1
            (REX W)"\xB8"(aarrp/builtin-func-addr/byte-buffer-push-int64) ; mov rax, bb_push_int64
-           "\xFF\xD0"                                                    ; call rax
+            "\xFF"(RM 2 rax)                                              ; call rax
 
            (REX W B)"\x8B"(RM rdi (m64 r12 0 1 16))         ; mov rdi, qword[r12+16]
-           "\x48\xB8"(reg-name-to-num barray-raw-addr 8 LE) ; mov rax, reg-name-to-num
-           "\xFF\xD0"                                       ; call rax
+           (REX W)"\xB8"(reg-name-to-num barray-raw-addr 8 LE) ; mov rax, reg-name-to-num
+            "\xFF"(RM 2 rax)                                              ; call rax
 
            ;; Push our output byte to output buffer
-           "\x4C\x89\xEF"                                             ; mov rdi, r13
+           (REX W R)"\x89"(RM r13 rdi)                                ; mov rdi, r13
            (REX W)"\x89"(RM rax rsi)                                  ; mov rsi, rax
            (REX W)"\xB8"(aarrp/builtin-func-addr/byte-buffer-push-int8)  ; mov rax, bb_push_int8
-           "\xFF\xD0"                                                 ; call rax
+            "\xFF"(RM 2 rax)                                              ; call rax
 
            (REX W)"\xC7"(RM 0 rax)(imm32 0) ; mov rax, 0
            (REX B)"\x5E"  ; pop r14
            (REX B)"\x5D"  ; pop r13
            (REX B)"\x5C"  ; pop r12
            "\xC3")))
+
+
+      ;; TODO: to support extended registers, the instruction table should be able to say
+      ;; (re64 re64) instead of (r64 r64) to communicate that the given slot can accept
+      ;; extended registers. If our operand is r64, it matches re64 and r64. If our operand
+      ;; is re64, the table entry *must* have re64 to match.
+
+      ;; TODO: make sure that memory operands that use an extended index register and extended
+      ;; base register both encode correctly
 
       (asm/x86_64
         (x86_64-linux
@@ -1534,7 +1587,12 @@
             "\xFF"(RM 2 rax)                                       ; call rax
             (REX W B)"\x89"(RM rax r14)                            ; mov r14, rax
 
-            ;; TODO write a placeholder parray length to our parray output byte buffer
+            ;; Write a placeholder parray length to our parray output byte buffer
+            (REX W R)"\x89"(RM r14 rdi)                                   ; mov rdi, r14
+            (REX W)"\xC7"(RM 0 rsi)(imm32 -1)                             ; mov rsi, -1
+            (REX W)"\xB8"(aarrp/builtin-func-addr/byte-buffer-push-int64) ; mov rax, bb_push_int64
+            "\xFF"(RM 2 rax)                                              ; call rax
+
             ;; TOOD write a pointer to a static barray of "aarrp/barray-cat" as the first element
             ;; of our parray output byte buffer
             ;; TODO create input tail macroexpand byte buffer
@@ -1560,11 +1618,16 @@
 
             ;; TODO update parray output buffer length (currently placeholder)
             ;; TODO output our parray output byte buffer to our output byte buffer
-            ;; TODO free our parray output byte buffer
+
+            ;; Free our parray output byte buffer
+            (REX W R)"\x89"(RM r14 rdi) ; mov rdi, r14
+            (REX W)"\xB8"(aarrp/builtin-func-addr/byte-buffer-free) ; mov rax, bb-free
+            "\xFF"(RM 2 rax)                                        ; call rax
+
             ;; TODO free our tail macroexpand buffer
             ;; TODO return buffer-rel pointer to our parray output in the output byte buffer
 
-            (REX W)"\xC7"(RM 0 rax)(imm32 -1) ;; TODO tmp
+            (REX W)"\xC7"(RM 0 rax)(imm32 -1) ;; mov rax, 1 - TODO tmp
             "\x5B"         ; pop rbx
             (REX B)"\x5F"  ; pop r15
             (REX B)"\x5E"  ; pop r14
@@ -1575,7 +1638,6 @@
      ;(REX W)
      ;(RM rax (m64 r11 0 1 127))
      ;(aarrp/barray-cat (REX W) "\x89" (RM rdi (m64 rsp rdi 2 10)))
-      (bregnum rsp)
      (asm/x86_64
        (mov rdi rsi))
      )))

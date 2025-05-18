@@ -879,6 +879,6 @@ compare_barrays:
 
 ;; This is my spot for having nasm assemble random things for me lel
 tmpaoeu:
-  mov rsi, rbx
+  mov r8w, 0
   ret
 
