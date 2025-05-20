@@ -70,6 +70,9 @@ structural_macro_expand:
 ;;;   If cp_shy_greedy is shy (1), we will only expand the first element of each parray.
 ;;;   If cp_shy_greedy is greedy (2), everything will be expanded.
 ;;;   TODO make it so if it's 3, we do macroexpand-1
+;;;     * or maybe 1, since that's a more logical number choice. Would require redoing
+;;;       all our calls tho. Depends on if we do this before or after other people
+;;;       start using arrp
 ;;;
 ;;;   If you're not sure, you probably want a greedy expand.
 ;;;
@@ -315,6 +318,20 @@ structural_macro_expand_tail:
   mov r13, rsi ; output byte buffer
   mov rbx, rdx ; cp_shy_greedy
 
+  ;; If our input is length 1, just return a zero-length parray
+  mov rdi, qword[r12]
+  not rdi
+  cmp rdi, -2
+  jne .use_tail
+
+  mov rdi, r13
+  mov rsi, -1
+  call byte_buffer_push_int64
+
+  mov rax, 0
+
+  jmp .epilogue
+  .use_tail:
   ;; Compute tail
   mov rdi, r12
   call parray_tail_new
@@ -332,6 +349,7 @@ structural_macro_expand_tail:
   call free
 
   mov rax, r15
+  .epilogue
   pop rbx
   pop r15
   pop r14

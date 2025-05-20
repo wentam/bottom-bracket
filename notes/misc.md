@@ -1,11 +1,19 @@
-Keep these notes around even after stuff is implemented so I can remember why I did things! I often forget. Maybe move old, less relevant notes to a diff file tho at some point.
+## it's a bunch of stuff
+
+I have a bad memory and think a lot. I like to keep 'brain dump' files like this around. It's like the human version of swap space. Consider this my arrp one. Do not expect it to have a clean structure.
+
+Note to self: keep these notes around even after stuff is implemented so I can remember why I did things! I often forget. Maybe move old, less relevant notes to a diff file tho at some point.
 
 Try to re-read this occassionaly when working on aarrp so we remember important things.
 
-When reading these notes, note that the macro stack was renamed to kv stack later on, and many of these notes predate this change.
+Notes:
+* The macro stack was renamed to kv stack later on, and many of these notes predate this change.
 
+## the stuff
 
-Aarrp: What if we did not inherit our abstractions, but derived them?
+* Blurbs
+
+arrp - What if we did not inherit our abstractions, but derived them?
 
 "first-principles reductionist simulator"
 
@@ -269,6 +277,7 @@ Interestingly, that means that even with this design there are certain situation
         * This means when you build your ahead-of-time language, you can simply just use it like a JIT language without modifications.
     * "lazy JIT" (compile at first function use): create your own with-macros macro that doesn't macroexpand the macro until it's used.
         * Optionally inline the macro instead
+    * macroexpansion = compilation, so any kind of JIT is possible by simply choosing when to macroexpand.
 * When trying to optimize codegen, I'd like to look at what existing compilers output for the same thing, but *don't* look at how they do it. I want to explore my own bottom-up way. Things like my allocate-register macro described here are a good example why.
 * the first optimizer worth implementing is probably a recursive inliner. Ideally this would be done at the IR level (by having an inliner macro that inputs IR and expands to IR with inlining done).
 * If an optimization can be done at the IR level, it should probably be done at the IR level (by having optimizer macros input IR and expand to IR with the optimization in place) rather than assembly or higher-level language.
@@ -303,3 +312,56 @@ Interestingly, that means that even with this design there are certain situation
         * What about IR-level bignums? Language designers can choose not to compile into them.
             * I like the idea of my high-level language having a natively supported bignum type.
         * Probably implement through an "integer reduction" pass, IR-to-IR.
+* desirable features in high-level lang:
+    * named parameters (IIRC CL was good at this)
+    * multiple return values - ideally access by name.
+    * multiple dispatched objectss like CLOS - but with fast static dispatch, not dynamic
+    * auto-generated accessor methods like CL
+* My thoughts on procedural vs declarative languages
+    * One is not more fundamental than the other. The fact the logic = truth and truth is stateless is an arbitrary human invention.
+    * Declarative languages are better at modeling inherently declarative problems. If the problem is "define how this system is configured", nix wins.
+    * Procedural languages are better for modeling everything else.
+    * We're using bottom-up abstraction upon procedural CPUs, thus a procedural language will probably form first.
+    * We naturally think procedurally and this makes it a natural choice for general purpose computing
+    * As a point of evidence that one regime is not inherently better, the empirical process of evolution produced the human brain which applies both ideas - procedural and declarative components.
+    * Machine learning is better at solving declarative problems.
+* Modeling abstractions vs problem space
+    * A problem is a dot.
+    * An abstraction is a line, usually horizontal
+    * Create a chart where the X axis is the problem space and Y axis is abstraction level.
+    * Machine language would be a very wide box but short box: it covers basically all problems,
+    but is a very low level of abstraction.
+    * Common lisp would be a narrower and very high up line.
+* My thoughts on string formation (interpolation etc)
+    * When writing a value stored in a variable into a string, we need to know not just the type of the variable, but the output format that we desire. An integer could be written in base 10, 2, 16. We might want it padded to certain width etc.
+        * Most languages with string interpolation simply make a best-guess assumption without configurability. This is wrong.
+    * printf and CL (format) does not make these assumptions for the user. This is correct.
+    * It may be possible to have string interpolation that also has you define the expansion format: "count: ~id( x + y )" or "memory address :~ix( x + y )"
+    * If there is string interpolation, we should allow for arbitrary expressions.
+    * There's nothing that says you need one or the other - templating or interpolation: (format "my num: ~id(x + y) my other num: ~d" z). Why not both?
+    * String interpolation can apply to more just format/printf like function calls - and can be more general-purpose. This is desirable.
+    * arrp uses \ as an escape character for byte strings at a low level. Because string interpolation would be a runtime task, we probably need a different escape character for runtime. Maybe '~' to remain lisp-consistent.
+        * Maybe even 3: \ for build-time/arrp-time, ~ for macros like 'format', % for interpolation with every string.
+            * This might be confusing or annoying to manage to have 3 diff escapes. 2 is already atypical.
+                * ~i could mean interpolate instead to help manage this
+* Minecraft command block compilation target would be fun and probably popular
+* mindustry computer compilation target?
+* we probably want a webassembly implementation of arrp itself, so you can play with arrp in a web browser
+* (with-templates) - a macro that allows you to define things like 'with', but the things you define can accept parameters to be used as part of the expansion like C macros.
+    * You could argue these are basically "declarative macros"
+    * could maybe just be the normal behavior of 'with', since this could fill both roles.
+    * Once you reach a high level of abstraction where the language can behave in a more declarative way, with-macros fills both roles. Thus, with-macros feels more "fundamental". with-templates would just be a bootstrapping convienience.
+        * Because of this, I don't think with-templates should be a builtin. We should try to keep things simple
+* 'with' could also fill the role of with-macros, you just need to tag an entry as a macro
+    * Doing it this way would let you distinguish general build-time functions vs macros more easily when reading code, as when you end up with tall code you lose the context of the 'with-macros' call.
+* should 'with' even be builtin?
+    * It's not really fundamental like macros are - you can build it with macros (it's just a builtin macro)
+    * It's useful for bootstrapping a language
+        * I lean 'yes' for this reason. While I want to keep things as minimal as possible, we need *some* bootstrapping ergonomics.
+* We need to expose builtins for both pushing/popping macros and stuff w/ kv_stack.
+    * This means we need macros to expose the global macro stack addressess
+* We should prove we can re-implement all builtin macros in the language by simply doing so. There aren't that many.
+    * Will help us find holes - will probably find things we forgot to expose like builtin functions or arrp-side state that we need.
+        * Fundamentally, arrp-side state is the only stuff you should need, though because some of the internal data structures are implementation-defined in terms of memory layout and such,
+        some functions are practically required for portability.
+* for our high-level lang, it would be cool if you could enter a 'pure' declarative subset of the language just by going (pure {stuff})

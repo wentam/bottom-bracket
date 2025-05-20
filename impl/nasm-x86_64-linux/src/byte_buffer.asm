@@ -28,6 +28,7 @@ global byte_buffer_bindump_buffer
 global byte_buffer_write_contents
 global byte_buffer_delete_bytes
 global byte_buffer_extend
+global byte_buffer_push_byte_buffer
 
 extern malloc
 extern realloc
@@ -716,6 +717,33 @@ byte_buffer_push_bytes:
     jmp .write_loop
 
   .write_loop_break:
+
+  pop r14
+  pop r13
+  pop r12
+  ret
+
+;;; byte_buffer_push_byte_buffer(*byte_buffer_dest, *byte_buffer_source)
+;;;   Pushes the bytes from the source byte buffer into the dest byte buffer
+byte_buffer_push_byte_buffer:
+  push r12
+  push r13
+  push r14
+
+  mov r12, rdi ; byte buffer dest
+  mov r13, rsi ; byte buffer src
+
+  mov rdi, rsi
+  call byte_buffer_get_data_length
+  mov r14, rax
+
+  mov rdi, rsi
+  call byte_buffer_get_buf
+
+  mov rdi, r12
+  mov rsi, rax
+  mov rdx, r14
+  call byte_buffer_push_bytes
 
   pop r14
   pop r13

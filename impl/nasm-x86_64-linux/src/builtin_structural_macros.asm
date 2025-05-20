@@ -21,6 +21,7 @@ extern byte_buffer_push_barray_bytes
 extern byte_buffer_push_byte_n_times
 extern byte_buffer_push_int_as_width_LE
 extern byte_buffer_push_int_as_width_BE
+extern byte_buffer_push_byte_buffer
 
 extern structural_macro_expand
 extern structural_macro_expand_tail
@@ -64,6 +65,7 @@ with_macro_name: db 10,0,0,0,0,0,0,0,"aarrp/with"
 builtin_bb_push_int64_macro_name: db 46,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-push-int64"
 builtin_bb_push_int32_macro_name: db 46,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-push-int32"
 builtin_bb_push_int16_macro_name: db 46,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-push-int16"
+builtin_bb_push_bb_macro_name: db 52,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-push-byte-buffer"
 builtin_bb_push_int8_macro_name: db 45,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-push-int8"
 builtin_bb_push_barray_macro_name: db 47,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-push-barray"
 builtin_bb_data_len_macro_name: db 51,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-get-data-length"
@@ -73,6 +75,8 @@ builtin_bb_new_macro_name: db 39,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buf
 builtin_bb_free_macro_name: db 40,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-free"
 builtin_barray_equalp_macro_name: db 37,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/barray-equalp"
 bsumLE_macro_name: db 12,0,0,0,0,0,0,0,"aarrp/bsumLE"
+builtin_sma_macro_name: db 47,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/structural-macro-expand"
+builtin_smat_macro_name: db 52,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/structural-macro-expand-tail"
 
 barray_literal_macro_name: db 17,0,0,0,0,0,0,0,"test_macro_barray"
 barray_test_expansion: db 17,0,0,0,0,0,0,0,"test_macro_barray"
@@ -203,6 +207,36 @@ push_builtin_structural_macros:
   mov rdi, qword[macro_stack_structural]    ; macro stack
   mov rsi, builtin_bb_push_int16_macro_name ; macro name
   mov rdx, rsp                              ; code
+  call kv_stack_push
+  add rsp, 16
+
+  ;; Push builtin_sma macro
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], builtin_sma
+  mov rdi, qword[macro_stack_structural] ; macro stack
+  mov rsi, builtin_sma_macro_name        ; macro name
+  mov rdx, rsp                           ; code
+  call kv_stack_push
+  add rsp, 16
+
+  ;; Push builtin_smat macro
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], builtin_smat
+  mov rdi, qword[macro_stack_structural] ; macro stack
+  mov rsi, builtin_smat_macro_name        ; macro name
+  mov rdx, rsp                           ; code
+  call kv_stack_push
+  add rsp, 16
+
+  ;; Push builtin_bb_push_bb macro
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], builtin_bb_push_bb
+  mov rdi, qword[macro_stack_structural] ; macro stack
+  mov rsi, builtin_bb_push_bb_macro_name ; macro name
+  mov rdx, rsp                           ; code
   call kv_stack_push
   add rsp, 16
 
@@ -439,6 +473,61 @@ builtin_bb_push_int16:
   pop r12
   ret
 builtin_bb_push_int16_end:
+
+builtin_sma:
+  push r12
+  mov r12, rsi
+
+  mov rdi, r12
+  mov rsi, 8
+  mov rax, byte_buffer_push_int64
+  call rax
+
+  mov rdi, r12
+  mov rsi, structural_macro_expand
+  mov rax, byte_buffer_push_int64
+  call rax
+  mov rax, 0
+
+  pop r12
+  ret
+
+builtin_smat:
+  push r12
+  mov r12, rsi
+
+  mov rdi, r12
+  mov rsi, 8
+  mov rax, byte_buffer_push_int64
+  call rax
+
+  mov rdi, r12
+  mov rsi, structural_macro_expand_tail
+  mov rax, byte_buffer_push_int64
+  call rax
+  mov rax, 0
+
+  pop r12
+  ret
+
+builtin_bb_push_bb:
+  push r12
+  mov r12, rsi
+
+  mov rdi, r12
+  mov rsi, 8
+  mov rax, byte_buffer_push_int64
+  call rax
+
+  mov rdi, r12
+  mov rsi, byte_buffer_push_byte_buffer
+  mov rax, byte_buffer_push_int64
+  call rax
+  mov rax, 0
+
+  pop r12
+  ret
+builtin_bb_push_bb_end:
 
 builtin_bb_free:
   push r12
