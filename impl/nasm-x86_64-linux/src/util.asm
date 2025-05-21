@@ -879,9 +879,7 @@ compare_barrays:
 
 ;; This is my spot for having nasm assemble random things for me lel
 tmpaoeu:
-      ; mov r12, rax
-       ;mov r15, rax
- ;mov rdi, r15
-       mov rsi, r15
+
+ cmp qword[rbp-56], 0
   ret
 

@@ -344,6 +344,7 @@ Interestingly, that means that even with this design there are certain situation
         * Maybe even 3: \ for build-time/arrp-time, ~ for macros like 'format', % for interpolation with every string.
             * This might be confusing or annoying to manage to have 3 diff escapes. 2 is already atypical.
                 * ~i could mean interpolate instead to help manage this
+    * There could be both build-time *and* runtime string interpolation using the two diff escape chars
 * Minecraft command block compilation target would be fun and probably popular
 * mindustry computer compilation target?
 * we probably want a webassembly implementation of arrp itself, so you can play with arrp in a web browser
@@ -365,3 +366,44 @@ Interestingly, that means that even with this design there are certain situation
         * Fundamentally, arrp-side state is the only stuff you should need, though because some of the internal data structures are implementation-defined in terms of memory layout and such,
         some functions are practically required for portability.
 * for our high-level lang, it would be cool if you could enter a 'pure' declarative subset of the language just by going (pure {stuff})
+* A good argument for implementing C inside arrp is that we could gain the ability to import C header files like zig does for easy FFI.
+* Another argument for implementing C: direct apples-to-apples comparison of optimizer to existing C compilers
+* We need line numbers in errors. This may require accomodation in arrp itself - because we're destroying this metadata right now at read time. Perhaps the readers needs to produce a secondary tree of identical structure to the input, except with all barrays replaced with their corrisponding line numbers.
+* In order to encourage clean macros, we mighht want gensym builtins
+* We may change the exact interface macros use in time. Thus, with-macros - or each macro definition inside it - could specify a 'macro protocol version' that the macro is defined in. This would allow for backwards compatibility if we changed the interface.
+    * It's okay if we implement this later, because we can just say if no version is specified, assume X version and emit a deprecation warning.
+    * It's important to allow for the core of arrp to improve as we learn more about how best to solve it's problems. It's best to avoid breaking changes along the way.
+* What if parrays used relative pointers?
+    * This would avoid lots of "pointer to dynamic memory allocation" type bugs like with pointers into a byte buffer that might grow
+    * This assumes our data is local to us in some way, which might not always be true, so less flexible.
+    * Maybe some way to support both relative and absolute addressing is in order?
+        * Probably annoying because now when you're passed a parray it's complex to access it's values.
+    * Absolute pointers seem to be the most complete answer. Just bug-prone with the amount of dynamic allocations our design demands.
+    * arrp/with is a good example of why we need absolute pointers - how would you reference a 'with' value by reference?
+        * Absolutely needed for things like defining compile-time utility functions
+* We might want the portable "buffer-relative pointer" form to be a specified and correct memory representation of arrp structures in addition to the normal form.
+    * Right now this form is used as an implementation detail in some places
+    * Provide functions to convert between them (I think we already have relative to absolute in the arrp binary)
+    * Maybe provide a mechanism that allows macros to produce this form, and we can relative-to-abs internally.
+* At least some of Rust's memory safety components would be very useful in our high-level language.
+    * Look at how rust solves the problem where a dynamic memory allocation grows - like a std::vector - invalidating pointers to it.
+        * Alias XOR mutate - "No aliasing while mutating" - If you have a reference, nobody can mutate.
+            * Works this out at compile-time, so no overhead.
+            * References, not pointers at this level.
+        * This situation is a constant pain with our byte_buffer allocations in arrp.
+    * Any rust-style memory safety should be easily disabled and moved out of the way, both globally and locally.
+        * There are corner cases where it probably gets in the way.
+* byte buffer 'safe mode' - if enabled, instead of realloc, it creates an entirely fresh allocation and copies everything over, leaving the old allocation around.
+    * Make it the default mode, user only turns it off as on optimization.
+    * Track *all* allocations so you can free them all at once when done.
+    * I think this means that we could remove a lot of the "buffer-relative pointer" complexity in stuff like the macroexpander.
+    * Would this behavior be confusing? Mutations may suddenly not behave as the user expects.
+        * Mutate at known pointer value, current relevant buffer remains unmutated.
+    * Perhaps instead, 'safe mode' means that we allocate in chunks, and you *must* access through accessor functions only. No get_buf.
+        * you need get_buf to write useful parrays.
+        * Does introduce runtime complexity
+        * Means it always behaves "as you expect" with pointers all remaining valid.
+        * Actually no - I'm wrong - if you have a pointer to something along the chunk edges then read a whole bunch of bytes, you'll get garbage.
+    * Yeah, this is a leaky abstraction: Imagine you 'get_buf' and 'get_data_len' to grab a pointer to the end of the current byte buffer, then write 1024 bytes to the buffer with the intent on that being the data the pointer refers to. But the buffer grows as you write it, and your pointer points to the stale block before the allocation. Now you have memory garbage.
+    * Could only ever work if the behavior was made very clear to users
+    * Probably just introduces different, more confusing memory management errors
