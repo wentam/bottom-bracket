@@ -15,6 +15,10 @@
 ;; NOTE: neovim treesitter 'commonlisp' plugin works-ish for indentation, :set filetype=commonlisp
 ;; NOTE: :set shiftwidth=1
 ;; NOTE: neovim :set foldmethod=indent gives you kinda-working code folding
+;; NOTE: if you accidentally set the filetype to 'lisp' and not 'commonlisp', the editor will be
+;; unusably slow until you restart neovim. The builtin lisp indentor is very slow.
+
+;; NOTE: This file is "double wide" as per STYLE.md. You can use 200 columns.
 
 ; TODO build out these comments to describe generally how to encode x86_64 instructions from
 ; a table.
@@ -1552,7 +1556,29 @@
    ;; base register both encode correctly
 
    (aarrp/with
-    (;; TODO - make these comments true!
+    (
+     ;; TODO implement access function - reg-type-fn. Should return whether or not the register was
+     ;; found, and continue without error if not found
+     (reg-type-map ((rax r64) (eax  r32) (ax   r16) (al   r8)
+                    (rcx r64) (ecx  r32) (cx   r16) (cl   r8)
+                    (rdx r64) (edx  r32) (dx   r16) (dl   r8)
+                    (rbx r64) (ebx  r32) (bx   r16) (bl   r8)
+                    (rsp r64) (esp  r32) (sp   r16) (spl  r8)
+                    (rbp r64) (ebp  r32) (bp   r16) (bpl  r8)
+                    (rsi r64) (esi  r32) (si   r16) (sil  r8)
+                    (rdi r64) (edi  r32) (di   r16) (dil  r8)
+
+                    ;; Extended registers, use REX prefix to access
+                    (r8  re64) (r8d  re32) (r8w  re16) (r8b  re8)
+                    (r9  re64) (r9d  re32) (r9w  re16) (r9b  re8)
+                    (r10 re64) (r10d re32) (r10w re16) (r10b re8)
+                    (r11 re64) (r11d re32) (r11w re16) (r11b re8)
+                    (r12 re64) (r12d re32) (r12w re16) (r12b re8)
+                    (r13 re64) (r13d re32) (r13w re16) (r13b re8)
+                    (r14 re64) (r14d re32) (r14w re16) (r14b re8)
+                    (r15 re64) (r15d re32) (r15w re16) (r15b re8)))
+
+     ;; TODO - make these comments true!
      ;;
      ;; Encodings are defined with a mini-DSL composed of macros. This allows for arbitrarily complex
      ;; behavior in encoding each form (if you need a new behavior, implement a new macro).
@@ -1600,6 +1626,70 @@
        (cmp (((r64 re64) (r64 re 64)) "thiswouldbecmp"))))
 
      ; (((r64 re64) (r64 re64)) (REX W (p1 R-if-ext) (p0 B-if-ext)) "\x89" (RM (p1) (p0)))
+
+
+     ;; Inputs an operand (rdi), byte buffer (rsi). Writes a parray of compatible operand types
+     ;; for the operand to the byte buffer.
+     ;;
+     ;; Returns an absolute pointer to the parray.
+     (operand-type-fn
+      (aarrp/barray-cat
+        ;; rdi                 -> (r64)
+        ;; r15                 -> (re64)
+        ;; 5                   -> (imm8 imm16 imm32 imm64)
+        ;; 300                 -> (imm16 imm32 imm64)
+        ;; (m64 rdi 0 1 0)     -> (m64)
+        ;; (m32 rsi 0 1 0)     -> (m32)
+        ;; (m16 rsi 0 1 0)     -> (m16)
+        ;; (m8 rsi 0 1 0)      -> (m8)
+        ;; (label-rel-ref foo) -> (imm32 imm64)
+        ;; (label-abs-ref foo) -> (imm64)
+        ;; error if nothing matches
+
+        (REX B)"\x54"                                                             ; push r12
+        (REX B)"\x55"                                                             ; push r13
+        (REX B)"\x56"                                                             ; push r14
+        (REX B)"\x57"                                                             ; push r15
+        "\x53"                                                                    ; push rbx
+
+        ; mov r12, rdi - operand structure
+        ; mov r13, rsi - output byte buffer
+
+        ;; If it's a barray or parray of length 0, just go straight to is-nothing and error
+        ;; Means we can assume they have at least a length of 1 in this function moving forwards
+
+        ; cmp qword[r12], 0
+        ; je is-nothing
+        ; cmp qword[r12], -1
+        ; je is-nothing
+
+        ;; branch on parray vs barray
+
+        ; cmp qword[r12], 0
+        ; jl is-parray
+
+        (label is-barray)
+
+        ;; TODO
+        ;;   * Scan the reg type map
+        ;;   * If it's in there, output accordingly and goto epilogue
+        ;;   * Do nothing and fall-through if it's not in there (it's either an invalid operand or not a register)
+
+
+        ; jmp is-nothing
+        (label is-parray)
+
+
+        (label is-nothing)
+        ;; TODO error if we get here
+
+        (label epilogue)
+        "\x5B"                                                                              ; pop rbx
+        (REX B)"\x5F"                                                                       ; pop r15
+        (REX B)"\x5E"                                                                       ; pop r14
+        (REX B)"\x5D"                                                                       ; pop r13
+        (REX B)"\x5C"                                                                       ; pop r12
+        "\xC3"))
 
      (assemble-fn
        (aarrp/barray-cat
@@ -1673,6 +1763,8 @@
 
         (label not-instruction)
         (label-scope
+         ;; It's not an instruction name, just forward this parray to barray-cat
+
          ;; Recursive copy this input using macroexpand into our output buffer
          (REX W B)"\x8B"(RM rdi r12)                                               ; mov rdi, r12
          (REX W B)"\x8B"(RM rsi r13)                                               ; mov rsi, r13
@@ -1695,13 +1787,11 @@
          "\xE9"(label-rel-ref epilogue 4 LE))                                      ; jmp epilogue
 
         (label is-instruction)
+        ;; It's an instruction name
+
         ;; TODO do something. rbx = entry parray
         "\xE9"(label-rel-ref epilogue 4 LE)                                       ; jmp epilogue
         ;; TODO
-        ;;          * If it's not an instruction name, just output the parray to our new parray
-        ;;            * write parray bytes to output buffer (via macroexpand recursive copy)
-        ;;            * write pointer to parray output buf
-        ;;          * If it is an instruction name:
         ;;            * determine it's parameter types
         ;;            * select the correct encoding entry for that instruction (error if none)
         ;;            * push relevant access macros (param 0) (param 1)
@@ -1877,6 +1967,7 @@
       "foo"
       (REX W R)"\x89"(RM r15 rax)                                                         ; mov rax, r15
       (some-garbage)
+      (cmp rdx rcx)
       (mov rdi rsi))
    )))
 

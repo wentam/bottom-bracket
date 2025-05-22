@@ -112,10 +112,7 @@ buffered_fd_reader_free:
 ;;;   Reads a byte.
 buffered_fd_reader_read_byte:
   push r12
-  push r13
-  sub rsp, 8
   mov r12, rdi                                   ; Struct pointer
-  mov r13, qword [r12+BUFFERED_READER_FD_OFFSET] ; fd
 
   ;; Decide if we need to refill the buffer
   mov rdi, qword [r12+BUFFERED_READER_READ_PTR_OFFSET]
@@ -125,7 +122,7 @@ buffered_fd_reader_read_byte:
   ;; Refill buffer from fd
   mov rsi, r12                        ; Struct pointer
   add rsi, BUFFERED_READER_BUF_OFFSET ; Move to start of the buffer
-  mov rdi, r13                        ; FD to read from
+  mov rdi, qword [r12+BUFFERED_READER_FD_OFFSET]                      ; FD to read from
   mov rdx, READ_BUFFER_SIZE           ; Length to read
   mov rax, sys_read                   ; syscall number
   syscall
@@ -142,21 +139,18 @@ buffered_fd_reader_read_byte:
   add rdi, rax
   mov qword [r12+BUFFERED_READER_END_PTR_OFFSET], rdi
 
+  mov rdi, qword [r12+BUFFERED_READER_READ_PTR_OFFSET] ; Obtain read pointer
   .do_read:
-  mov rsi, qword [r12+BUFFERED_READER_READ_PTR_OFFSET] ; Obtain read pointer
-  xor rax, rax                                         ; Zero rax
-  mov  al, byte [rsi]                                  ; Read at read pointer
-  inc qword [r12+BUFFERED_READER_READ_PTR_OFFSET]      ; increment read pointer
+  ;mov rdi, qword [r12+BUFFERED_READER_READ_PTR_OFFSET] ; Obtain read pointer
+  movzx  rax, byte [rdi]                                  ; Read at read pointer
+  inc rdi
+  mov qword[r12+BUFFERED_READER_READ_PTR_OFFSET], rdi  ; increment read pointer
 
-  add rsp, 8
-  pop r13
   pop r12
   ret
 
   .epilogue:
   mov rax, BUFFERED_READER_EOF
-  add rsp, 8
-  pop r13
   pop r12
   ret
 

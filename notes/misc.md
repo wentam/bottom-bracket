@@ -428,3 +428,10 @@ Interestingly, that means that even with this design there are certain situation
         * Could do this by an IR->IR compile phase that converts SIMD-IR to non-SIMD-IR
 * IR should have a raw instruction passthrough to allow for stuff like C's asm tooling.
     * Passthrough should declare what platform it's for, and an error should be produced if we attempt to compile that IR down to other platforms
+* For the arrp-side allocator, we could set up a bump allocator - allocating in 1MB chunks as needed - that is used for all tiny allocations. We have a lot of tiny allocations.
+    * All other allocations can either use another allocation scheme or a syscall. Probably just a syscall at first, tiny allocations are our primary overhead.
+    * Bump allocators exchange memory use for speed. At the tiny allocation scale - at compile time - we really only care about speed.
+    * Anything bump allocated just doesn't get freed until program exit.
+    * Play with thresholds, but probably bump allocate anything <= 1024 bytes, and probably actually syscall every 1MB. Maybe even progressively grow the syscall allocations.
+    * Probably put a sanity cap on bump allocation at like 50MB.
+    * Some logic to free a chunk if *everything* inside it is freed is probably still worth it. Probably do this by tracking allocation count per chunk. Increment on alloc, decrement on dealloc, free if zero.

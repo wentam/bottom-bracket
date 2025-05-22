@@ -13,3 +13,4 @@ For code written in arrp in this repo:
 * Align stuff as needed depending on the semantics of
   the macro in use
 * Use < 100 columns
+    * Some files where this is impractical may choose to be "double wide" and use < 200 columns. Try to avoid this. Make note of this usage in comments at the top of the file.
