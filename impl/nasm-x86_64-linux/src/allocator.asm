@@ -285,20 +285,20 @@ free:
    ;;; Decrement (and retain) refcount
    ;int3
    mov rcx, qword[rsi+CHUNK_REFCOUNT_OFFSET]
-   ;dec rcx
-   ;mov qword[rsi+CHUNK_REFCOUNT_OFFSET], rcx
+   dec rcx
+   mov qword[rsi+CHUNK_REFCOUNT_OFFSET], rcx
 
-   ;;; If ref count is now zero and it's not the current chunk, free the chunk
-   ;cmp rsi, qword[current_chunk_ptr]
-   ;je .bump_done
+   ;; If ref count is now zero and it's not the current chunk, free the chunk
+   cmp rsi, qword[current_chunk_ptr]
+   je .bump_done
 
-   ;test rcx, rcx
-   ;jnz .bump_done
+   test rcx, rcx
+   jnz .bump_done
 
-   ;mov rdi, rsi
-   ;mov rsi, CHUNK_SIZE
-   ;mov rax, SYS_MUNMAP
-   ;syscall
+   mov rdi, rsi
+   mov rsi, CHUNK_SIZE
+   mov rax, SYS_MUNMAP
+   syscall
 
   .bump_done:
    mov rax, 0
