@@ -30,9 +30,12 @@ global error_exit
 global exit
 global read_char
 global write_char
-global malloc
-global realloc
-global free
+;global malloc
+;global realloc
+;global free
+extern malloc
+extern realloc
+extern free
 global write_as_base
 global parse_uint
 global digit_to_ascii
@@ -134,62 +137,62 @@ write_char:
 
 ;;; malloc(size) -> ptr
 ;;;  Allocates memory. returns 0/NULL if allocation fails.
-malloc:
-  sub rsp, 8
-  %ifdef ASSERT_STACK_ALIGNMENT
-  call assert_stack_aligned
-  %endif
-
-  ;; mmap in a chunk of memory at requested size+8
-  ;; The extra 8 bytes will be used to store the length of the allocation
-  add rdi, 8        ; Make room for our metadata
-  mov rsi, rdi      ; length
-  mov rdi, 0        ; addr (NULL)
-  ;; TODO: don't exec by default, set up a path such that macro allocations
-  ;; can ask for executable
-  mov rdx, (PROT_READ | PROT_WRITE | PROT_EXEC) ; protection flags
-  mov r10, (MAP_PRIVATE | MAP_ANONYMOUS) ; flags
-  mov r8,  -1       ; fd. -1 for portability with MAP_ANONYMOUS
-  mov r9,  0        ; offset
-  mov rax, sys_mmap ; syscall number
-  syscall
-
-  ;; If mmap gave us an error, proceed to failed codepath
-  test rax, rax
-  js   .failed
-
-  ;; Write the length of this allocation to the first 8 bytes.
-  ;; The length will include the extra 8 bytes.
-  mov qword [rax], rsi
-
-  ;; Return a pointer to the block+8 so the user doesn't get our metadata
-  add rax, 8
-
-  add rsp, 8
-  ret
-
-  .failed:
-    mov rax, 0
-
-    add rsp, 8
-    ret
+;malloc:
+;  sub rsp, 8
+;  %ifdef ASSERT_STACK_ALIGNMENT
+;  call assert_stack_aligned
+;  %endif
+;
+;  ;; mmap in a chunk of memory at requested size+8
+;  ;; The extra 8 bytes will be used to store the length of the allocation
+;  add rdi, 8        ; Make room for our metadata
+;  mov rsi, rdi      ; length
+;  mov rdi, 0        ; addr (NULL)
+;  ;; TODO: don't exec by default, set up a path such that macro allocations
+;  ;; can ask for executable
+;  mov rdx, (PROT_READ | PROT_WRITE | PROT_EXEC) ; protection flags
+;  mov r10, (MAP_PRIVATE | MAP_ANONYMOUS) ; flags
+;  mov r8,  -1       ; fd. -1 for portability with MAP_ANONYMOUS
+;  mov r9,  0        ; offset
+;  mov rax, sys_mmap ; syscall number
+;  syscall
+;
+;  ;; If mmap gave us an error, proceed to failed codepath
+;  test rax, rax
+;  js   .failed
+;
+;  ;; Write the length of this allocation to the first 8 bytes.
+;  ;; The length will include the extra 8 bytes.
+;  mov qword [rax], rsi
+;
+;  ;; Return a pointer to the block+8 so the user doesn't get our metadata
+;  add rax, 8
+;
+;  add rsp, 8
+;  ret
+;
+;  .failed:
+;    mov rax, 0
+;
+;    add rsp, 8
+;    ret
 
 ;;; free(ptr) -> int
 ;;;   Frees memory allocated with malloc. Returns 0 on success, -errno on error.
-free:
-  sub rsp, 8
-
-  %ifdef ASSERT_STACK_ALIGNMENT
-  call assert_stack_aligned
-  %endif
-
-  sub rdi, 8           ; Walk back to the start of the mmap region
-  mov rsi, qword [rdi] ; Grab our length from our metadata prefix
-  mov rax, sys_munmap
-  syscall
-
-  add rsp, 8
-  ret
+;free:
+;  sub rsp, 8
+;
+;  %ifdef ASSERT_STACK_ALIGNMENT
+;  call assert_stack_aligned
+;  %endif
+;
+;  sub rdi, 8           ; Walk back to the start of the mmap region
+;  mov rsi, qword [rdi] ; Grab our length from our metadata prefix
+;  mov rax, sys_munmap
+;  syscall
+;
+;  add rsp, 8
+;  ret
 
 ;;; realloc(ptr, new_size) -> ptr
 ;;;   Reallocate memory to new_size.
@@ -197,41 +200,41 @@ free:
 ;;;   After the allocation the pointer to the previous allocation is invalid.
 ;;;
 ;;;   Returns 0 (NULL pointer) on failure.
-realloc:
-  sub rsp, 8
-
-  %ifdef ASSERT_STACK_ALIGNMENT
-  call assert_stack_aligned
-  %endif
-
-  ;; remap mmap region
-  add rsi, 8
-  sub rdi, 8              ; Walk back to the start of the mmap region
-  mov rdx, rsi            ; New length from function argument
-  mov rsi, qword [rdi]    ; Length from our metadata
-  mov r10, MREMAP_MAYMOVE ; flags
-  mov  r8, 0              ; new address (unused with current flags)
-  mov rax, sys_mremap
-  syscall
-
-  ;; Failed codepath if realloc failed
-  test rax, rax
-  js .failed
-
-  ;; write new length to metadata
-  mov qword [rax], rdx
-
-  ;; Return mmaped region with metadata hidden
-  add rax, 8
-
-  add rsp, 8
-  ret
-
-  .failed:
-    mov rax, 0
-
-    add rsp, 8
-    ret
+;realloc:
+;  sub rsp, 8
+;
+;  %ifdef ASSERT_STACK_ALIGNMENT
+;  call assert_stack_aligned
+;  %endif
+;
+;  ;; remap mmap region
+;  add rsi, 8
+;  sub rdi, 8              ; Walk back to the start of the mmap region
+;  mov rdx, rsi            ; New length from function argument
+;  mov rsi, qword [rdi]    ; Length from our metadata
+;  mov r10, MREMAP_MAYMOVE ; flags
+;  mov  r8, 0              ; new address (unused with current flags)
+;  mov rax, sys_mremap
+;  syscall
+;
+;  ;; Failed codepath if realloc failed
+;  test rax, rax
+;  js .failed
+;
+;  ;; write new length to metadata
+;  mov qword [rax], rdx
+;
+;  ;; Return mmaped region with metadata hidden
+;  add rax, 8
+;
+;  add rsp, 8
+;  ret
+;
+;  .failed:
+;    mov rax, 0
+;
+;    add rsp, 8
+;    ret
 
 ;;; digit_to_ascii(int) -> char
 ;;;   Converts any numeric value representing a digit (up to base 36) to ASCII

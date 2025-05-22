@@ -66,6 +66,8 @@ extern structural_macro_expand_relptr
 extern structural_macro_expand
 extern byte_buffer_bindump_buffer
 extern byte_buffer_free
+extern _malloc
+extern _free
 
 section .rodata
 
@@ -127,6 +129,29 @@ section .text
 ;;
 ;;       pay attention to what happens when a reader macro/structural macro expands into nothing.
 _start:
+  ;mov rdi, 2
+  ;call malloc
+
+  ;mov rdi, rax
+  ;mov rsi, 5129
+  ;call realloc
+
+  ;mov rdi, rax
+  ;mov rsi, 16
+  ;call realloc
+
+  ;mov rdi, rax
+  ;mov rsi, 500
+  ;call realloc
+
+  ;mov qword[rax], 5
+
+  ;;mov rdi, rax
+  ;;call free
+
+  ;mov rdi, 0
+  ;call exit
+
   ;; Output welcome string to stderr
   ;;mov rdi, welcome_msg
   ;;mov rsi, welcome_msg_len

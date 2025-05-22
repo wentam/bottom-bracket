@@ -2169,12 +2169,24 @@ with_macros:
 
   mov rdi, qword[macro_stack_structural] ; macro stack
   mov rsi, rax
+  mov rax, kv_stack_value_by_id
+  call rax
+
+  push rax
+  sub rsp, 8
+
+  ; free the macro - we malloc'd it
+  mov rdi, qword[rax+8]
+  call free
+
+  add rsp, 8
+  pop rax
+
+  mov rdi, qword[macro_stack_structural] ; macro stack
+  mov rsi, rax
   mov rax, kv_stack_pop_by_id
   call rax
 
-  ; free the macro - we malloc'd it
-  mov rdi, rax
-  call free
 
   add rsp, 8
   pop rax

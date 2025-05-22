@@ -264,7 +264,6 @@ byte_buffer_push_byte:
   shl rsi, 1                                         ; * 2
   mov qword [r13+BYTE_BUFFER_BUF_LENGTH_OFFSET], rsi ; write new size
   call realloc
-
   cmp rax, 0
   jne .good_realloc
 
