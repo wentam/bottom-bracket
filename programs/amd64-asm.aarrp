@@ -157,55 +157,7 @@
 ;; TODO: show usage w/ "Usage:" for all functions/macros above them
 
 (aarrp/with
- (
-  ;; TODO - make these comments true!
-  ;;
-  ;; Encodings are defined with a mini-DSL composed of macros. This allows for arbitrarily complex
-  ;; behavior in encoding each form (if you need a new behavior, implement a new macro).
-  ;;
-  ;; X86_64 is a mess and pretty inconsistent with plenty of special cases, so this level
-  ;; of flexibility is needed to nicely handle all cases.
-  ;;
-  ;; The encoding process is to simply:
-  ;;   * push some relevant macros to the stack
-  ;;   * macroexpand your encoding
-  ;;   * pop those extra macros.
-  ;;
-  ;; Entry format:
-  ;; (instruction-name (((accepted types for param 0) (accepted types for param 1)) encoding)
-    ;;                    (another possible encoding))
-  ;;
-  ;; barrays in your encoding will be forward directly, so use byte strings to provide literals.
-  ;;
-  ;; Operand types:
-  ;; re*  = extended register
-  ;; r*   = non-extended register
-  ;; m*   = memory operand
-  ;; me*  = memory operand using extended registers (base or index)
-  ;; s8   = spl, bpl, sil, or dil (these registers have special encoding rules)
-  ;; imm* = immediate values. May include labels (but imm* macros will resolve labels)
-  ;;
-  ;; Some relevant macros (though if you need something more - just define a new macro)
-  ;;   * (REX [W] [R] [X] [B])             - encodes a REX byte
-  ;;   * (RM reg reg/mem)                  - encode a MODRM, SIB, and displacement
-  ;;   * (imm 8), (imm 16), (imm 32), (imm 64) - encodes immediate values
-  ;;
-  ;; p* macros represent parameters.
-  ;;   * (p*) expands to the parameter (memory operand, register etc)
-  ;;   * (p* R-if-ext) expands to 'R' if it's an extended register, else nothing
-  ;;   * (p* X-if-ext) expands to 'X' if it's an extended register, else nothing
-  ;;   * (p* B-if-ext) expands to 'B' if it's an extended register, else nothing
-  ;;
-  ;; Tips:
-  ;;   * The arrp/bsumLE macro with bregnum can be used to offset base opcodes with a register num
-  (instruction-table
-   (mov (((r64 re64) (r64 re64)) (REX W) "\x89" (RM rdi rsi))
-        (((r64 re64) (m64 me64)) (REX W) "\x89" (RM rdi (m64 rsi 0 1 0)))
-        (((r64 re64) (imm32)   ) (REX W) "\xC7" (RM 0 rdi) (imm 32 5))))
-
-  ; (((r64 re64) (r64 re64)) (REX W (p1 R-if-ext) (p0 B-if-ext)) "\x89" (RM (p1) (p0)))
-
-  (imm-arg-count-error   "ERROR: Incorrect number of parameters passed to imm (should be 2).\n")
+ ((imm-arg-count-error   "ERROR: Incorrect number of parameters passed to imm (should be 2).\n")
   (imm-bad-width-error   "ERROR: Bad width as first arg to imm. Must be one of: 8 16 32 64.\n")
   (REX-input-error       "ERROR: Inputs to REX must be one char each of: WRXBwrxb.\n")
   (MODRM-input-error     "ERROR: Bad input to RM\n")
@@ -223,7 +175,7 @@
 
   (zero 0)
 
-  (barray-cat-macro-name "aarrp/barray-cat")
+  (barray-cat-macro-name "aarrp/barray-caat")
 
   (valid-registers (rax eax   ax    al
                     rcx ecx   cx    cl
@@ -1600,66 +1552,172 @@
    ;; base register both encode correctly
 
    (aarrp/with
-    ((assemble-fn
-      (aarrp/barray-cat
-       (REX B)"\x54"                                                             ; push r12
-       (REX B)"\x55"                                                             ; push r13
-       (REX B)"\x56"                                                             ; push r14
-       (REX B)"\x57"                                                             ; push r15
-       "\x53"                                                                    ; push rbx
+    (;; TODO - make these comments true!
+     ;;
+     ;; Encodings are defined with a mini-DSL composed of macros. This allows for arbitrarily complex
+     ;; behavior in encoding each form (if you need a new behavior, implement a new macro).
+     ;;
+     ;; X86_64 is a mess and pretty inconsistent with plenty of special cases, so this level
+     ;; of flexibility is needed to nicely handle all cases.
+     ;;
+     ;; The encoding process is to simply:
+     ;;   * push some relevant macros to the stack
+     ;;   * macroexpand your encoding
+     ;;   * pop those extra macros.
+     ;;
+     ;; Entry format:
+     ;; (instruction-name (((accepted types for param 0) (accepted types for param 1)) encoding)
+       ;;                    (another possible encoding))
+     ;;
+     ;; barrays in your encoding will be forward directly, so use byte strings to provide literals.
+     ;;
+     ;; Operand types:
+     ;; re*  = extended register
+     ;; r*   = non-extended register
+     ;; m*   = memory operand
+     ;; me*  = memory operand using extended registers (base or index)
+     ;; s8   = spl, bpl, sil, or dil (these registers have special encoding rules)
+     ;; imm* = immediate values. May include labels (but imm* macros will resolve labels)
+     ;;
+     ;; Some relevant macros (though if you need something more - just define a new macro)
+     ;;   * (REX [W] [R] [X] [B])             - encodes a REX byte
+     ;;   * (RM reg reg/mem)                  - encode a MODRM, SIB, and displacement
+     ;;   * (imm 8), (imm 16), (imm 32), (imm 64) - encodes immediate values
+     ;;
+     ;; p* macros represent parameters.
+     ;;   * (p*) expands to the parameter (memory operand, register etc)
+     ;;   * (p* R-if-ext) expands to 'R' if it's an extended register, else nothing
+     ;;   * (p* X-if-ext) expands to 'X' if it's an extended register, else nothing
+     ;;   * (p* B-if-ext) expands to 'B' if it's an extended register, else nothing
+     ;;
+     ;; Tips:
+     ;;   * The arrp/bsumLE macro with bregnum can be used to offset base opcodes with a register num
 
-       (REX W R)"\x8B"(RM r12 rdi)                                               ; mov r12, rdi - r12 = the element to assemble
-       (REX W R)"\x8B"(RM r13 rsi)                                               ; mov r13, rsi - output buffer
-       (REX W R)"\x8B"(RM r14 rdx)                                               ; mov r14, rdx - output parray
+     (instruction-table
+      ((mov (((r64 re64) (r64  re64)) (REX W) "\x89" (RM rdi rsi))
+            (((r64 re64) (m64  me64)) (REX W) "\x89" (RM rdi (m64 rsi 0 1 0)))
+            (((r64 re64) (imm32)    ) (REX W) "\xC7" (RM 0 rdi) (imm 32 5)))
+       (cmp (((r64 re64) (r64 re 64)) "thiswouldbecmp"))))
 
-       ;; NOTE: write buffer-relative pointers - not abs - in the output parray.
+     ; (((r64 re64) (r64 re64)) (REX W (p1 R-if-ext) (p0 B-if-ext)) "\x89" (RM (p1) (p0)))
 
-       ;; If the element is a barray:
-       ;; * write the barray (not a pointer) to our output byte buffer
-       ;; * write a pointer to the barray to our parray output buffer
+     (assemble-fn
+       (aarrp/barray-cat
+        (REX B)"\x54"                                                             ; push r12
+        (REX B)"\x55"                                                             ; push r13
+        (REX B)"\x56"                                                             ; push r14
+        (REX B)"\x57"                                                             ; push r15
+        "\x53"                                                                    ; push rbx
 
-       (REX W B)"\x83"(RM 7 (m64 r12 0 1 0))(imm 8 0)                            ; cmp qword[r12], 0
-       "\x0F\x8C"(label-rel-ref not-barray 4 LE)                                 ; jl not-barray
+        (REX W R)"\x8B"(RM r12 rdi)                                               ; mov r12, rdi - r12 = the element to assemble
+        (REX W R)"\x8B"(RM r13 rsi)                                               ; mov r13, rsi - output buffer
+        (REX W R)"\x8B"(RM r14 rdx)                                               ; mov r14, rdx - output parray
 
-       (REX W R)"\x89"(RM r13 rdi)                                               ; mov rdi, r13
-       (REX W)"\xB8"(aarrp/builtin-func-addr/byte-buffer-get-data-length)        ; mov rax, bb-get-data-len
-       "\xFF"(RM 2 rax)                                                          ; call rax
+        ;; NOTE: write buffer-relative pointers - not abs - in the output parray.
 
-       (REX W R)"\x89"(RM r14 rdi)                                               ; mov rdi, r14
-       (REX W)"\x89"(RM rax rsi)                                                 ; mov rsi, rax
-       (REX W)"\xB8"(aarrp/builtin-func-addr/byte-buffer-push-int64)             ; mov rax, bb-push-int64
-       "\xFF"(RM 2 rax)                                                          ; call rax
+        ;; If the element is a barray:
+        ;; * write the barray (not a pointer) to our output byte buffer
+        ;; * write a pointer to the barray to our parray output buffer
 
-       (REX W R)"\x89"(RM r13 rdi)                                               ; mov rdi, r13
-       (REX W R)"\x89"(RM r12 rsi)                                               ; mov rsi, r12
-       (REX W)"\xB8"(aarrp/builtin-func-addr/byte-buffer-push-barray)            ; mov rax, bb-push-barray
-       "\xFF"(RM 2 rax)                                                          ; call rax
+        (REX W B)"\x83"(RM 7 (m64 r12 0 1 0))(imm 8 0)                            ; cmp qword[r12], 0
+        "\x0F\x8C"(label-rel-ref not-barray 4 LE)                                 ; jl not-barray
 
-       "\xE9"(label-rel-ref epilogue 4 LE)                                       ; jmp epilogue
-       (label not-barray)
+        (REX W R)"\x89"(RM r13 rdi)                                               ; mov rdi, r13
+        (REX W)"\xB8"(aarrp/builtin-func-addr/byte-buffer-get-data-length)        ; mov rax, bb-get-data-len
+        "\xFF"(RM 2 rax)                                                          ; call rax
 
-       ;;        * TODO if the element is a parray, scan our instruction table to see if
-       ;;          the element is an instruction.
-       ;;          * If it's not an instruction name, just output the parray to our new parray
-       ;;            * write parray bytes to output buffer (via macroexpand recursive copy)
-       ;;            * write pointer to parray output buf
-       ;;          * If it is an instruction name:
-       ;;            * determine it's parameter types
-       ;;            * select the correct encoding entry for that instruction (error if none)
-       ;;            * push relevant access macros (param 0) (param 1)
-       ;;            * OR wrap the encoding entry with a 'arrp/with' with stuff defined?.
-       ;;            * macroexpand encoding entry
-       ;;            * pop access macros
-       ;;            * recursive copy each element in macroexpansion parray
-       ;;            * push pointer to that in parray output buf
+        (REX W R)"\x89"(RM r14 rdi)                                               ; mov rdi, r14
+        (REX W)"\x89"(RM rax rsi)                                                 ; mov rsi, rax
+        (REX W)"\xB8"(aarrp/builtin-func-addr/byte-buffer-push-int64)             ; mov rax, bb-push-int64
+        "\xFF"(RM 2 rax)                                                          ; call rax
 
-       (label epilogue)
-       "\x5B"                                                                              ; pop rbx
-       (REX B)"\x5F"                                                                       ; pop r15
-       (REX B)"\x5E"                                                                       ; pop r14
-       (REX B)"\x5D"                                                                       ; pop r13
-       (REX B)"\x5C"                                                                       ; pop r12
-       "\xC3")))
+        (REX W R)"\x89"(RM r13 rdi)                                               ; mov rdi, r13
+        (REX W R)"\x89"(RM r12 rsi)                                               ; mov rsi, r12
+        (REX W)"\xB8"(aarrp/builtin-func-addr/byte-buffer-push-barray)            ; mov rax, bb-push-barray
+        "\xFF"(RM 2 rax)                                                          ; call rax
+
+        "\xE9"(label-rel-ref epilogue 4 LE)                                       ; jmp epilogue
+        (label not-barray)
+
+        ;; It's a parray, scan instruction table to see if it's an instruction
+
+        ;; If the parray is zero-length, it's not an instruction
+        (REX W B)"\x8B"(RM rdi (m64 r12 0 1 0)) ; mov rdi, qword[r12]
+        (REX W)"\xF7"(RM 2 rdi)                 ; not rdi
+        (REX W)"\x83"(RM 7 rdi)(imm 8 -1)       ; cmp rdi, -1
+        "\x0F\x84"(label-rel-ref not-instruction 4 LE)                            ; je not-instruction
+
+        (REX W)(aarrp/bsumLE "\xB8" (bregnum rbx))(instruction-table addr 8 LE)   ; mov rbx, instruction-table
+        (REX W R)"\x8B"(RM r15 (m64 rbx 0 1 0))                                   ; mov r15, qword[rbx]
+        (REX W B)"\xF7"(RM 2 r15)                                                 ; not r15 - r15 = table entry count
+
+        (REX W)"\x83"(RM 0 rbx)(imm 8 8)                                          ; add rbx, 8 - move past length
+
+        (label table-loop)
+        (label-scope
+         (REX W B)"\x83"(RM 7 r15)(imm 8 0)                                       ; cmp r15, 0
+         "\x0F\x8E"(label-rel-ref table-loop-break 4 LE)                          ; jle table-loop-break
+
+         (REX W)"\x8B"(RM rdi (m64 rbx 0 1 0))                                    ; mov rdi, qword[rbx]   - rdi = entry parray
+         (REX W)"\x8B"(RM rsi (m64 rdi 0 1 8))                                    ; mov rsi, qword[rdi+8] - rsi = name of entry barray
+         (REX W B)"\x8B"(RM rdi (m64 r12 0 1 8))                                  ; mov rdi, qword[r12+8] - rdi = name of user's instruction
+         (REX W)"\xB8"(aarrp/builtin-func-addr/barray-equalp)                     ; mov rax, barray-equalp
+         "\xFF"(RM 2 rax)                                                         ; call rax
+         (REX W)"\x83"(RM 7 rax)(imm 8 1)                                         ; cmp rax, 1
+         "\x0F\x84"(label-rel-ref is-instruction 4 LE)                            ; je is-instruction
+
+         (REX W)"\x83"(RM 0 rbx)(imm 8 8)                                         ; add rbx, 8
+         (REX W B)"\xFF"(RM 1 r15)                                                ; dec r15
+         "\xE9"(label-rel-ref table-loop 4 LE))                                   ; jmp table-loop
+        (label table-loop-break)
+
+        (label not-instruction)
+        (label-scope
+         ;; Recursive copy this input using macroexpand into our output buffer
+         (REX W B)"\x8B"(RM rdi r12)                                               ; mov rdi, r12
+         (REX W B)"\x8B"(RM rsi r13)                                               ; mov rsi, r13
+         (REX W)"\xC7"(RM 0 rdx)(imm 32 0)                                         ; mov rdx, 0
+         (REX W)"\xB8"(aarrp/builtin-func-addr/structural-macro-expand)            ; mov rax, structural-macro-expand
+         "\xFF"(RM 2 rax)                                                          ; call rax
+         (REX W)"\x8B"(RM rbx rax)                                                 ; mov rbx, rax
+
+         ;; Write a buffer-relative pointer to the thing we should expanded to our parray
+         (REX W B)"\x8B"(RM rdi r13)                                               ; mov rdi, r13
+         (REX W)"\xB8"(aarrp/builtin-func-addr/byte-buffer-get-buf)                ; mov rax, byte-buffer-get-buf
+         "\xFF"(RM 2 rax)                                                          ; call rax
+         (REX W)"\x2B"(RM rbx rax)                                                 ; sub rbx, rax
+
+         (REX W B)"\x8B"(RM rdi r14)                                               ; mov rdi, r14
+         (REX W)"\x8B"(RM rsi rbx)                                                 ; mov rsi, rbx
+         (REX W)"\xB8"(aarrp/builtin-func-addr/byte-buffer-push-int64)             ; mov rax, byte-buffer-push-int64
+         "\xFF"(RM 2 rax)                                                          ; call rax
+
+         "\xE9"(label-rel-ref epilogue 4 LE))                                      ; jmp epilogue
+
+        (label is-instruction)
+        ;; TODO do something. rbx = entry parray
+        "\xE9"(label-rel-ref epilogue 4 LE)                                       ; jmp epilogue
+        ;; TODO
+        ;;          * If it's not an instruction name, just output the parray to our new parray
+        ;;            * write parray bytes to output buffer (via macroexpand recursive copy)
+        ;;            * write pointer to parray output buf
+        ;;          * If it is an instruction name:
+        ;;            * determine it's parameter types
+        ;;            * select the correct encoding entry for that instruction (error if none)
+        ;;            * push relevant access macros (param 0) (param 1)
+        ;;            * OR wrap the encoding entry with a 'arrp/with' with stuff defined?.
+        ;;            * macroexpand encoding entry
+        ;;            * pop access macros
+        ;;            * recursive copy each element in macroexpansion parray
+        ;;            * push pointer to that in parray output buf
+
+        (label epilogue)
+        "\x5B"                                                                              ; pop rbx
+        (REX B)"\x5F"                                                                       ; pop r15
+        (REX B)"\x5E"                                                                       ; pop r14
+        (REX B)"\x5D"                                                                       ; pop r13
+        (REX B)"\x5C"                                                                       ; pop r12
+        "\xC3")))
     (asm/x86_64
      (x86_64-linux
       (aarrp/barray-cat
@@ -1816,8 +1874,10 @@
     ;(RM rax (m64 r11 0 1 127))
     ;(aarrp/barray-cat (REX W) "\x89" (RM rdi (m64 rsp rdi 2 10)))
     (asm/x86_64
+      "foo"
       (REX W R)"\x89"(RM r15 rax)                                                         ; mov rax, r15
+      (some-garbage)
       (mov rdi rsi))
-   a )))
+   )))
 
 ; (m64 rdi 0 1 0)

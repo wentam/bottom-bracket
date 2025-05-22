@@ -276,6 +276,7 @@ Interestingly, that means that even with this design there are certain situation
     * "eager" JIT (compile at function definiton time): just like ahead-of-time, except your code expands into a macro instead of an ELF to define a function. Using the macro (inside another macro definition) is calling the function.
         * This means when you build your ahead-of-time language, you can simply just use it like a JIT language without modifications.
     * "lazy JIT" (compile at first function use): create your own with-macros macro that doesn't macroexpand the macro until it's used.
+        * Probably by pushing 'dummy' macros that macroexpand and push the real macro to the stack upon first use.
         * Optionally inline the macro instead
     * macroexpansion = compilation, so any kind of JIT is possible by simply choosing when to macroexpand.
 * When trying to optimize codegen, I'd like to look at what existing compilers output for the same thing, but *don't* look at how they do it. I want to explore my own bottom-up way. Things like my allocate-register macro described here are a good example why.
@@ -407,3 +408,23 @@ Interestingly, that means that even with this design there are certain situation
     * Yeah, this is a leaky abstraction: Imagine you 'get_buf' and 'get_data_len' to grab a pointer to the end of the current byte buffer, then write 1024 bytes to the buffer with the intent on that being the data the pointer refers to. But the buffer grows as you write it, and your pointer points to the stale block before the allocation. Now you have memory garbage.
     * Could only ever work if the behavior was made very clear to users
     * Probably just introduces different, more confusing memory management errors
+* Maybe there should be two stages of IR: stage 1 = infinite normal registers, stage 2 = infinite SSA registers.
+    * stage 1 design to more closely resemble how most cpus function allowing for as much optimization as possible away from the platform
+    * this would make register assignment more platform-independent
+    * To compile stage 1 to machine code, you could start by taking passes through the stage 1 IR to reduce the register counts to match available registers on the target platform.
+    * Maybe both of these stages are the same IR - the IR just supports both SSA and mutable registers.
+        * The optimizer expects everything to be SAA and errors on mutables.
+        * Helpful because we likely want to do mutable->immutable->mutable again. It might be easier to build a language atop mutable registers. We optimize with immutable SSA. Back to mutable to generate machine code.
+        * Explicit 'spill' instruction?
+        * Allow mov memory, memory at the IR level, and only involve temps once compiled down?
+            * Though if we disallow this, the spilling pain dramatically reduces on platforms where you need
+            temps to spill
+    * If it's helpful, the immutable->mutable transformation stage might write some tags about the mutable register to help compilers
+        * For information easier to compute while registers are still immutable, but relevant to the lower levels
+        * Like if the mutable register's usage crosses function call boundaries - useful for the IR->platform code compiler to know if they should prefer callee-preserve register if possible.
+* Our IR should have good generic SIMD instructions
+    * Can always compile down to non-SIMD on non-SIMD platforms.
+    * Probably make it always possible to compile without SIMD support
+        * Could do this by an IR->IR compile phase that converts SIMD-IR to non-SIMD-IR
+* IR should have a raw instruction passthrough to allow for stuff like C's asm tooling.
+    * Passthrough should declare what platform it's for, and an error should be produced if we attempt to compile that IR down to other platforms
