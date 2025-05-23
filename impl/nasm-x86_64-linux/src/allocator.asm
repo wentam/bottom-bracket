@@ -25,7 +25,7 @@
 %define ALLOCATION_LENGTH_OFFSET 8
 %define ALLOCATION_DATA_OFFSET 16
 
-%define CHUNK_SIZE (1024*1024) ;; TODO more bigger
+%define CHUNK_SIZE (1024*1024)
 %define SYSCALL_SPILL_SIZE 1024 ;; Allocations larger than this will syscall
 
 %define MAP_ANONYMOUS  0x20
@@ -283,7 +283,6 @@ free:
 
   .is_bump_allocation:
    ;;; Decrement (and retain) refcount
-   ;int3
    mov rcx, qword[rsi+CHUNK_REFCOUNT_OFFSET]
    dec rcx
    mov qword[rsi+CHUNK_REFCOUNT_OFFSET], rcx

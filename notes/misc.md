@@ -435,3 +435,29 @@ Interestingly, that means that even with this design there are certain situation
     * Play with thresholds, but probably bump allocate anything <= 1024 bytes, and probably actually syscall every 1MB. Maybe even progressively grow the syscall allocations.
     * Probably put a sanity cap on bump allocation at like 50MB.
     * Some logic to free a chunk if *everything* inside it is freed is probably still worth it. Probably do this by tracking allocation count per chunk. Increment on alloc, decrement on dealloc, free if zero.
+* IR should
+    * not use stateful nonsense like flags, this makes optimization hard and poorly maps to RISC arches
+    * avoid side-effects at all costs in instructions. If side-effects end up being needed, compile a clear list of 'side-effect' instructions for the optimizer to know about.
+    * be modeled after RISC-V - just SSA
+    * Should have vector/SIMD operations
+* We should pretend x86 is RISC and just use simple instructions when lowering
+    * x86 is a dumb legacy platform and won't be relevant forever.
+* As the quantity of macros grows, it actually may start to make sense to make with-macros lazy - push dummy macros that compile and push tho real macro upon first call, masking the dummy.
+    * But also might not be needed because we plan to be able to package precompiled macros with the .arrpb format.
+* RISC-V assembler should not assume any extension, but enabled with args
+    * When lowering IR to RISC-V, it should work fine without extensions but have slower codegen, because no SIMD etc
+    * When lowering IR to RISC-V, take list of extensions.
+* High-level language name idea: flaming parenthesis
+    * parenthetic inferno
+    * arrp = spark, higher level = inferno?
+        * kindling = IR
+        * Cinder,ash,smoulder
+    * arrp = ember, higher level = blaze
+    * kindling -> wildfire
+    * cinder -> inferna
+    * cinder -> wildfire
+* For the web: what about building a RISC-V VM in webassembly
+    * Give it a standardized mechanism of DOM access, maybe by memory-mapped I/O
+        * Obviously this means it would need to be paired with a javascript glue library
+    * Could create a webapp in an entirely arrp-runtime defined way. Initial page load just loads
+    JS glue and nothing else.

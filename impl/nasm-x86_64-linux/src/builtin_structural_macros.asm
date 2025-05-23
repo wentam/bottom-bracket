@@ -62,6 +62,7 @@ elf64_relocatable_macro_name: db 17,0,0,0,0,0,0,0,"elf64-relocatable"
 barray_cat_macro_name: db 16,0,0,0,0,0,0,0,"aarrp/barray-cat"
 with_macros_macro_name: db 17,0,0,0,0,0,0,0,"aarrp/with-macros"
 with_macro_name: db 10,0,0,0,0,0,0,0,"aarrp/with"
+builtin_print_macro_name: db 29,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/print"
 builtin_bb_push_int64_macro_name: db 46,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-push-int64"
 builtin_bb_push_int32_macro_name: db 46,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-push-int32"
 builtin_bb_push_int16_macro_name: db 46,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-push-int16"
@@ -206,6 +207,16 @@ push_builtin_structural_macros:
   mov qword[rsp+8], builtin_bb_push_int16
   mov rdi, qword[macro_stack_structural]    ; macro stack
   mov rsi, builtin_bb_push_int16_macro_name ; macro name
+  mov rdx, rsp                              ; code
+  call kv_stack_push
+  add rsp, 16
+
+  ;; Push builtin_print macro
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], builtin_print
+  mov rdi, qword[macro_stack_structural]    ; macro stack
+  mov rsi, builtin_print_macro_name ; macro name
   mov rdx, rsp                              ; code
   call kv_stack_push
   add rsp, 16
@@ -473,6 +484,26 @@ builtin_bb_push_int16:
   pop r12
   ret
 builtin_bb_push_int16_end:
+
+builtin_print:
+  push r12
+  mov r12, rsi
+
+  mov rdi, r12
+  mov rsi, 8
+  mov rax, byte_buffer_push_int64
+  call rax
+
+  mov rdi, r12
+  mov rsi, print
+  mov rax, byte_buffer_push_int64
+  call rax
+  mov rax, 0
+
+  pop r12
+  ret
+builtin_print_end:
+
 
 builtin_sma:
   push r12
