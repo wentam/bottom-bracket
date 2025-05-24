@@ -2,6 +2,7 @@ section .text
 global structural_macro_expand
 global structural_macro_expand_relptr
 global structural_macro_expand_tail
+global dump_expand_count
 
 extern byte_buffer_get_buf
 extern byte_buffer_get_data_length
@@ -21,6 +22,10 @@ extern write_char
 extern parray_tail_new
 
 extern free
+
+section .bss
+
+expand_count: resb 8
 
 section .rodata
 
@@ -167,6 +172,7 @@ structural_macro_expand_relptr:
   push rdx
   sub rsp, 8
   call qword[rax+8]
+  inc qword[expand_count]
   add rsp, 8
   pop rdx
   .nullfunc:
@@ -356,3 +362,12 @@ structural_macro_expand_tail:
   pop r13
   pop r12
   ret
+
+dump_expand_count:
+ mov rdi, qword[expand_count]
+ mov rsi, 10
+ mov rdx, 2
+ mov rcx, 0
+ call write_as_base
+ ret
+

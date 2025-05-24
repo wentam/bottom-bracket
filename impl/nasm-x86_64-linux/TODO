@@ -7,6 +7,7 @@
 * implement elf64-relocatable (or maybe just elf-relocatable?)
 * don't always malloc executable, make sure macro stack mallocs executable except when serving as data stack
 * rework macro interface and all builtins to not use byte_buffer?
+  * One thing we could say: if your expansion is less than X bytes, you can just write directly to the buffer. We could even pass you the value of get_buf as your third argument - so you don't need to call any functions at all for small expansions.
 * are compare_barrays and barray_equalp the same function? We need to either remove one or document the difference.
 * Put barray utility functions into a barray.asm, not util.asm
 * make malloc not always executable (split into malloc and malloc_linux as per notes so that public malloc is never executable)

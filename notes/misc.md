@@ -461,3 +461,7 @@ Interestingly, that means that even with this design there are certain situation
         * Obviously this means it would need to be paired with a javascript glue library
     * Could create a webapp in an entirely arrp-runtime defined way. Initial page load just loads
     JS glue and nothing else.
+* Builtin macro: (arrp/print-expansion foo). Macroexpands input. Prints result. Expands into input.
+    * handy for debugging.
+    * Expanding into input means we can stick this anywhere and have no effect on outcome, just injects the side-effect of printing the expansion along the way.
+    * also print-expansion-1 to just do a macroexpand-1

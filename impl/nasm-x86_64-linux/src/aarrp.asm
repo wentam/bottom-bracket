@@ -41,6 +41,7 @@ extern dump_read_result_buffer
 extern dump_read_result
 extern print
 extern barray_equalp
+extern dump_expand_count
 
 extern init_macro_stacks
 extern free_macro_stacks
@@ -331,6 +332,8 @@ _start:
 
   ;;pop rdi
   ;;add rsp, 10
+
+  call dump_expand_count
 
   ;; Exit
   mov rdi, 0
