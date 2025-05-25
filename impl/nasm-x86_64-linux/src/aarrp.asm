@@ -29,6 +29,7 @@ extern exit
 extern write_char
 extern read_char
 extern malloc
+extern malloc_cleanup
 extern realloc
 extern free
 extern write_as_base
@@ -334,6 +335,8 @@ _start:
   ;;add rsp, 10
 
   call dump_expand_count
+
+  call malloc_cleanup
 
   ;; Exit
   mov rdi, 0

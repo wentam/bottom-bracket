@@ -819,7 +819,7 @@ assert_stack_aligned:
   mov rsi, stack_unaligned_str_len
   mov rdx, stderr_fd
   call write
-  int 3
+  int3
 
   .aligned:
 

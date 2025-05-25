@@ -47,12 +47,23 @@ bump_ptr: resb 8          ; Pointer to first available byte in chunk
 section .text
 
 global malloc
+global malloc_cleanup
 global realloc
 global free
 
 
-;;; TODO Cleans up last bump alloc chunk if it's around.
+;;; Cleans up last bump alloc chunk if it's around.
 malloc_cleanup:
+ mov rdi, qword[bump_ptr]
+ cmp rdi, 0
+ je .nope
+
+ mov rdi, qword[current_chunk_ptr]
+ mov rsi, CHUNK_SIZE
+ mov rax, SYS_MUNMAP
+ syscall
+ ret
+ .nope:
  ret
 
 ;;; TODO don't always allocate as exec. Maybe make a separate malloc_exec function call.
@@ -61,6 +72,13 @@ malloc_cleanup:
 ;;;  Allocates memory. returns 0/NULL if allocation fails.
 malloc:
  sub rsp, 8 ; align stack
+
+ cmp rdi, 0
+ jg .not_zero
+ mov rax, 0
+ add rsp, 8
+ ret
+ .not_zero:
 
  ;; If allocation is > spill size, just take slow path
  cmp rdi, SYSCALL_SPILL_SIZE

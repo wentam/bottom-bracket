@@ -1943,7 +1943,7 @@ _with_macros_push_macro:
   push r13
   push r14
   push r15
-  sub rsp, 8
+  push rbx
 
   mov r12, rdi ; r12 = macro spec
 
@@ -2012,10 +2012,31 @@ _with_macros_push_macro:
 
   ;; We failed to push an implementation, push our error-producing macro in it's place so
   ;; any attempt to use this macro fails with an error.
+  ;;
+  ;; We do this with malloc because our pop logic frees this stuff
+
+  mov rdi, (with_macros_unsupported_platform_end - with_macros_unsupported_platform)
+  add rdi, 8
+  call malloc
+  mov rbx, rax
+
+  mov rdi, with_macros_unsupported_platform
+  mov rcx, 0
+  .memcpy_ucode:
+  cmp rdi, with_macros_unsupported_platform_end
+  jg .memcpy_ucode_break
+
+  mov al, byte[rdi]
+  mov byte[rbx+rcx], al
+
+  inc rcx
+  inc rdi
+  jmp .memcpy_ucode
+  .memcpy_ucode_break:
 
   sub rsp, 16
   mov qword[rsp], 8
-  mov qword[rsp+8], with_macros_unsupported_platform
+  mov qword[rsp+8], rbx
   mov rdi, qword[macro_stack_structural]  ; macro stack
   mov rsi, qword[r12+8]                   ; macro name
   mov rdx, rsp                     ; code
@@ -2024,7 +2045,7 @@ _with_macros_push_macro:
   ;; return id
 
   .epilogue:
-  add rsp, 8
+  pop rbx
   pop r15
   pop r14
   pop r13
@@ -2109,7 +2130,7 @@ with_macros:
   push r14
   push r15
   push rbx
-  sub rsp, 8 ; alloc for id byte buffer
+  sub rsp, 24 ; alloc for id byte buffer
 
   mov r12, rdi ; input structure
   mov r13, rsi ; output bytpe buffer
@@ -2184,45 +2205,34 @@ with_macros:
   mov rdi, qword[rbp-48]
   mov rax, byte_buffer_get_data_length
   call rax
+  mov qword[rbp-56], rax
 
   .pop_loop:
-  cmp rax, 0
+  cmp qword[rbp-56], 0
   jle .pop_loop_break
 
-  push rax
-  sub rsp, 8
-
   mov rdi, qword[rbp-48]
-  mov rsi, rax
+  mov rsi, qword[rbp-56]
   sub rsi, 8
   mov rax, byte_buffer_read_int64
   call rax
+  mov qword[rbp-64], rax
 
   mov rdi, qword[macro_stack_structural] ; macro stack
-  mov rsi, rax
+  mov rsi, qword[rbp-64]
   mov rax, kv_stack_value_by_id
   call rax
 
-  push rax
-  sub rsp, 8
-
-  ; free the macro - we malloc'd it
+  ;; free the macro - we malloc'd it
   mov rdi, qword[rax+8]
   call free
 
-  add rsp, 8
-  pop rax
-
   mov rdi, qword[macro_stack_structural] ; macro stack
-  mov rsi, rax
+  mov rsi, qword[rbp-64]
   mov rax, kv_stack_pop_by_id
   call rax
 
-
-  add rsp, 8
-  pop rax
-
-  sub rax, 8
+  sub qword[rbp-56], 8
   jmp .pop_loop
   .pop_loop_break:
 
@@ -2234,7 +2244,7 @@ with_macros:
   ;; Return buffer relative pointer to our structure in output buffer
   mov rax, rbx
   .epilogue:
-  add rsp, 8
+  add rsp, 24
   pop rbx
   pop r15
   pop r14
@@ -2705,6 +2715,26 @@ with_:
   .pop_loop_break:
 
   ;; Free each byte buffer in data byte buffer (it's a buffer of pointers to byte buffers)
+  mov rdi, r15
+  call byte_buffer_get_data_length
+  shr rax, 3 ;; / 8
+  mov r13, rax ; NOTE: we comandeer r13 (formerly output byte buffer) for this lel
+
+  mov rdi, r15
+  call byte_buffer_get_buf
+  mov r12, rax ; NOTE: we comandeer r12 (our input) for this kek
+
+  .data_free_loop:
+  cmp r13, 0
+  jle .data_free_loop_break
+
+  mov rdi, qword[r12]
+  call byte_buffer_free
+
+  add r12, 8
+  dec r13
+  jmp .data_free_loop
+  .data_free_loop_break:
 
   ;; Free id list byte buffer, data byte buffer, and shy macroexpand byte buffer
   mov rdi, rbx

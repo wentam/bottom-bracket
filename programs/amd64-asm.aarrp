@@ -2384,7 +2384,7 @@
   ;(aarrp/barray-cat (REX W)"\x89"(RM rdi (m64 rax 0 1 0)))
   ;(REX (barray-test))
   ;(imm 16 2)
-   ;(RM rsi r13)
+  ; (RM rsi r13)
     ;(RM rax (m64 r11 0 1 127))
     ;(aarrp/barray-cat (REX W) "\x89" (RM rdi (m64 rsp rdi 2 10)))
     (asm/x86_64
@@ -2392,7 +2392,8 @@
       (REX W R)"\x89"(RM r15 rax)                                                         ; mov rax, r15
       (some-garbage)
       (cmp 5 rcx)
-      (mov (m8 rdi 0 1 0) rsi))
+      (mov (m8 rdi 0 1 0) rsi)
+      )
    )))
 
 ; (m64 rdi 0 1 0)

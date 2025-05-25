@@ -1,7 +1,13 @@
 ((aarrp/with-macros
-   ((my-nothing-macro
+   ((aoeu (x86_64-linux "\xC3"))
+    (my-nothing-macro
      (x86_64-linux (aarrp/barray-cat
                     "\x48\xB8\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF" ; mov rax, -1
                     "\xC3")))                                  ; ret
-    (unsupported-macro (a (aarrp/barray-cat "\xFF" (my-nothing-macro)))))
-   (a b (my-nothing-macro) (aunsupported-macro))))
+    (unsupported-macro (a (aarrp/barray-cat "\xFF" (my-nothing-macro))))
+    ;(unsupported-macr2o (a (aarrp/barray-cat "\xFF" (my-nothing-macro))))
+    ;(uunsupported-macr2o (a (aarrp/barray-cat "\xFF" (my-nothing-macro))))
+    )
+   (a b (my-nothing-macro) (aunsupported-macro)))
+
+   (my-nothing-macro) (unsupported-macro))
