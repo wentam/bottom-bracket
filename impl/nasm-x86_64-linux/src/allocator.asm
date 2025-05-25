@@ -26,7 +26,7 @@
 %define ALLOCATION_DATA_OFFSET 16
 
 %define CHUNK_SIZE (1024*1024)
-%define SYSCALL_SPILL_SIZE 1024 ;; Allocations larger than this will syscall
+%define SYSCALL_SPILL_SIZE 128*1024 ;; Allocations larger than this will syscall
 
 %define MAP_ANONYMOUS  0x20
 %define MAP_PRIVATE    0x02

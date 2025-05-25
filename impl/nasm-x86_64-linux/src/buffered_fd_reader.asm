@@ -55,7 +55,7 @@ section .text
 %define BUFFERED_READER_END_PTR_OFFSET 16
 %define BUFFERED_READER_BUF_OFFSET 24
 
-%define READ_BUFFER_SIZE 4096 ; For simplicity read buffers are constant size
+%define READ_BUFFER_SIZE 8192 ; For simplicity read buffers are constant size
 %define BUFFERED_READER_SIZE (READ_BUFFER_SIZE + 24)
 
 %define NEWLINE 10

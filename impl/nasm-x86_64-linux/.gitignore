@@ -4,3 +4,4 @@ build/
 vgcore*
 callgrind*
 perf.data
+perf.data.old

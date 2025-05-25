@@ -33,3 +33,4 @@
   * See if there's a good way to simplify defining these macros
   inside arrp. Maybe use a template macro.
 * We probably want the allocator to use thread-local storage to make it thread-safe in case the user spawns threads (even though arrp itself is single-threaded right now).
+* line numbers in errors
