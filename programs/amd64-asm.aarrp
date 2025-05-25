@@ -1665,6 +1665,69 @@
       (label loop-break)
       "\xC3"))
 
+     ;; Returns 1 if the two input parrays (rdi and rsi) share a common barray
+     ;; element. Otherwise returns 0.
+     (parrays-intersect-p
+      (aarrp/barray-cat
+       (REX B)"\x54"                                                            ; push r12
+       (REX B)"\x55"                                                            ; push r13
+       (REX B)"\x56"                                                            ; push r14
+       (REX B)"\x57"                                                            ; push r15
+       "\x53"                                                                   ; push rbx
+
+       (REX W R)"\x8B"(RM r12 rdi)                            ; mov r12, rdi
+       (REX W R)"\x8B"(RM r13 rsi)                            ; mov r13, rsi
+
+       (REX W R B)"\x8B"(RM r14 (m64 r12 0 1 0))                ; mov r14, qword[r12]
+       (REX W B)"\xF7"(RM 2 r14)                              ; not r14
+       (REX W B)"\x83"(RM 0 r12)(imm 8 8)                     ; add r12, 8 - move past len
+
+       (label outer-loop)
+       (label-scope
+        (REX W B)"\x83"(RM 7 r14)(imm 8 0)                    ; cmp r14, 0
+        "\x0F\x8E"(label-rel-ref outer-loop-break 4 LE)       ; jle outer-loop-break
+
+        (REX W R B)"\x8B"(RM r15 (m64 r13 0 1 0))             ; mov r15, qword[r13]
+        (REX W B)"\xF7"(RM 2 r15)                             ; not r15
+        (REX W B)"\x8B"(RM rbx r13)                           ; mov rbx, r13
+        (REX W)"\x83"(RM 0 rbx)(imm 8 8)                      ; add rbx, 8 - move past len
+
+        (label inner-loop)
+        (label-scope
+         (REX W B)"\x83"(RM 7 r15)(imm 8 0)                   ; cmp r15, 0
+         "\x0F\x8E"(label-rel-ref inner-loop-break 4 LE)      ; jle inner-loop-break
+
+         (REX W B)"\x8B"(RM rdi (m64 r12 0 1 0))              ; mov rdi, qword[r12]
+         (REX W)"\x8B"(RM rsi (m64 rbx 0 1 0))                ; mov rsi, qword[rbx]
+         (REX W)"\xB8"(aarrp/builtin-func-addr/barray-equalp) ; mov rax, barray-equalp
+         "\xFF"(RM 2 rax)                                     ; call rax
+         (REX W)"\x83"(RM 7 rax)(imm 8 1)                     ; cmp rax, 1
+         "\x0F\x84"(label-rel-ref ya 4 LE)                    ; je ya
+
+         (REX W)"\x83"(RM 0 rbx)(imm 8 8)                     ; add rbx, 8
+         (REX W B)"\xFF"(RM 1 r15)                            ; dec r15
+         "\xE9"(label-rel-ref inner-loop 4 LE))               ; jmp inner-loop
+        (label inner-loop-break)
+
+        (REX W B)"\x83"(RM 0 r12)(imm 8 8)                    ; add r12, 8
+        (REX W B)"\xFF"(RM 1 r14)                             ; dec r14
+        "\xE9"(label-rel-ref outer-loop 4 LE))                ; jmp outer-loop
+       (label outer-loop-break)
+
+       (label nah)
+       (REX W)"\xC7"(RM 0 rax)(imm 32 0)                      ; mov rax, 0
+       "\xE9"(label-rel-ref epilogue 4 LE)                   ; jmp epilogue
+
+       (label ya)
+       (REX W)"\xC7"(RM 0 rax)(imm 32 1)                      ; mov rax, 1
+       (label epilogue)
+       "\x5B"                                                                   ; pop rbx
+       (REX B)"\x5F"                                                            ; pop r15
+       (REX B)"\x5E"                                                            ; pop r14
+       (REX B)"\x5D"                                                            ; pop r13
+       (REX B)"\x5C"                                                            ; pop r12
+       "\xC3"))
+
      (imm8-barray  "imm8")
      (imm16-barray "imm16")
      (imm32-barray "imm32")
@@ -2022,26 +2085,42 @@
 
         ;; TODO tmp for testing operand-type-fn
         ;; Just passed through our instruction's first operand every time
-        (REX W)"\xB8"(aarrp/builtin-func-addr/byte-buffer-new)                ; mov rax, byte-buffer-new
-        "\xFF"(RM 2 rax)                                                      ; call rax
-        "\x50"                                                                ; push rax
-        (REX W)"\x83"(RM 5 rsp)(imm 8 8)                                      ; sub rsp, 8
+        ;(REX W)(aarrp/bsumLE "\xB8" (bregnum rdi))(parray-test-1 addr 8 LE)                  ; mov rdi, parray-test-1
+        ;(REX W)(aarrp/bsumLE "\xB8" (bregnum rsi))(parray-test-2 addr 8 LE)                  ; mov rsi, parray-test-2
+        ;(REX W)(aarrp/bsumLE "\xB8" (bregnum rax))(parrays-intersect-p barray-raw-addr 8 LE) ; mov rax, parrays-intersect-p
+        ; "\xFF"(RM 2 rax)                                                          ; call rax
+        ;(REX W)"\x83"(RM 7 rax)(imm 8 1) ; cmp rax, 1
+        ; "\x0F\x85"(label-rel-ref nuh-uh 4 LE)                                 ; jne nuh-uh
 
-        (REX W B)"\x8B"(RM rdi (m64 r12 0 1 16))                              ; mov rdi, qword[r12+16]
-        (REX W)"\x8B"(RM rsi rax)                                             ; mov rsi, rax
-        (REX W)(aarrp/bsumLE "\xB8" (bregnum rax))(operand-type-fn barray-raw-addr 8 LE) ; mov rax, operand-type-fn
-         "\xFF"(RM 2 rax)                                                          ; call rax
-
-        ;(REX W)"\x8B"(RM rdi rax)         ; mov rdi, rax
-        ;(REX W)"\xC7"(RM 0 rsi)(imm 32 2) ; mov rsi, 2 - stderr
+        ;(REX W)(aarrp/bsumLE "\xB8" (bregnum rdi))(parray-test-1 addr 8 LE)                  ; mov rdi, parray-test-1
+        ;(REX W)"\xC7"(RM 0 rsi)(imm 32 2) ; mov rsi, 2
         ;(REX W)"\xB8"(aarrp/builtin-func-addr/print)             ; mov rax, print
         ;"\xFF"(RM 2 rax)                                                          ; call rax
 
-        (REX W)"\x83"(RM 0 rsp)(imm 8 8) ; add rsp, 8
-        "\x58" ; pop rax
-        (REX W)"\x8B"(RM rdi rax) ; mov rdi, rax
-        (REX W)"\xB8"(aarrp/builtin-func-addr/byte-buffer-free)             ; mov rax, byte-buffer-free
-        "\xFF"(RM 2 rax)                                                          ; call rax
+        ;(label nuh-uh)
+
+
+
+        ;(REX W)"\xB8"(aarrp/builtin-func-addr/byte-buffer-new)                ; mov rax, byte-buffer-new
+        ;"\xFF"(RM 2 rax)                                                      ; call rax
+        ;"\x50"                                                                ; push rax
+        ;(REX W)"\x83"(RM 5 rsp)(imm 8 8)                                      ; sub rsp, 8
+
+        ;(REX W B)"\x8B"(RM rdi (m64 r12 0 1 16))                              ; mov rdi, qword[r12+16]
+        ;(REX W)"\x8B"(RM rsi rax)                                             ; mov rsi, rax
+        ;(REX W)(aarrp/bsumLE "\xB8" (bregnum rax))(operand-type-fn barray-raw-addr 8 LE) ; mov rax, operand-type-fn
+        ; "\xFF"(RM 2 rax)                                                          ; call rax
+
+        ;;(REX W)"\x8B"(RM rdi rax)         ; mov rdi, rax
+        ;;(REX W)"\xC7"(RM 0 rsi)(imm 32 2) ; mov rsi, 2 - stderr
+        ;;(REX W)"\xB8"(aarrp/builtin-func-addr/print)             ; mov rax, print
+        ;;"\xFF"(RM 2 rax)                                                          ; call rax
+
+        ;(REX W)"\x83"(RM 0 rsp)(imm 8 8) ; add rsp, 8
+        ;"\x58" ; pop rax
+        ;(REX W)"\x8B"(RM rdi rax) ; mov rdi, rax
+        ;(REX W)"\xB8"(aarrp/builtin-func-addr/byte-buffer-free)             ; mov rax, byte-buffer-free
+        ;"\xFF"(RM 2 rax)                                                          ; call rax
 
         ;; TODO do something. rbx = entry parray
         "\xE9"(label-rel-ref epilogue 4 LE)                                       ; jmp epilogue

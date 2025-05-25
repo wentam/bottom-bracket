@@ -465,3 +465,11 @@ Interestingly, that means that even with this design there are certain situation
     * handy for debugging.
     * Expanding into input means we can stick this anywhere and have no effect on outcome, just injects the side-effect of printing the expansion along the way.
     * also print-expansion-1 to just do a macroexpand-1
+* To optimize a program fully, you need the full picture. For example, without LTO in C, you can't inline a function from another .c. This leads me to wonder: is it realistic to just build everything as one 'translation unit'?
+    * This doesn't mean a single file, as you can still use includes, but means the entire application is built without linking (aside from dynamic linking for third party libraries).
+    * This would make it harder to scale compilation processes wide: right now arrp is strictly single-threaded like most compilers.
+        * It might be possible to get multi-threaded macroexpansion working - one parent with two children expands each child in a separate thread.
+            * Means we wouldn't have as many ordering gaurantees for the user though.
+            * The primary compilation cost in arrp probably won't be bottlenecked on macroexpansion, but things like optimization passes
+                * Optimization is generally per-function and could be parallelized without arrp itself being parallel.
+        * This also might be fine if arrp remains super fast once we get to high-level compiler scale.
