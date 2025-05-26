@@ -160,7 +160,7 @@
 
 ;; TODO: show usage w/ "Usage:" for all functions/macros above them
 
-(aarrp/withm
+(aarrp/with
  ((data imm-arg-count-error   "\nERROR: Incorrect number of parameters passed to imm (should be 2).\n")
   (data imm-bad-width-error   "\nERROR: Bad width as first arg to imm. Must be one of: 8 16 32 64.\n")
   (data REX-input-error       "\nERROR: Inputs to REX must be one char each of: WRXBwrxb.\n")

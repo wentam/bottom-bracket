@@ -1,9 +1,20 @@
-(aarrp/with
- ((my-thing "foo")
-  (my-other-thing (a (a b) b))
-  (internal-ref (my-thing)))
+(aarrp/withm
+ ((data my-thing       "foo")
+  (data my-other-thing (a (a b) b))
+  (data internal-ref   (my-thing))
 
- ((internal-ref)                    ; expands into "foo" barray
+  (macro my-nothing-macro
+   (x86_64-linux
+    (aarrp/barray-cat
+     "\x48\xB8\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF" ; mov rax, -1
+     "\xC3")))
+
+  (macro unsupported-macro (a (aarrp/barray-cat "\xFF" (my-nothing-macro))))
+  )
+
+ ((my-nothing-macro)
+  (aunsupported-macro)
+  (internal-ref)                    ; expands into "foo" barray
   (my-thing)                        ; expands into "foo" barray
   (my-other-thing)                  ; expands into (a (a b) b) parray structure
   (my-thing addr 8 LE)              ; expands into pointer to "foo" barray
@@ -13,11 +24,4 @@
                                     ;  * This means you can define a function as machine language
                                     ;    and call the function with this address. This gives you
                                     ;    functions you can re-use in multiple different macros.
-
-
-
-
-
-
-
 
