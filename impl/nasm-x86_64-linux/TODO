@@ -1,3 +1,7 @@
+* Does the 'with' macro need to create a new byte buffer for each data entry? Why not just push the data directly to the 'data' byte buffer then free the whole buffer when we're done?
+* remove old with-macros and with
+* clean up unused data entries in builtin_structural_macros
+* rename withm->with
 * implement unified 'with' macro
   * data, functions, macros
   * needed because of memory lifecycle

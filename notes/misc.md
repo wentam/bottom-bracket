@@ -473,3 +473,6 @@ Interestingly, that means that even with this design there are certain situation
             * The primary compilation cost in arrp probably won't be bottlenecked on macroexpansion, but things like optimization passes
                 * Optimization is generally per-function and could be parallelized without arrp itself being parallel.
         * This also might be fine if arrp remains super fast once we get to high-level compiler scale.
+* should byte_buffer_new accept an argument for it's initial backing buffer size? our static size isn't always the ideal number - sometimes we might want something bigger to avoid reallocs (which are a bit expensive).
+* We combined 'with' and 'with-macros' because we need to be able to ship interdependent macros, data, and functions as one unit. Using separate macros this is a problem for memory management reasons.
+    * Before, if you wanted to return macros that depend on data you had a problem: once the 'with' macro expands, the data has beed freed.
