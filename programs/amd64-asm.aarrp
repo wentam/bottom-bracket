@@ -1077,7 +1077,10 @@
      "\x48\xB8" (aarrp/builtin-func-addr/byte-buffer-free)             ; mov rax, bb_free
      "\xFF\xD0"                                                        ; call rax
 
-     "\x48\xC7\xC0\x00\x00\x00\x00"                                    ; mov rax, 0
+     "\x4C\x89\xE7"                                                    ; mov rdi, r12
+     "\x48\xB8"(aarrp/builtin-func-addr/byte-buffer-get-buf)           ; mov rax, bb_get_buf
+     "\xFF\xD0"                                                        ; call rax
+     ; return rax
 
      "\x48\x83\xC4\x08"                                                ; add rsp, 8
      "\x5B"                                                            ; pop rbx
@@ -1219,7 +1222,10 @@
      "\x48\xB8" (aarrp/builtin-func-addr/byte-buffer-free)             ; mov rax, bb_free
      "\xFF\xD0"                                                        ; call rax
 
-     "\x48\xC7\xC0"(imm 32 0) ; mov rax, 0
+     "\x4C\x89\xEF"                                                    ; mov rdi, r13
+     "\x48\xB8"(aarrp/builtin-func-addr/byte-buffer-get-buf)           ; mov rax, bb_get_buf
+     "\xFF\xD0"                                                        ; call rax
+     ; return rax
 
      "\x48\x83\xC4\x08"                                                ; add rsp, 8
      "\x5B"      ; pop rbx
@@ -1499,7 +1505,10 @@
      "\x48\xB8" (aarrp/builtin-func-addr/byte-buffer-free)             ; mov rax, bb_free
      "\xFF\xD0"                                                        ; call rax
 
-     (REX W)"\xC7\xC0"(imm 32 0)                                         ; mov rax, 0
+     "\x4C\x89\xEF"                                                    ; mov rdi, r13
+     "\x48\xB8"(aarrp/builtin-func-addr/byte-buffer-get-buf)           ; mov rax, bb_get_buf
+     "\xFF\xD0"                                                        ; call rax
+     ; return rax
 
      "\x48\x83\xC4\x08"                                                ; add rsp, 8
       "\x5B"         ; pop rbx
@@ -1565,7 +1574,12 @@
      "\x48\xB8" (aarrp/builtin-func-addr/byte-buffer-free)             ; mov rax, bb_free
      "\xFF\xD0"                                                        ; call rax
 
-     (REX W)"\xC7"(RM 0 rax)(imm 32 0) ; mov rax, 0
+
+     "\x4C\x89\xEF"                                                    ; mov rdi, r13
+     "\x48\xB8"(aarrp/builtin-func-addr/byte-buffer-get-buf)           ; mov rax, bb_get_buf
+     "\xFF\xD0"                                                        ; call rax
+     ; return rax
+
      (REX B)"\x5F"  ; pop r15
      (REX B)"\x5E"  ; pop r14
      (REX B)"\x5D"  ; pop r13
@@ -2415,7 +2429,10 @@
      "\xFF"(RM 2 rax)                                                                    ; call rax
 
      ;; Return buffer-rel pointer to our parray output in the output byte buffer
-     (REX W R)"\x89"(RM r15 rax)                                                         ; mov rax, r15
+     (REX W R)"\x89"(RM r13 rdi)                                                         ; mov rdi, r13
+     (REX W)"\xB8"(aarrp/builtin-func-addr/byte-buffer-get-buf)                             ; mov rax, bb_get_buf
+     "\xFF"(RM 2 rax)                                                                    ; call rax
+     (REX W B)"\x03"(RM rax r15)                                                         ; add rax, r15
 
      "\x48\x83\xC4\x18"                                                                  ; add rsp, 24
      "\x5B"                                                                              ; pop rbx
@@ -2424,14 +2441,16 @@
      (REX B)"\x5D"                                                                       ; pop r13
      (REX B)"\x5C"                                                                       ; pop r12
      "\x5D"                                                                              ; pop rbp
-     "\xC3"))))
+     "\xC3")))
+     )
    ;; TODO: make sure that memory operands that use an extended index register and extended
    ;; base register both encode correctly
 
  (
   ;(aarrp/barray-cat (REX W)"\x89"(RM rdi (m64 rax 0 1 0)))
   ;(REX (barray-test))
-  ;(imm 16 2)
+  (bregnum rax)
+  (RM rsi r14)
   ; (RM rsi r13)
   ;(RM rax (m64 r11 0 1 127))
   ;(aarrp/barray-cat (REX W) "\x89" (RM rdi (m64 rsp rdi 2 10)))

@@ -7,6 +7,7 @@ extern byte_buffer_new
 extern byte_buffer_free
 extern byte_buffer_extend
 extern byte_buffer_get_buf
+extern byte_buffer_get_write_ptr
 extern byte_buffer_push_byte
 extern byte_buffer_push_bytes
 extern byte_buffer_push_int64
@@ -71,6 +72,7 @@ builtin_bb_push_int8_macro_name: db 45,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/by
 builtin_bb_push_barray_macro_name: db 47,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-push-barray"
 builtin_bb_data_len_macro_name: db 51,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-get-data-length"
 builtin_bb_get_buf_macro_name: db 43,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-get-buf"
+builtin_bb_get_write_ptr_macro_name: db 49,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-get-write-ptr"
 builtin_bb_write_int64_macro_name: db 47,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-write-int64"
 builtin_bb_new_macro_name: db 39,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-new"
 builtin_bb_free_macro_name: db 40,0,0,0,0,0,0,0,"aarrp/builtin-func-addr/byte-buffer-free"
@@ -300,6 +302,16 @@ push_builtin_structural_macros:
   call kv_stack_push
   add rsp, 16
 
+  ;; Push builtin_bb_get_write_ptr macro
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], builtin_bb_get_write_ptr
+  mov rdi, qword[macro_stack_structural]    ; macro stack
+  mov rsi, builtin_bb_get_write_ptr_macro_name ; macro name
+  mov rdx, rsp                              ; code
+  call kv_stack_push
+  add rsp, 16
+
   ;; Push builtin_bb_write_int64 macro
   sub rsp, 16
   mov qword[rsp], 8
@@ -406,332 +418,130 @@ push_builtin_structural_macros:
 ;;; barray_test(*structure, *output_byte_buffer) -> output buf relative pointer
 ;;;   Test macro that produces a static barray
 barray_test:
-  push r12
-  push r13
-  sub rsp, 8
-
-  mov r12, rdi ; input structure
-  mov r13, rsi ; output byte buffer
-
-  mov rdi, r13
-  mov rsi, barray_test_expansion
-  mov rax, byte_buffer_push_barray
-  call rax
-
-  mov rax, 0
-  add rsp, 8
-  pop r13
-  pop r12
+  mov rax, barray_test_expansion
   ret
 barray_test_end:
 
-  ;; TODO doc
+
+section .rodata
+push_int64_ptr_barray: dq 8, byte_buffer_push_int64
+section .text
 builtin_bb_push_int64:
-  push r12
-  mov r12, rsi
+ mov rax, push_int64_ptr_barray
+ ret
 
-  mov rdi, r12
-  mov rsi, 8
-  mov rax, byte_buffer_push_int64
-  call rax
-
-  mov rdi, r12
-  mov rsi, byte_buffer_push_int64
-  mov rax, byte_buffer_push_int64
-  call rax
-  mov rax, 0
-
-  pop r12
-  ret
-builtin_bb_push_int64_end:
-
+section .rodata
+push_int32_ptr_barray: dq 8, byte_buffer_push_int32
+section .text
 builtin_bb_push_int32:
-  push r12
-  mov r12, rsi
+ mov rax, push_int32_ptr_barray
+ ret
 
-  mov rdi, r12
-  mov rsi, 8
-  mov rax, byte_buffer_push_int64
-  call rax
-
-  mov rdi, r12
-  mov rsi, byte_buffer_push_int32
-  mov rax, byte_buffer_push_int64
-  call rax
-  mov rax, 0
-
-  pop r12
-  ret
-builtin_bb_push_int32_end:
-
-
+section .rodata
+push_int16_ptr_barray: dq 8, byte_buffer_push_int16
+section .text
 builtin_bb_push_int16:
-  push r12
-  mov r12, rsi
+ mov rax, push_int16_ptr_barray
+ ret
 
-  mov rdi, r12
-  mov rsi, 8
-  mov rax, byte_buffer_push_int64
-  call rax
-
-  mov rdi, r12
-  mov rsi, byte_buffer_push_int16
-  mov rax, byte_buffer_push_int64
-  call rax
-  mov rax, 0
-
-  pop r12
-  ret
-builtin_bb_push_int16_end:
-
+section .rodata
+print_ptr_barray: dq 8, print
+section .text
 builtin_print:
-  push r12
-  mov r12, rsi
+ mov rax, print_ptr_barray
+ ret
 
-  mov rdi, r12
-  mov rsi, 8
-  mov rax, byte_buffer_push_int64
-  call rax
-
-  mov rdi, r12
-  mov rsi, print
-  mov rax, byte_buffer_push_int64
-  call rax
-  mov rax, 0
-
-  pop r12
-  ret
-builtin_print_end:
-
-
+section .rodata
+structural_macro_expand_ptr_barray: dq 8, structural_macro_expand
+section .text
 builtin_sma:
-  push r12
-  mov r12, rsi
+ mov rax, structural_macro_expand_ptr_barray
+ ret
 
-  mov rdi, r12
-  mov rsi, 8
-  mov rax, byte_buffer_push_int64
-  call rax
-
-  mov rdi, r12
-  mov rsi, structural_macro_expand
-  mov rax, byte_buffer_push_int64
-  call rax
-  mov rax, 0
-
-  pop r12
-  ret
-
+section .rodata
+structural_macro_expand_tail_ptr_barray: dq 8, structural_macro_expand_tail
+section .text
 builtin_smat:
-  push r12
-  mov r12, rsi
+ mov rax, structural_macro_expand_tail_ptr_barray
+ ret
 
-  mov rdi, r12
-  mov rsi, 8
-  mov rax, byte_buffer_push_int64
-  call rax
-
-  mov rdi, r12
-  mov rsi, structural_macro_expand_tail
-  mov rax, byte_buffer_push_int64
-  call rax
-  mov rax, 0
-
-  pop r12
-  ret
-
+section .rodata
+push_byte_buffer_ptr_barray: dq 8, byte_buffer_push_byte_buffer
+section .text
 builtin_bb_push_bb:
-  push r12
-  mov r12, rsi
+ mov rax, push_byte_buffer_ptr_barray
+ ret
 
-  mov rdi, r12
-  mov rsi, 8
-  mov rax, byte_buffer_push_int64
-  call rax
-
-  mov rdi, r12
-  mov rsi, byte_buffer_push_byte_buffer
-  mov rax, byte_buffer_push_int64
-  call rax
-  mov rax, 0
-
-  pop r12
-  ret
-builtin_bb_push_bb_end:
-
+section .rodata
+free_byte_buffer_ptr_barray: dq 8, byte_buffer_free
+section .text
 builtin_bb_free:
-  push r12
-  mov r12, rsi
+ mov rax, free_byte_buffer_ptr_barray
+ ret
 
-  mov rdi, r12
-  mov rsi, 8
-  mov rax, byte_buffer_push_int64
-  call rax
 
-  mov rdi, r12
-  mov rsi, byte_buffer_free
-  mov rax, byte_buffer_push_int64
-  call rax
-  mov rax, 0
-
-  pop r12
-  ret
-builtin_bb_free_end:
-
+section .rodata
+new_byte_buffer_ptr_barray: dq 8, byte_buffer_new
+section .text
 builtin_bb_new:
-  push r12
-  mov r12, rsi
+ mov rax, new_byte_buffer_ptr_barray
+ ret
 
-  mov rdi, r12
-  mov rsi, 8
-  mov rax, byte_buffer_push_int64
-  call rax
-
-  mov rdi, r12
-  mov rsi, byte_buffer_new
-  mov rax, byte_buffer_push_int64
-  call rax
-  mov rax, 0
-
-  pop r12
-  ret
-builtin_bb_new_end:
-
+section .rodata
+get_buf_byte_buffer_ptr_barray: dq 8, byte_buffer_get_buf
+section .text
 builtin_bb_get_buf:
-  push r12
-  mov r12, rsi
+ mov rax, get_buf_byte_buffer_ptr_barray
+ ret
 
-  mov rdi, r12
-  mov rsi, 8
-  mov rax, byte_buffer_push_int64
-  call rax
+section .rodata
+get_write_ptr_byte_buffer_ptr_barray: dq 8, byte_buffer_get_write_ptr
+section .text
+builtin_bb_get_write_ptr:
+ mov rax, get_write_ptr_byte_buffer_ptr_barray
+ ret
 
-  mov rdi, r12
-  mov rsi, byte_buffer_get_buf
-  mov rax, byte_buffer_push_int64
-  call rax
-  mov rax, 0
-
-  pop r12
-  ret
-builtin_bb_get_buf_end:
-
+section .rodata
+write_int64_byte_buffer_ptr_barray: dq 8, byte_buffer_write_int64
+section .text
 builtin_bb_write_int64:
-  push r12
-  mov r12, rsi
+ mov rax, write_int64_byte_buffer_ptr_barray
+ ret
 
-  mov rdi, r12
-  mov rsi, 8
-  mov rax, byte_buffer_push_int64
-  call rax
-
-  mov rdi, r12
-  mov rsi, byte_buffer_write_int64
-  mov rax, byte_buffer_push_int64
-  call rax
-  mov rax, 0
-
-  pop r12
-  ret
-builtin_bb_write_int64_end:
-
+section .rodata
+data_len_byte_buffer_ptr_barray: dq 8, byte_buffer_get_data_length
+section .text
 builtin_bb_data_len:
-  push r12
-  mov r12, rsi
+ mov rax, data_len_byte_buffer_ptr_barray
+ ret
 
-  mov rdi, r12
-  mov rsi, 8
-  mov rax, byte_buffer_push_int64
-  call rax
 
-  mov rdi, r12
-  mov rsi, byte_buffer_get_data_length
-  mov rax, byte_buffer_push_int64
-  call rax
-  mov rax, 0
-
-  pop r12
-  ret
-builtin_bb_data_len_end:
-
+section .rodata
+barray_equalp_ptr_barray: dq 8, barray_equalp
+section .text
 builtin_barray_equalp:
-  push r12
-  mov r12, rsi
+ mov rax, barray_equalp_ptr_barray
+ ret
 
-  mov rdi, r12
-  mov rsi, 8
-  mov rax, byte_buffer_push_int64
-  call rax
-
-  mov rdi, r12
-  mov rsi, barray_equalp
-  mov rax, byte_buffer_push_int64
-  call rax
-  mov rax, 0
-
-  pop r12
-  ret
-builtin_barray_equalp_end:
-
+section .rodata
+push_int8_ptr_barray: dq 8, byte_buffer_push_byte
+section .text
 builtin_bb_push_int8:
-  push r12
-  mov r12, rsi
+ mov rax, push_int8_ptr_barray
+ ret
 
-  mov rdi, r12
-  mov rsi, 8
-  mov rax, byte_buffer_push_int64
-  call rax
 
-  mov rdi, r12
-  mov rsi, byte_buffer_push_byte
-  mov rax, byte_buffer_push_int64
-  call rax
-  mov rax, 0
-
-  pop r12
-  ret
-builtin_bb_push_int8_end:
-
-  ;; TODO doc
+section .rodata
+push_barray_ptr_barray: dq 8, byte_buffer_push_barray
+section .text
 builtin_bb_push_barray:
-  push r12
-  mov r12, rsi
-
-  mov rdi, r12
-  mov rsi, 8
-  mov rax, byte_buffer_push_int64
-  call rax
-
-  mov rdi, r12
-  mov rsi, byte_buffer_push_barray
-  mov rax, byte_buffer_push_int64
-  call rax
-  mov rax, 0
-
-  pop r12
-  ret
-builtin_bb_push_barray_end:
+ mov rax, push_barray_ptr_barray
+ ret
 
 ;;; parray_test(*structure, *output_byte_buffer) -> output buf relative pointer
 ;;;   Test macro that produces a static parray
 parray_test:
-  push r12
-  push r13
-  sub rsp, 8
-
-  mov r12, rdi ; input structure
-  mov r13, rsi ; output byte buffer
-
-  mov rdi, r13
-  mov rsi, parray_test_expansion
-  mov rdx, (8 * 4)
-  mov rax, byte_buffer_push_bytes
-  call rax
-
-  mov rax, 0
-  add rsp, 8
-  pop r13
-  pop r12
+  mov rax, parray_test_expansion
   ret
 parray_test_end:
 
@@ -740,8 +550,6 @@ parray_test_end:
 nothing:
   mov rax, -1
   ret
-
-nothing_end:
 
 ;;; _elf64_relocatable_find_sections_parray(structure*)
 ;;;   Returns a pointer to the sections parray of an elf64-relocatable macro call
@@ -1262,7 +1070,9 @@ elf64_relocatable:
   mov rax, byte_buffer_write_int64
   call rax
 
-  mov rax, 0
+  mov rdi, r13
+  call byte_buffer_get_buf
+  ;mov rax, 0
   mov rsp, rbp
   add rsp, 8
   pop rbx
@@ -1272,8 +1082,6 @@ elf64_relocatable:
   pop r12
   pop rbp
   ret
-
-elf64_relocatable_end:
 
 
 ;;; aarrp/barray-cat
@@ -1826,7 +1634,9 @@ barray_cat:
   mov rax, byte_buffer_free
   call rax
 
-  mov rax, 0
+  mov rdi, r13
+  call byte_buffer_get_buf
+  ;mov rax, 0
   add rsp, 24
   pop rbx
   pop r15
@@ -1835,7 +1645,6 @@ barray_cat:
   pop r12
   pop rbp
   ret
-barray_cat_end:
 
 ;;; _with_macros_try_push_impl(macro_name_barray*, impl_spec*)
 ;;;   Attempts to push a macro implementation spec to the structural macro stack
@@ -1966,14 +1775,8 @@ _with_template_macro:
   mov rdx, 0 ; copy mode
   mov rax, structural_macro_expand
   call rax
-  mov rbx, rax ; rbx = absolute pointer to our expansion
 
-  mov rdi, r13
-  mov rax, byte_buffer_get_buf
-  call rax
-  sub rbx, rax ; rbx = relative pointer to our expansion
-
-  mov rax, rbx
+  ; mov rax, rax
   jmp .epilogue
   .not_one_el:
 
@@ -2017,7 +1820,10 @@ _with_template_macro:
   mov rax, byte_buffer_push_int_as_width_LE
   call rax
 
-  mov rax, 0
+  mov rdi, r13
+  mov rax, byte_buffer_get_buf
+  call rax
+  ;mov rax, 0
   jmp .epilogue
 
   .is_BE:
@@ -2027,7 +1833,10 @@ _with_template_macro:
   mov rax, byte_buffer_push_int_as_width_BE
   call rax
 
-  mov rax, 0
+  mov rdi, r13
+  mov rax, byte_buffer_get_buf
+  call rax
+  ;mov rax, 0
   jmp .epilogue
 
   .not_addr:
@@ -2084,7 +1893,11 @@ _with_template_macro:
   mov rax, byte_buffer_push_int_as_width_LE
   call rax
 
-  mov rax, 0
+
+  mov rdi, r13
+  mov rax, byte_buffer_get_buf
+  call rax
+  ;mov rax, 0
   jmp .epilogue
 
   .is_BE2:
@@ -2095,7 +1908,10 @@ _with_template_macro:
   mov rax, byte_buffer_push_int_as_width_BE
   call rax
 
-  mov rax, 0
+  mov rdi, r13
+  mov rax, byte_buffer_get_buf
+  call rax
+  ;mov rax, 0
   jmp .epilogue
 
   .not_baddr:
@@ -2252,7 +2068,9 @@ bsumLE:
   mov rdx, rax
   call byte_buffer_write_int64
 
-  mov rax, 0
+  mov rdi, r13
+  call byte_buffer_get_buf
+  ;mov rax, 0
   add rsp, 8
   pop rbx
   pop r15
@@ -2629,7 +2447,7 @@ _withm_push_macros:
   pop rbp
   ret
 
-;;; withm(structure*, output_byte_buffer*) -> output buf relptr
+;;; withm(structure*, output_byte_buffer*) -> ptr
 withm:
   push rbp
   mov rbp, rsp
@@ -2679,10 +2497,6 @@ withm:
   mov rdx, 2             ; greedy
   call structural_macro_expand
   mov qword[rbp-56], rax ; qword[rbp-56] = abs pointer to output
-
-  mov rdi, r13 ; output byte buffer
-  call byte_buffer_get_buf
-  sub qword[rbp-56], rax ; qword[rbp-56] = relative pointer to result
 
   ;; Pop access/reference macros by ids in id byte buffer
   mov rdi, rbx
@@ -2748,7 +2562,7 @@ withm:
   mov rdi, r14
   call byte_buffer_free
 
-  ;; Return buffer-relative pointer to result
+  ;; Return pointer to result
   mov rax, qword[rbp-56]
 
   .epilogue:

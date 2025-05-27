@@ -6,6 +6,7 @@
     we can use a single byte buffer for all macroexpansions and
     just reset it
     * Provides you a pool to store things that we be 'freed'
+* Replace -1 as non-expand sigil: should be 0/NULL ptr now
 * Make third argument to macros == byte_buffer_get_buf?
   * You could expand macros up to 64 bytes without any function
   calls.
@@ -24,6 +25,7 @@
 * implement aarrp/include (as a builtin probably)
   * probably use buffered_fd_reader
 * implement elf64-relocatable (or maybe just elf-relocatable?)
+  * Remove the incomplete builtin one
 * don't always malloc executable, make sure macro stack mallocs executable except when serving as data stack
 * rework macro interface and all builtins to not use byte_buffer?
   * One thing we could say: if your expansion is less than X bytes, you can just write directly to the buffer. We could even pass you the value of get_buf as your third argument - so you don't need to call any functions at all for small expansions.

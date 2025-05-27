@@ -489,3 +489,5 @@ Interestingly, that means that even with this design there are certain situation
         * When you're done deferring the expansion, just macroexpand 'foo' directly.
         * Not really any different than the barray approach below, just more complex and requires arrp-accomodation.
 * One way to defer macroexpanion would be to define a macro that takes an input structure and expands into a barray of the bytes that represent that structure (using our in-memory representation)
+* We might want a way to inline builtin function calls in your macro if that overhead starts to matter
+    * probably just define a macro (arrp/builtin-func-code/byte-buffer-get-buf x86_64) that expands into the code.

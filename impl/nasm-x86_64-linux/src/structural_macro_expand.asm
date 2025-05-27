@@ -179,20 +179,20 @@ structural_macro_expand_relptr:
   call kv_stack_value_by_key
   mov rdi, r12                    ; arg1 (*data)
   mov rsi, rbx                    ; output buffer
-  mov rdx, rax
+  ;mov rdx, rax
   cmp rax, 0
   je .expand_parray_not_expanded
   call qword[rax+8]
   inc qword[expand_count]
-  mov r15, rax ; r15 = expanded macro
+  ;mov r15, rax ; r15 = expanded macro
   cmp rax, -1
   je .done ; return -1 for nothing expansion (rax already -1)
 
   .expand_parray_expanded:
   ;; It expanded. Call self on the expansion, then output the returned pointer
-  mov rdi, rbx
-  call byte_buffer_get_buf
-  add rax, r15
+  ;mov rdi, rbx
+  ;call byte_buffer_get_buf
+  ;add rax, r15
 
   mov rdi, rax
   mov rsi, r13
