@@ -232,21 +232,11 @@ realloc:
   cmova rcx, r13
 
   ;; Copy data to new allocation
-  mov rdx, r12
-  add rdx, ALLOCATION_DATA_OFFSET
-  mov rsi, r14
-  .copy_loop:
-  cmp rcx, 0
-  jle .copy_loop_break
-
-  mov al, byte[rdx]
-  mov byte[rsi], al
-
-  inc rsi
-  inc rdx
-  dec rcx
-  jmp .copy_loop
-  .copy_loop_break:
+  mov rdi, r14 ; dest
+  mov rsi, r12 ; src
+  add rsi, ALLOCATION_DATA_OFFSET
+  cld
+  rep movsb
 
   mov rdi, r12
   add rdi, ALLOCATION_DATA_OFFSET

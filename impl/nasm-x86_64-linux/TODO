@@ -1,3 +1,14 @@
+* Macroexpansion rework:
+  * Each macro just returns an absolute pointer to it's output
+  * The byte buffer passed to each macro is just an optional
+  pool of memory to play with
+    * This doesn't really cost the macroexpander anything because
+    we can use a single byte buffer for all macroexpansions and
+    just reset it
+    * Provides you a pool to store things that we be 'freed'
+* Make third argument to macros == byte_buffer_get_buf?
+  * You could expand macros up to 64 bytes without any function
+  calls.
 * Does the 'with' macro need to create a new byte buffer for each data entry? Why not just push the data directly to the 'data' byte buffer then free the whole buffer when we're done?
 * remove old with-macros and with
 * clean up unused data entries in builtin_structural_macros
@@ -16,6 +27,7 @@
 * don't always malloc executable, make sure macro stack mallocs executable except when serving as data stack
 * rework macro interface and all builtins to not use byte_buffer?
   * One thing we could say: if your expansion is less than X bytes, you can just write directly to the buffer. We could even pass you the value of get_buf as your third argument - so you don't need to call any functions at all for small expansions.
+  * A macro could just be a pair of functions: the expander ond the cleanup. The expander provides a userdata pointer. Either explicitly two functions, or the expander returns a cleanup function pointer, userdata pointer, and expansion pointer.
 * are compare_barrays and barray_equalp the same function? We need to either remove one or document the difference.
 * Put barray utility functions into a barray.asm, not util.asm
 * make malloc not always executable (split into malloc and malloc_linux as per notes so that public malloc is never executable)
@@ -43,3 +55,8 @@
 * We probably want the allocator to use thread-local storage to make it thread-safe in case the user spawns threads (even though arrp itself is single-threaded right now).
 * line numbers in errors
 * buffered writer or mmap writer to minimize those syscalls
+* Expose all builtin functions that the builtin macros use
+* Expose read/print builtin functions.
+* Expose all kv_stack functions
+* Expose all byte_buffer functions
+* Expose access to global kv_stacks (like macro stacks)

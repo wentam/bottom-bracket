@@ -180,7 +180,7 @@
   (data zero 0)
 
 
-  (data barray-cat-macro-name "aarrp/barray-caat")
+  (data barray-cat-macro-name "aarrp/barray-cat")
 
   (data valid-registers (rax eax   ax    al
                          rcx ecx   cx    cl
@@ -219,6 +219,63 @@
                      (r13 "\x05") (r13d "\x05") (r13w "\x05") (r13b "\x05")
                      (r14 "\x06") (r14d "\x06") (r14w "\x06") (r14b "\x06")
                      (r15 "\x07") (r15d "\x07") (r15w "\x07") (r15b "\x07")))
+
+  ;; TODO - make these comments true!
+  ;;
+  ;; Encodings are defined with a mini-DSL composed of macros. This allows for arbitrarily complex
+  ;; behavior in encoding each form (if you need a new behavior, implement a new macro).
+  ;;
+  ;; X86_64 is a mess and pretty inconsistent with plenty of special cases, so this level
+  ;; of flexibility is needed to nicely handle all cases.
+  ;;
+  ;; The encoding process is to simply:
+  ;;   * push some relevant macros to the stack
+  ;;   * macroexpand your encoding
+  ;;   * pop those extra macros.
+  ;;
+  ;; Entry format:
+  ;; (instruction-name (((accepted types for param 0) (accepted types for param 1)) encoding)
+  ;;                    (another possible encoding))
+  ;;
+  ;; barrays in your encoding will be forward directly, so use byte strings to provide literals.
+  ;;
+  ;; Operand types:
+  ;; re*   = extended register
+  ;; r*    = non-extended register
+  ;; m*    = memory operand
+  ;; me*   = memory operand using extended registers (base or index)
+  ;; s8    = spl, bpl, sil, or dil (these registers have special encoding rules)
+  ;; l8    = legacy ah, bh, ch, dh (we don't actually support this but writing it down in case we ever add it)
+  ;; imm*  = immediate values
+  ;; label = labels. Use them with label-rel-ref and label-abs-ref.
+  ;;
+  ;; Some relevant macros (though if you need something more - just define a new macro)
+  ;;   * (REX [W] [R] [X] [B])             - encodes a REX byte
+  ;;   * (RM reg reg/mem)                  - encode a MODRM, SIB, and displacement
+  ;;   * (imm 8), (imm 16), (imm 32), (imm 64) - encodes immediate values
+  ;;
+  ;; p macro represents parameters.
+  ;;   * (p *) expands to the parameter (memory operand, register etc)
+  ;;   * (p * R-if-ext) expands to 'R' if it's an extended register, else nothing
+  ;;   * (p * X-if-ext) expands to 'X' if it's an extended register, else nothing
+  ;;   * (p * B-if-ext) expands to 'B' if it's an extended register, else nothing
+  ;;
+  ;; Tips:
+  ;;   * The arrp/bsumLE macro with bregnum can be used to offset base opcodes with a register num
+
+  ;; TODO exposing the instruction table and related access functions publicly in a namespace
+  ;; may be benificial for things like optimizers and register allocators.
+  ;;
+  ;; For example, when spilling higher IR registers to memory, we need to know when
+  ;; to use a temporary register.
+
+  (data instruction-table
+   ((mov (((r64 re64) (r64  re64)) (REX W) "\x89" (RM rdi rsi))
+         (((r64 re64) (m64  me64)) (REX W) "\x89" (RM rdi (m64 rsi 0 1 0)))
+         (((r64 re64) (imm32)    ) (REX W) "\xC7" (RM 0 rdi) (imm 32 5)))
+    (cmp (((r64 re64) (r64  re64)) "thiswouldbecmp"))))
+
+  ; (((r64 re64) (r64 re64)) (REX W (p 1 R-if-ext) (p 0 B-if-ext)) "\x89" (RM (p 1) (p 0)))
 
 
   ;; writes a barray's bytes to fd (use me to print stuff to stdout/stderr)
@@ -1534,65 +1591,6 @@
                       (r14 re64) (r14d re32) (r14w re16) (r14b re8)
                       (r15 re64) (r15d re32) (r15w re16) (r15b re8)))
 
-
-  ;; TODO - make these comments true!
-  ;;
-  ;; Encodings are defined with a mini-DSL composed of macros. This allows for arbitrarily complex
-  ;; behavior in encoding each form (if you need a new behavior, implement a new macro).
-  ;;
-  ;; X86_64 is a mess and pretty inconsistent with plenty of special cases, so this level
-  ;; of flexibility is needed to nicely handle all cases.
-  ;;
-  ;; The encoding process is to simply:
-  ;;   * push some relevant macros to the stack
-  ;;   * macroexpand your encoding
-  ;;   * pop those extra macros.
-  ;;
-  ;; Entry format:
-  ;; (instruction-name (((accepted types for param 0) (accepted types for param 1)) encoding)
-  ;;                    (another possible encoding))
-  ;;
-  ;; barrays in your encoding will be forward directly, so use byte strings to provide literals.
-  ;;
-  ;; Operand types:
-  ;; re*   = extended register
-  ;; r*    = non-extended register
-  ;; m*    = memory operand
-  ;; me*   = memory operand using extended registers (base or index)
-  ;; s8    = spl, bpl, sil, or dil (these registers have special encoding rules)
-  ;; l8    = legacy ah, bh, ch, dh (we don't actually support this but writing it down in case we ever add it)
-  ;; imm*  = immediate values
-  ;; label = labels. Use them with label-rel-ref and label-abs-ref.
-  ;;
-  ;; Some relevant macros (though if you need something more - just define a new macro)
-  ;;   * (REX [W] [R] [X] [B])             - encodes a REX byte
-  ;;   * (RM reg reg/mem)                  - encode a MODRM, SIB, and displacement
-  ;;   * (imm 8), (imm 16), (imm 32), (imm 64) - encodes immediate values
-  ;;
-  ;; p* macros represent parameters.
-  ;;   * (p*) expands to the parameter (memory operand, register etc)
-  ;;   * (p* R-if-ext) expands to 'R' if it's an extended register, else nothing
-  ;;   * (p* X-if-ext) expands to 'X' if it's an extended register, else nothing
-  ;;   * (p* B-if-ext) expands to 'B' if it's an extended register, else nothing
-  ;;
-  ;; Tips:
-  ;;   * The arrp/bsumLE macro with bregnum can be used to offset base opcodes with a register num
-
-  ;; TODO exposing the instruction table and related access functions publicly in a namespace
-  ;; may be benificial for things like optimizers and register allocators.
-  ;;
-  ;; For example, when spilling higher IR registers to memory, we need to know when
-  ;; to use a temporary register.
-
-  (data instruction-table
-   ((mov (((r64 re64) (r64  re64)) (REX W) "\x89" (RM rdi rsi))
-         (((r64 re64) (m64  me64)) (REX W) "\x89" (RM rdi (m64 rsi 0 1 0)))
-         (((r64 re64) (imm32)    ) (REX W) "\xC7" (RM 0 rdi) (imm 32 5)))
-    (cmp (((r64 re64) (r64  re64)) "thiswouldbecmp"))))
-
-  ; (((r64 re64) (r64 re64)) (REX W (p1 R-if-ext) (p0 B-if-ext)) "\x89" (RM (p1) (p0)))
-
-
   ;; Inputs a barray (rdi) and returns 1 if it could represent a base-10 ascii integer,
   ;; else 0. Negative numbers are fine.
   (data ascii-base-10-p
@@ -2035,6 +2033,43 @@
 
   (data no-encoding-err "\nERROR: No matching encoding found for instruction.\n")
 
+  ;; Used in p-macro to refer to the current instruction during the encoding process.
+  ;; Will be updated as a pointer to the instruction before expanding the DSL entry in the instruction table
+  (data current-instruction-ptr "\x00\x00\x00\x00\x00\x00\x00\x00")
+
+  ;; Macro that will be pushed as 'p' for our instruction encoding DSL for our instruction table
+  ;; This will be pushed while we assemble an instruction, and popped afterwards
+  ;;
+  ;; Obtains the correct parameter values through current-instruction-ptr
+  (data p-macro
+   (aarrp/barray-cat
+    (REX B)"\x54"                                                             ; push r12
+    (REX B)"\x55"                                                             ; push r13
+    (REX B)"\x56"                                                             ; push r14
+    (REX B)"\x57"                                                             ; push r15
+    "\x53"                                                                    ; push rbx
+
+    ; mov r12, rdi - input structure
+    ; mov r13, rsi - output buffer
+
+    ;; TODO error if input structure doesn't have at least 2 elements
+    ;; TODO error if the 2nd element of our input isn't a ascii base 10 int
+    ;; TODO parse our 2nd element as a base 10 ascii int
+    ;; TODO error if the parsed integer points to beyond our current-instruction's parameter count
+    ;; TODO Copy the parameter from the current instruction at the user-specified index to our
+    ;;      output buffer
+    ;; TODO buffer-rel ptr
+
+
+
+    (label epilogue)
+    "\x5B"                                                                              ; pop rbx
+    (REX B)"\x5F"                                                                       ; pop r15
+    (REX B)"\x5E"                                                                       ; pop r14
+    (REX B)"\x5D"                                                                       ; pop r13
+    (REX B)"\x5C"                                                                       ; pop r12
+    "\xC3"))
+
   (data encode-instruction-fn
    (aarrp/barray-cat
     (REX B)"\x54"                                                             ; push r12
@@ -2089,6 +2124,7 @@
 
     (REX W B)"\x8B"(RM rdi (m64 r13 0 1 0)) ; mov rdi, qword[r13]
     (REX W B)"\x8B"(RM rsi r14) ; mov rsi, r14
+    (REX W)"\xC7"(RM 0 rdx)(imm 32 2)                                         ; mov rdx, 2 - greedy expand
     (REX W)(aarrp/bsumLE "\xB8" (bregnum rax))(aarrp/builtin-func-addr/structural-macro-expand-tail) ; mov rax, structural-macro-expand-tail
     "\xFF"(RM 2 rax)                                                               ; call rax
     (REX W R)"\x8B"(RM r13 rax) ; mov r13, rax - r13 = our new parray to push
@@ -2403,7 +2439,7 @@
    ;"foo"
    ;(REX W R)"\x89"(RM r15 rax)                                                         ; mov rax, r15
    ;(some-garbage)
-   (mov rsi rdi)
+   ;(mov rsi rdi)
    (mov rdi 2)
    ;(cmp rdi rsi)
    ;(cmp 5 rcx)

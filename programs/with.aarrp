@@ -1,4 +1,4 @@
-(aarrp/withm
+(aarrp/with
  ((data my-thing       "foo")
   (data my-other-thing (a (a b) b))
   (data internal-ref   (my-thing))

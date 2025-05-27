@@ -9,6 +9,7 @@ extern byte_buffer_get_data_length
 extern byte_buffer_push_barray
 extern byte_buffer_new
 extern byte_buffer_free
+extern byte_buffer_reset
 extern byte_buffer_push_int64
 extern _relative_to_abs
 
@@ -35,10 +36,21 @@ structural_macro_expand:
   push r12
   push r13
   push r14
+  push r15
+  push rbx
 
   mov r12, rdi  ; data
   mov r13, rsi  ; output byte buffer
-  ;mov rdx, rdx ; cp_shy_greedy
+  mov rbx, rdx
+
+
+  call byte_buffer_new
+  mov r15, rax
+
+  mov rdi, r12
+  mov rsi, r13
+  mov rdx, rbx ; cp_shy_greedy
+  mov rcx, r15
   call structural_macro_expand_relptr
   cmp rax, -1
   jne .not_nothing
@@ -58,16 +70,22 @@ structural_macro_expand:
   mov rdi, rax
   mov rsi, r13
   call _relative_to_abs
+
+  mov rdi, r15
+  call byte_buffer_free
+
   add rsp, 8
   pop rax
 
   .done:
+  pop rbx
+  pop r15
   pop r14
   pop r13
   pop r12
   ret
 
-;;; structural_macro_expand_relptr(*data, *output_byte_buffer, shy_greedy) -> ptr
+;;; structural_macro_expand_relptr(*data, *output_byte_buffer, shy_greedy, *pool_buffer) -> ptr
 ;;;   Produces a recursively (structural) macroexpanded version of *data in
 ;;;   *output_byte_buffer.
 ;;;
@@ -88,12 +106,13 @@ structural_macro_expand:
 ;;;
 ;;;   Returns a pointer to the top-level element in *output_byte_buffer
 structural_macro_expand_relptr:
+  push rbp
+  mov rbp, rsp
   push r12
   push r13
   push r14
   push r15
   push rbx
-  push rbp
   sub rsp, 8
 
   mov rax, -1
@@ -103,6 +122,7 @@ structural_macro_expand_relptr:
   mov r12, rdi ; data
   mov r13, rsi ; output byte buffer
   mov r14, rdx ; shy_greedy
+  mov rbx, rcx
 
   mov rdi, qword[r12] ; length of first thing in data
   cmp rdi, 0
@@ -145,16 +165,9 @@ structural_macro_expand_relptr:
 
   .not_empty:
 
-  ;; Create byte buffer to attempt expansion
-  ;; TODO using a new byte buffer each time isn't particularly efficient,
-  ;; especially because not everything will expand.
-  ;;
-  ;; We should probably have a big buffer around just for these temps.
-  ;; note that if this is done, below usage in .expand_parray_expanded
-  ;; needs to be adjusted (currently uses tip of buffer to get macroexpansion
-  ;; ptr)
-  call byte_buffer_new
-  mov rbx, rax
+  ;; Reset pool byte buffer to attempt expansion
+  mov rdi, rbx
+  call byte_buffer_reset
 
   ;; Skip expansion if we're in copy mode
   cmp r14, 0
@@ -168,19 +181,12 @@ structural_macro_expand_relptr:
   mov rsi, rbx                    ; output buffer
   mov rdx, rax
   cmp rax, 0
-  je .nullfunc
-  push rdx
-  sub rsp, 8
+  je .expand_parray_not_expanded
   call qword[rax+8]
   inc qword[expand_count]
-  add rsp, 8
-  pop rdx
-  .nullfunc:
-  mov r15, rax ; r15 = expanded macro (if it expanded)
-  cmp r15, -1
-  je .expand_parray_nothing
-  cmp rdx, 0
-  je .expand_parray_not_expanded
+  mov r15, rax ; r15 = expanded macro
+  cmp rax, -1
+  je .done ; return -1 for nothing expansion (rax already -1)
 
   .expand_parray_expanded:
   ;; It expanded. Call self on the expansion, then output the returned pointer
@@ -191,13 +197,9 @@ structural_macro_expand_relptr:
   mov rdi, rax
   mov rsi, r13
   mov rdx, r14
+  mov rcx, rbx
   call structural_macro_expand_relptr
-  jmp .expand_parray_done
-
-  .expand_parray_nothing:
-    ;; This macro expanded to nothing. Return -1 as our nothing signal.
-    mov rax, -1
-    jmp .expand_parray_done
+  jmp .done
 
   .expand_parray_not_expanded:
   ;; It didn't expand, call structural_macro_expand_relptr on it's children,
@@ -207,7 +209,7 @@ structural_macro_expand_relptr:
   mov rcx, r15
   not r15
   add r12, 8 ; move past length
-  mov rbp, rsp
+  mov qword[rbp-48], rsp
   .children:
     cmp r15, 0
     je .children_break
@@ -217,6 +219,7 @@ structural_macro_expand_relptr:
     mov rdi, qword[r12]
     mov rsi, r13
     mov rdx, r14
+    mov rcx, rbx
 
     ;; If we're in shy mode (r14 == 1) and this isn't the first child,
     ;; set rdx to 0 for copy expansion.
@@ -264,7 +267,7 @@ structural_macro_expand_relptr:
 
   ; Write child pointers
   not r15
-  mov rcx, rbp
+  mov rcx, qword[rbp-48]
   .write_ptrs:
     cmp r15, 0
     je .write_ptrs_break
@@ -284,28 +287,19 @@ structural_macro_expand_relptr:
   .write_ptrs_break:
 
   ; Restore stack pointer
-  mov rsp, rbp
+  mov rsp, qword[rbp-48]
 
   mov rax, r14
-  ;jmp .expand_parray_done
-
-  .expand_parray_done:
-  push rax
-  sub rsp, 8
-  mov rdi, rbx
-  call byte_buffer_free
-  add rsp, 8
-  pop rax
   ;jmp .done
 
   .done:
   add rsp, 8
-  pop rbp
   pop rbx
   pop r15
   pop r14
   pop r13
   pop r12
+  pop rbp
   ret
 
 

@@ -8,6 +8,8 @@ Try to re-read this occassionaly when working on aarrp so we remember important 
 
 Notes:
 * The macro stack was renamed to kv stack later on, and many of these notes predate this change.
+* 'with-macros' was merged with 'with' at some point to allow for interdependencies between the two to be shipped as one unit.
+    * 'with' just did data at first, not macros
 
 ## the stuff
 
@@ -444,6 +446,8 @@ Interestingly, that means that even with this design there are certain situation
     * x86 is a dumb legacy platform and won't be relevant forever.
 * As the quantity of macros grows, it actually may start to make sense to make with-macros lazy - push dummy macros that compile and push tho real macro upon first call, masking the dummy.
     * But also might not be needed because we plan to be able to package precompiled macros with the .arrpb format.
+    * lazy with-macros means that the time at which you choose to expand the macro the first time potentially changes the behavior of the macro. I don't like this.
+        * Because of this I'm in favour of greedy macro definition. Seems more logically correct.
 * RISC-V assembler should not assume any extension, but enabled with args
     * When lowering IR to RISC-V, it should work fine without extensions but have slower codegen, because no SIMD etc
     * When lowering IR to RISC-V, take list of extensions.
@@ -476,3 +480,12 @@ Interestingly, that means that even with this design there are certain situation
 * should byte_buffer_new accept an argument for it's initial backing buffer size? our static size isn't always the ideal number - sometimes we might want something bigger to avoid reallocs (which are a bit expensive).
 * We combined 'with' and 'with-macros' because we need to be able to ship interdependent macros, data, and functions as one unit. Using separate macros this is a problem for memory management reasons.
     * Before, if you wanted to return macros that depend on data you had a problem: once the 'with' macro expands, the data has beed freed.
+* What if a macro can choose to *not* expand?
+    * you can't just make a macro that expands into itself, that's recursive.
+    * If a macro can say "no more", the macroexpander can leave it alone and not infinitely recurse
+    * This allows for a build-time 'quote' macro that prevents macroexpansion.
+    * macro returning -2 means don't macroexpand me anymore.
+    * builtin macro using this: (aarrp/hold foo) expands right back into (aarrp/hold foo) returning -2 to prevent recursion.
+        * When you're done deferring the expansion, just macroexpand 'foo' directly.
+        * Not really any different than the barray approach below, just more complex and requires arrp-accomodation.
+* One way to defer macroexpanion would be to define a macro that takes an input structure and expands into a barray of the bytes that represent that structure (using our in-memory representation)
