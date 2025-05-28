@@ -334,7 +334,7 @@ _start:
   ;;pop rdi
   ;;add rsp, 10
 
- ; call dump_expand_count
+  call dump_expand_count
 
   call malloc_cleanup
 

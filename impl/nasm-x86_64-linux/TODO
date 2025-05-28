@@ -65,3 +65,7 @@
 * Expose access to global kv_stacks (like macro stacks)
 * Once we have good line number errors and stuff, we should probably expose a fancy public error-exit function that produces consistent pretty errors with line numbers, macro stack dump etc.
   * Or maybe just expose the component parts - print-macro-stack-trace and print-line-num
+* Right now, in many macros we expand our child input into a new byte buffer. We can just use our output byte buffer instead and save the allocation. That buffer passed to us is basically just an arena allocator for us to play with, it doesn't need to be used just for our output.
+  * This principle should be used more heavily than we are right now
+  * Look at if-reg-is-ext for an example on how much cleaner this is.
+  * Just be careful about macro return values being shifted

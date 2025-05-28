@@ -492,10 +492,30 @@ Interestingly, that means that even with this design there are certain situation
 * We might want a way to inline builtin function calls in your macro if that overhead starts to matter
     * probably just define a macro (arrp/builtin-func-code/byte-buffer-get-buf x86_64) that expands into the code.
 * Rather than provide a platform-specific passthrough mechanism for things like syscalls, why not abstraction it? What if the IR had it's own version of a "syscall" layer that compiled down to linux syscalls, win32 calls etc.
+    * Basically: do we want to abstract away the platform+machine or just the machine at the IR level?
+        * Ideally we'd treat these as separate concerns, but things like windows not having a stable syscall API make this hard to do practically.
     * Yes, you might get less optimal syscalls, but I consider syscalls to be hot lava anyway.
     * Completely abstract away the operating system at compile time :D
+    * What about embedded? We shouldn't assume there's an operating system at all...
+        * Maybe we need to raise it to the 'malloc' level, not mmap?
+    * I think we might want 'generally-portable ops', 'OS-portable ops', 'OS-specific ops', and 'machine code/asm passthrough'
+        * Avoid windows OS-specific ops to discourage bad design
     * Might be a problem for win32 if they force us to do stuff at a higher level of abstraction. Windows tends to have some really dumb design decisions.
         * Thus, might still need a passthrough in *addition* to this abstraction layer.
+    * How GCC/clang/LLVM land-work:
+        * syscalls are all implement in libc-land
+        * syscalls are implemented via platform-specific passthrough like asm {}.
+    * Honestly, I think I want all three in the IR, there's no harm in it as far as I can tell:
+        * fully portable instructions
+            * malloc - can be done on AVR etc
+                * Would probably be a "simple" allocator that builds directly onto a syscall on platforms like linux. Allocators would use it sparingly, same as the syscall.
+        * OS-only portable instructions, don't work on embedded
+        * machine-specific instructions, such as assembly/machine language passthrough
+            * mmap
+        *
+        * Just make it really clear in the names: (OS-ONLY/instruction param0 param1)
+        * At IR compile time, you choose one of 3 modes: fully portable, OS-only portable, machine-specific.
+    * Keep it simple though, don't implement complex features here. We need to implement the IR many times, once per platform.
 * Parellelizing macroexpansion should be possible and is possibly a big advantage of doing things this way.
     * If our IR optimizer runs separately per-function, this would thus implicitly paralellize optimization
     * You probably want to be able to choose if you're working on serial or parallel when you call structural_macro_expand. You might care about macroexpansion ordering, you might not. You can choose serial mode in your macro when expanding your child elements if you are for example building an interpreted language with side-effect macros.
@@ -507,3 +527,10 @@ Interestingly, that means that even with this design there are certain situation
         * could use a heuristic like the size of the macro in bytes, though false positives would suck
         * could even make parallelism opt-in per defined macro if the overhead is really bad.
     * probably task queue/worker model
+* I want to maintain a pattern through all abstractions through to high-level that makes it really obvious when you're using something that's not portable to all machines
+    * Such as using a 'non-portable' or 'linux-only' namespace.
+* I think the IR should always support up to 64-bit integers. Platforms with less than this need to emulate them.
+    * For emulation, we probably want to do the lowering within the IR itself so the emulation can be optimized and we only need to implement this once. IR -> IR transformation.
+    * Some compilers support extra-big integers like 128-bit. It would be interesting to experiment with this once we have lowering logic in the IR.
+        * Would be cool if we could make it width-arbitrary lowering, and support 512-bit integers or whatever.
+            * This makes sense because if the width is fixed - even when it's really wide - we can be more optimal than generalized bignums.
