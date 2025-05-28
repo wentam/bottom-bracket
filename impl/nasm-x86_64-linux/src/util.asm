@@ -882,7 +882,7 @@ compare_barrays:
 
 ;; This is my spot for having nasm assemble random things for me lel
 tmpaoeu:
+  mov rdi, qword[compare_barrays]
 
- cmp qword[rbp-56], 0
   ret
 

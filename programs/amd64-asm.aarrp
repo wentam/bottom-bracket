@@ -20,6 +20,11 @@
 
 ;; NOTE: This file is "double wide" as per STYLE.md. You can use 200 columns.
 
+;; NOTE: we intentionally don't support disp32 absolute addressing like qword[my-label]
+;; because our data often exists outside of 32-bit addressable space. Using disp32 would be unsafe.
+;;
+;; Use mov rdi, foo; mov rsi, qword[rdi] instead.
+
 ; TODO build out these comments to describe generally how to encode x86_64 instructions from
 ; a table.
 
@@ -270,8 +275,8 @@
   ;; to use a temporary register.
 
   (data instruction-table
-   ((mov (((r64 re64) (r64  re64)) (REX W) "\x89" (RM rdi rsi))
-         (((r64 re64) (m64  me64)) (REX W) "\x89" (RM rdi (m64 rsi 0 1 0)))
+   ((mov (((r64 re64) (r64  re64)) (REX W) "\x8B" (RM (p 0) (p 1)))
+         (((r64 re64) (m64  me64)) (REX W) "\x8B" (RM (p 0) (p 1)))
          (((r64 re64) (imm32)    ) (REX W) "\xC7" (RM 0 rdi) (imm 32 5)))
     (cmp (((r64 re64) (r64  re64)) "thiswouldbecmp"))))
 
@@ -2047,9 +2052,18 @@
 
   (data no-encoding-err "\nERROR: No matching encoding found for instruction.\n")
 
+
+  ;; TODO this design is not thread-safe, so if we ever parralellize macroexpansion this will
+  ;; need to change. One cool way to fix this would be to have arrp/with support thread-local
+  ;; storage by saying 'thread-local-data' instead of 'data'
+
   ;; Used in p-macro to refer to the current instruction during the encoding process.
   ;; Will be updated as a pointer to the instruction before expanding the DSL entry in the instruction table
   (data current-instruction-ptr "\x00\x00\x00\x00\x00\x00\x00\x00")
+
+  (data p-macro-bad-param-count "\nERROR: Bad parameter count for 'p'.\n")
+  (data p-macro-not-base-10-ascii "\nERROR: Parameter to 'p' macro not a base-10 ascii integer. It must be.\n")
+  (data p-macro-index-too-large "\nERROR: Index passed to 'p' macro too large for instruction being encoded.\n")
 
   ;; Macro that will be pushed as 'p' for our instruction encoding DSL for our instruction table
   ;; This will be pushed while we assemble an instruction, and popped afterwards
@@ -2063,18 +2077,58 @@
     (REX B)"\x57"                                                             ; push r15
     "\x53"                                                                    ; push rbx
 
-    ; mov r12, rdi - input structure
-    ; mov r13, rsi - output buffer
+    (REX W R)"\x8B"(RM r12 rdi) ; mov r12, rdi - input structure
+    (REX W R)"\x8B"(RM r13 rsi) ; mov r13, rsi - output buffer
 
-    ;; TODO error if input structure doesn't have at least 2 elements
-    ;; TODO error if the 2nd element of our input isn't a ascii base 10 int
-    ;; TODO parse our 2nd element as a base 10 ascii int
-    ;; TODO error if the parsed integer points to beyond our current-instruction's parameter count
-    ;; TODO Copy the parameter from the current instruction at the user-specified index to our
-    ;;      output buffer
-    ;; TODO buffer-rel ptr
+    ;; Error if input structure doesn't have at least 2 elements
+    (REX W B)"\x83"(RM 7 (m64 r12 0 1 0))(imm 8 -3) ; cmp qword[r12], -3
+    "\x0F\x8E"(label-rel-ref good-input-count 4 LE) ; jle good-input-count
 
+    (REX W)(aarrp/bsumLE "\xB8" (bregnum rdi))(p-macro-bad-param-count addr 8 LE)  ; mov rdi, error-msg
+    (REX W)(aarrp/bsumLE "\xB8" (bregnum rax))(error-exit-fn barray-raw-addr 8 LE) ; mov rax, error-exit
+    "\xFF"(RM 2 rax)                                                               ; call rax
 
+    (label good-input-count)
+
+    ;; Error if the 2nd element of our input isn't a ascii base 10 int
+    (REX W B)"\x8B"(RM rdi (m64 r12 0 1 16))                                         ; mov rdi, qword[r12+16]
+    (REX W)(aarrp/bsumLE "\xB8" (bregnum rax))(ascii-base-10-p barray-raw-addr 8 LE) ; mov rax, ascii-base-10-p
+    "\xFF"(RM 2 rax)                                                                 ; call rax
+    (REX W)"\x83"(RM 7 rax)(imm 8 1)                                                 ; cmp rax, 1
+    "\x0F\x84"(label-rel-ref is-ascii-base-10 4 LE)                                  ; je is-ascii-base-10
+
+    (REX W)(aarrp/bsumLE "\xB8" (bregnum rdi))(p-macro-not-base-10-ascii addr 8 LE)  ; mov rdi, error-msg
+    (REX W)(aarrp/bsumLE "\xB8" (bregnum rax))(error-exit-fn barray-raw-addr 8 LE)   ; mov rax, error-exit
+    "\xFF"(RM 2 rax)                                                                 ; call rax
+
+    (label is-ascii-base-10)
+
+    ;; Parse our 2nd element as a base 10 ascii int
+    (REX W B)"\x8B"(RM rdi (m64 r12 0 1 16)) ; mov rdi, qword[r12+16]
+    (REX W)"\xC7"(RM 0 rsi)(imm 32 10) ; mov rsi, 10
+    (REX W)(aarrp/bsumLE "\xB8" (bregnum rax))(parse-int-fn barray-raw-addr 8 LE)    ; mov rax, parse-int-fn
+    "\xFF"(RM 2 rax)                                                                 ; call rax
+    (REX W R)"\x8B"(RM r14 rax)                                                      ; mov r14, rax - r14 = parameter index
+
+    ;; Error if the parsed integer points to beyond our current-instruction's parameter count
+    (REX W)(aarrp/bsumLE "\xB8" (bregnum rsi))(current-instruction-ptr barray-raw-addr 8 LE) ; mov rsi, current-instruction-ptr-barray-raw-addr
+    (REX W)"\x8B"(RM rdi (m64 rsi 0 1 0)) ; mov rdi, qword[rsi]
+    (REX W)"\x8B"(RM rsi (m64 rdi 0 1 0))     ; mov rsi, qword[rdi]
+    (REX W)"\xF7"(RM 2 rsi)                   ; not rsi
+    (REX W)"\x83"(RM 5 rsi)(imm 8 2)          ; sub rsi, 2 - rsi = maximum index
+    (REX W R)"\x3B"(RM r14 rsi)               ; cmp r14, rsi
+    "\x0F\x8E"(label-rel-ref good-index 4 LE) ; jle good-index
+
+    (REX W)(aarrp/bsumLE "\xB8" (bregnum rdi))(p-macro-index-too-large addr 8 LE) ; mov rdi, error-msg
+    (REX W)(aarrp/bsumLE "\xB8" (bregnum rax))(error-exit-fn barray-raw-addr 8 LE)   ; mov rax, error-exit
+    "\xFF"(RM 2 rax)                                                                 ; call rax
+
+    (label good-index)
+
+    ;; Return a pointer to parameter from the current instruction at the user-specified index
+    (REX W)(aarrp/bsumLE "\xB8" (bregnum rsi))(current-instruction-ptr barray-raw-addr 8 LE) ; mov rsi, current-instruction-ptr-barray-raw-addr
+    (REX W)"\x8B"(RM rdi (m64 rsi 0 1 0)) ; mov rdi, qword[rsi]
+    (REX W X)"\x8B"(RM rax (m64 rdi r14 8 16)) ; mov rax, qword[rdi+r14*8+16]
 
     (label epilogue)
     "\x5B"                                                                              ; pop rbx
@@ -2084,13 +2138,18 @@
     (REX B)"\x5C"                                                                       ; pop r12
     "\xC3"))
 
+  (data p-macro-name "p")
+
   (data encode-instruction-fn
    (aarrp/barray-cat
+    "\x55"                                                                              ; push rbp
+    "\x48\x89\xE5"                                                                      ; mov rbp, rsp
     (REX B)"\x54"                                                             ; push r12
     (REX B)"\x55"                                                             ; push r13
     (REX B)"\x56"                                                             ; push r14
     (REX B)"\x57"                                                             ; push r15
     "\x53"                                                                    ; push rbx
+    "\x48\x83\xEC\x08"                                                ; sub rsp, 8
 
     ;; (mov (((r64 re64) (r64  re64)) (REX W) "\x89" (RM rdi rsi))
     ;;      (((r64 re64) (m64  me64)) (REX W) "\x89" (RM rdi (m64 rsi 0 1 0)))
@@ -2134,6 +2193,25 @@
 
     "\xE9"(label-rel-ref epilogue 4 LE)                                            ; jmp epilogue
     (label encode)
+
+    ;; Update current-instruction-ptr
+    (REX W)(aarrp/bsumLE "\xB8" (bregnum rdi))(current-instruction-ptr barray-raw-addr 8 LE) ; mov rdi, current-instruction-ptr-barray-raw-addr
+    (REX W R)"\x89"(RM r12 (m64 rdi 0 1 0)); mov qword[rdi], r12
+
+    ;; Push p-macro
+    (REX W)"\x83"(RM 5 rsp)(imm 8 16) ; sub rsp, 16
+    (REX W)"\xC7"(RM 0 (m64 rsp 0 1 0))(imm 32 8) ; mov qword[rsp], 8
+    (REX W)(aarrp/bsumLE "\xB8" (bregnum rsi))(p-macro barray-raw-addr 8 LE) ; mov rsi, p-macro*
+    (REX W)"\x89"(RM rsi (m64 rsp 0 1 8)) ; mov qword[rsp+8], rsi
+    (REX W)"\x8B"(RM rdx rsp) ; mov rdx, rsp
+    (REX W)(aarrp/bsumLE "\xB8" (bregnum rdi))(aarrp/builtin-addr/macro-stack-structural) ; mov rdi, macro-stack-structural
+    (REX W)(aarrp/bsumLE "\xB8" (bregnum rsi))(p-macro-name addr 8 LE)                    ; mov rsi, p-macro-name
+    (REX W)(aarrp/bsumLE "\xB8" (bregnum rax))(aarrp/builtin-func-addr/kv-stack-push)     ; mov rax, kv-stack-push
+    "\xFF"(RM 2 rax)                                                                      ; call rax
+    (REX W)"\x89"(RM rax (m64 rbp 0 1 -48)); mov qword[rbp-48], rax - = id
+    (REX W)"\x83"(RM 0 rsp)(imm 8 16) ; add rsp, 16
+
+
     ;; Encode instruction (qword[r13])
 
     (REX W B)"\x8B"(RM rdi (m64 r13 0 1 0)) ; mov rdi, qword[r13]
@@ -2142,6 +2220,12 @@
     (REX W)(aarrp/bsumLE "\xB8" (bregnum rax))(aarrp/builtin-func-addr/structural-macro-expand-tail) ; mov rax, structural-macro-expand-tail
     "\xFF"(RM 2 rax)                                                               ; call rax
     (REX W R)"\x8B"(RM r13 rax) ; mov r13, rax - r13 = our new parray to push
+
+    ;; Pop p-macro by id
+    (REX W)(aarrp/bsumLE "\xB8" (bregnum rdi))(aarrp/builtin-addr/macro-stack-structural) ; mov rdi, macro-stack-structural
+    (REX W)"\x8B"(RM rsi (m64 rbp 0 1 -48)) ; mov rsi, qword[rbp-48]
+    (REX W)(aarrp/bsumLE "\xB8" (bregnum rax))(aarrp/builtin-func-addr/kv-stack-pop-by-id)     ; mov rax, kv-stack-pop-by-id
+    "\xFF"(RM 2 rax)                                                                      ; call rax
 
     (REX W B)"\x8B"(RM rdi r14) ; mov rdi, r14
     (REX W)(aarrp/bsumLE "\xB8" (bregnum rax))(aarrp/builtin-func-addr/byte-buffer-get-buf) ; mov rax, bb-get-buf
@@ -2169,11 +2253,13 @@
     (label ptr-loop-break)
 
     (label epilogue)
+    "\x48\x83\xC4\x08"                                                                 ; add rsp, 8
     "\x5B"                                                                              ; pop rbx
     (REX B)"\x5F"                                                                       ; pop r15
     (REX B)"\x5E"                                                                       ; pop r14
     (REX B)"\x5D"                                                                       ; pop r13
     (REX B)"\x5C"                                                                       ; pop r12
+    "\x5D"                                                                              ; pop rbp
     "\xC3"))
 
   (data assemble-fn
@@ -2449,21 +2535,24 @@
  (
   ;(aarrp/barray-cat (REX W)"\x89"(RM rdi (m64 rax 0 1 0)))
   ;(REX (barray-test))
-  (bregnum rax)
-  (RM rsi r14)
+  ;(bregnum rax)
+  ;(RM rsi r14)
   ; (RM rsi r13)
   ;(RM rax (m64 r11 0 1 127))
   ;(aarrp/barray-cat (REX W) "\x89" (RM rdi (m64 rsp rdi 2 10)))
-  (asm/x86_64
    ;"foo"
    ;(REX W R)"\x89"(RM r15 rax)                                                         ; mov rax, r15
    ;(some-garbage)
-   ;(mov rsi rdi)
-   (mov rdi 2)
+   ;(mov rdi 2)
    ;(cmp rdi rsi)
    ;(cmp 5 rcx)
    ;(mov (m8 rdi 0 1 0) rsi)
+
+   (asm/x86_64
+    (mov rsi rdx)
+    ;(mov rsi (m64 rdx 0 1 8))
+    )
+)
    )
-   ))
 
 ; (m64 rdi 0 1 0)

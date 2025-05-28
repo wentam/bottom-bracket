@@ -241,7 +241,7 @@ byte_buffer_write_int64:
 
 ;; TODO optimize the other push_int** like below
 
-;;; byte_buffer_push_int64(*byte_buffer, byte)
+;;; byte_buffer_push_int64(*byte_buffer, int64)
 ;;;   Pushes a byte to the byte buffer
 ;;;
 ;;;   Invalidates any pointers pointing to within the byte buffer.

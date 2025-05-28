@@ -491,3 +491,19 @@ Interestingly, that means that even with this design there are certain situation
 * One way to defer macroexpanion would be to define a macro that takes an input structure and expands into a barray of the bytes that represent that structure (using our in-memory representation)
 * We might want a way to inline builtin function calls in your macro if that overhead starts to matter
     * probably just define a macro (arrp/builtin-func-code/byte-buffer-get-buf x86_64) that expands into the code.
+* Rather than provide a platform-specific passthrough mechanism for things like syscalls, why not abstraction it? What if the IR had it's own version of a "syscall" layer that compiled down to linux syscalls, win32 calls etc.
+    * Yes, you might get less optimal syscalls, but I consider syscalls to be hot lava anyway.
+    * Completely abstract away the operating system at compile time :D
+    * Might be a problem for win32 if they force us to do stuff at a higher level of abstraction. Windows tends to have some really dumb design decisions.
+        * Thus, might still need a passthrough in *addition* to this abstraction layer.
+* Parellelizing macroexpansion should be possible and is possibly a big advantage of doing things this way.
+    * If our IR optimizer runs separately per-function, this would thus implicitly paralellize optimization
+    * You probably want to be able to choose if you're working on serial or parallel when you call structural_macro_expand. You might care about macroexpansion ordering, you might not. You can choose serial mode in your macro when expanding your child elements if you are for example building an interpreted language with side-effect macros.
+        * top-level would be parallel tho. You would need to opt-in to serial expansion.
+        * could provide an (arrp/serial-expand foo) macro to make this ergonomic.
+    * threading overhead might be a waste on tiny macros
+        * could allow for hinting to disable the thread queuing and just do it in the main thread
+            * "Hi I'm really cheap to expand just do it"
+        * could use a heuristic like the size of the macro in bytes, though false positives would suck
+        * could even make parallelism opt-in per defined macro if the overhead is really bad.
+    * probably task queue/worker model

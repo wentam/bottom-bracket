@@ -11,6 +11,7 @@
   * You could expand macros up to 64 bytes without any function
   calls.
 * Does the 'with' macro need to create a new byte buffer for each data entry? Why not just push the data directly to the 'data' byte buffer then free the whole buffer when we're done?
+  * Oh, this might be needed b/c we're holding pointers to the data and can't realloc
 * remove old with-macros and with
 * clean up unused data entries in builtin_structural_macros
 * rename withm->with
@@ -62,3 +63,5 @@
 * Expose all kv_stack functions
 * Expose all byte_buffer functions
 * Expose access to global kv_stacks (like macro stacks)
+* Once we have good line number errors and stuff, we should probably expose a fancy public error-exit function that produces consistent pretty errors with line numbers, macro stack dump etc.
+  * Or maybe just expose the component parts - print-macro-stack-trace and print-line-num

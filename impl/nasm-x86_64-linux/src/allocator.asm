@@ -25,6 +25,16 @@
 %define ALLOCATION_LENGTH_OFFSET 8
 %define ALLOCATION_DATA_OFFSET 16
 
+;;; When choosing a chunk size for the bump allocator, do consider that the linux kernel
+;;; allocates pages 'lazily' - it doesn't actually claim the memory until we touch the memory.
+;;;
+;;; That means the chunk size is not a minimum overhead, and in fact we may use far less memory.
+;;;
+;;; However, at the time of this writing, we only ever 'free' data by freeing entire chunks.
+;;; We don't decrement the bump pointer (TODO try this and see if it's fast!). This does
+;;; mean we'll use more memory with larger chunks because we never free anything.
+;;;
+;;; So we still need to be reasonable
 %define CHUNK_SIZE (4*1024*1024)
 %define SYSCALL_SPILL_SIZE 512*1024 ;; Allocations larger than this will syscall
 
