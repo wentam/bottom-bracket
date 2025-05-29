@@ -126,7 +126,7 @@ with_definitions_not_list_error_len:  equ $ - with_definitions_not_list_error
 with_definition_not_2_error: db "ERROR: A definition in aarrp/with isn't a parray of length 2. It must be.",10
 with_definition_not_2_error_len:  equ $ - with_definition_not_2_error
 
-with_definition_not_3_error: db "ERROR: A definition in aarrp/with isn't a parray of length 3. It must be. Try: (macro|data my-name data|code).",10
+with_definition_not_3_error: db "ERROR: A definition in aarrp/with isn't a parray of length 3. It must be. Try: (macro|data|noexpand-data my-name data|code).",10
 with_definition_not_3_error_len:  equ $ - with_definition_not_3_error
 
 with_definition_bad_type_error: db "ERROR: Bad type in definition in aarrp/with. Try 'macro' or 'data'.",10
@@ -146,6 +146,7 @@ with_be_name: db 2,0,0,0,0,0,0,0,"BE"
 with_addr_name: db 4,0,0,0,0,0,0,0,"addr"
 with_baddr_name: db 15,0,0,0,0,0,0,0,"barray-raw-addr"
 with_data_name: db 4,0,0,0,0,0,0,0,"data"
+with_noexpand_data_name: db 13,0,0,0,0,0,0,0,"noexpand-data"
 _with_macro_name: db 5,0,0,0,0,0,0,0,"macro"
 
 ;;; Stuff for with-macros macro:
@@ -171,7 +172,7 @@ with_macros_impl_spec_wrong_len_error_len:  equ $ - with_macros_impl_spec_wrong_
 with_macros_impl_spec_platform_not_barray_error: db "ERROR: First element of implementation specifier in aarrp/with-macros is not a barray. Should be a barray of the platform name like x86_64-linux."
 with_macros_impl_spec_platform_not_barray_error_len:  equ $ - with_macros_impl_spec_platform_not_barray_error
 
-with_macros_impl_spec_machine_code_not_barray_error: db "ERROR: Second element of implementation specifier in aarrp/with-macros is not a barray. Should be a barray of machine code for the given platform.",10
+with_macros_impl_spec_machine_code_not_barray_error: db "ERROR: Third element of macro definition in aarrp/with is not a barray. Should be a barray of machine code for the given platform.",10
 with_macros_impl_spec_machine_code_not_barray_error_len:  equ $ - with_macros_impl_spec_machine_code_not_barray_error
 
 with_macros_unsupported_platform_error: db "ERROR: Attempt to expand a macro that doesn't have an implementation for a platform we support. Supported platforms: x86_64-linux."
@@ -2409,11 +2410,14 @@ _withm_push_data_macro:
 
 ;;; _withm_push_definition(definition-parray*, macro-id-byte-buffer*, data-byte-buffer*)
 _withm_push_definition:
+ push rbp
+ mov rbp, rsp
  push r12
  push r13
  push r14
  push r15
  push rbx
+ sub rsp, 8
 
  mov r12, rdi ;; definition parray
  mov r13, rsi ;; macro id byte buffer
@@ -2429,8 +2433,46 @@ _withm_push_definition:
 
  .good_def_len:
 
+ ;; Create greedy macroexpand buffer for name
+ call byte_buffer_new
+ mov r15, rax ; qword[rbp-48] = greedy expansion buffer
+
+ ;; Create greedy macroexpand buffer for definition (might not be used depending on mode)
+ call byte_buffer_new
+ mov qword[rbp-48], rax ; qword[rbp-48] = greedy expansion buffer
+
+ ;; Greedy macroexpand the name
+ mov rdi, qword[r12+8] ; rdi = pointer to definition parray
+ mov rsi, r15
+ mov rdx, 2 ; greedy
+ call structural_macro_expand
+ mov rbx, rax ; rbx = name barray
+
+
+ ;; If first element is 'noexpand-data', call our data pusher
+ mov rdi, rbx
+ mov rsi, with_noexpand_data_name
+ call barray_equalp
+ cmp rax, 1
+ jne .is_not_ndata
+
+ mov rdi, r12
+ mov rsi, r13
+ mov rdx, r14
+ call _withm_push_data_macro
+ jmp .epilogue
+ .is_not_ndata:
+
+ ;;; For the below modes, we want to use a fully expanded definition, not just the name.
+ ;; Greedy macroexpand the definition
+ mov rdi, r12 ; rdi = pointer to definition parray
+ mov rsi, r15
+ mov rdx, 2 ; greedy
+ call structural_macro_expand
+ mov r12, rax ; rbx = name barray
+
  ;; If first element is 'data', call our data pusher
- mov rdi, qword[r12+8]
+ mov rdi, rbx
  mov rsi, with_data_name
  call barray_equalp
  cmp rax, 1
@@ -2444,7 +2486,7 @@ _withm_push_definition:
  .is_not_data:
 
  ;; If first element is 'macro', call our data pusher
- mov rdi, qword[r12+8]
+ mov rdi, rbx
  mov rsi, _with_macro_name
  call barray_equalp
  cmp rax, 1
@@ -2463,11 +2505,22 @@ _withm_push_definition:
  call error_exit
 
   .epilogue:
+
+ ;; Free the greedy name macroexpand buffer
+ mov rdi, r15
+ call byte_buffer_free
+
+ ;; Free the greedy definition macroexpand buffer
+ mov rdi, qword[rbp-48]
+ call byte_buffer_free
+
+ add rsp, 8
  pop rbx
  pop r15
  pop r14
  pop r13
  pop r12
+ pop rbp
  ret
 
 ;;; _withm_push_macros(def-list-parray*, id_byte_buffer*, data_byte_buffer*)
@@ -2505,23 +2558,23 @@ _withm_push_macros:
   cmp r15, 0
   jle .definition_loop_break
 
-  ;; Create greedy expansion byte buffer
+  ;; Create shy definiton expansion byte buffer
   call byte_buffer_new
   mov qword[rbp-48], rax ; qword[rbp-48] = greedy expansion buffer
 
   ;; Greedy macroexpand the definition
   mov rdi, qword[rbx] ; rdi = pointer to definition parray
   mov rsi, qword[rbp-48]
-  mov rdx, 2 ; greedy
+  mov rdx, 1 ; shy
   call structural_macro_expand
 
   ;; Push our access/reference macro referencing the byte buffer
-  mov rdi, rax ; rdi = greedy macro expansion of definition
+  mov rdi, rax ; rdi = shy definition macro expansion of definition
   mov rsi, r13 ; macro id byte buffer
   mov rdx, r14 ; data byte buffer
   call _withm_push_definition
 
-  ;; Free the greedy expansion byte buffer
+  ;; Free the shy definition expansion byte buffer
   mov rdi, qword[rbp-48]
   call byte_buffer_free
 
@@ -2558,10 +2611,6 @@ withm:
   mov rax, -1
   jg .epilogue
 
-  ;; Init byte buffer for shy macroexpand of definition list
-  call byte_buffer_new
-  mov r14, rax ; r14 = shy macroexpand buffer
-
   ;; Init byte buffer to store our data entries
   call byte_buffer_new
   mov r15, rax ; r15 = data entry buffer
@@ -2572,7 +2621,7 @@ withm:
 
   ;; Shy macroexpand our definition list
   mov rdi, qword[r12+16]
-  mov rsi, r14
+  mov rsi, r13
   mov rdx, 1 ; shy
   call structural_macro_expand
   mov qword[rbp-48], rax ; qword[rbp-48] = shy expansion of definition list
@@ -2648,10 +2697,6 @@ withm:
 
   ;; Free data byte buffer
   mov rdi, r15
-  call byte_buffer_free
-
-  ;; Free shy macroexpand buffer
-  mov rdi, r14
   call byte_buffer_free
 
   ;; Return pointer to result

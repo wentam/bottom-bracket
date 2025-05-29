@@ -258,7 +258,9 @@
   ;;
   ;; Tips:
   ;;   * The arrp/bsumLE macro with bregnum can be used to offset base opcodes with a register num
-  ;;   * The if-reg-is-ext macro can be used to set REX byte flags.
+  ;;   * The if-ext macro can be used to set REX byte flags.
+  ;;   * The memop-base macro can be used to get the base register for memory operands
+  ;;   * The memop-index macro can be used to get the index register for memory operands
   ;;
   ;; Conventions
   ;;   * Any instruction that accepts a label should have a "abs" or "rel" suffix depending on if
@@ -271,12 +273,15 @@
   ;; to use a temporary register.
 
 
-  (data instruction-table
-   ((mov    (((r64 re64) (r64  re64)) (REX W (if-reg-is-ext (p 0) R) (if-reg-is-ext (p 1) B)) "\x8B" (RM (p 0) (p 1)))
-            (((r64 re64) (m64  me64)) (REX W) "\x8B" (RM (p 0) (p 1)))
-            (((r64 re64) (imm32)    ) (REX W) "\xC7" (RM 0 (p 0)) (imm 32 (p 1))))
-    (movabs (((r64 re64) (label)    ) (REX W) (aarrp/bsumLE "\xB8" (bregnum (p 0))) (label-abs-ref (p 1) 8 LE)))
-    (cmp    (((r64 re64) (r64  re64)) "thiswouldbecmp"))))
+  (noexpand-data instruction-table
+   ((mov    (((r64 re64) (r64  re64)) (REX W (if-ext (p 0) R) (if-ext (p 1) B)) "\x8B" (RM (p 0) (p 1)))
+            (((r64 re64) (m64  me64)) (REX W (if-ext (p 0) R) (if-ext (memop-index (p 1)) X) (if-ext (memop-base (p 1)) B)) "\x8B" (RM (p 0) (p 1)))
+            (((m64 me64) (r64  re64)) (REX W (if-ext (p 1) R) (if-ext (memop-index (p 0)) X) (if-ext (memop-base (p 0)) B)) "\x89" (RM (p 1) (p 0)))
+            (((r64 re64) (imm32    )) (REX W (if-ext (p 0) B)) "\xC7" (RM 0 (p 0)) (imm 32 (p 1))))
+    (movabs (((r64 re64) (label    )) (REX W (if-ext (p 0) B)) (aarrp/bsumLE "\xB8" (bregnum (p 0))) (label-abs-ref (p 1) 8 LE)))
+    (cmp    (((r64 re64) (r64  re64)) (REX W (if-ext (p 0) R) (if-ext (p 1) B)) "\x3B" (RM (p 0) (p 1))))
+    (push   (((r64 re64)            ) (if-ext (p 0) (REX B)) (aarrp/bsumLE "\x50" (bregnum (p 0)))))
+    (pop    (((r64 re64)            ) (if-ext (p 0) (REX B)) (aarrp/bsumLE "\x58" (bregnum (p 0)))))))
 
   ; (((r64 re64) (r64 re64)) (REX W (p 1 R-if-ext) (p 0 B-if-ext)) "\x89" (RM (p 1) (p 0)))
 
@@ -2137,11 +2142,11 @@
     "\xC3"))
 
   (data p-macro-name "p")
-  (data if-reg-is-ext-bad-usage "\nERROR: Bad usage of if-reg-is-ext. Try (if-reg-is-ext register form).")
+  (data if-ext-bad-usage "\nERROR: Bad usage of if-ext. Try (if-ext register form).")
 
-  ;; (if-reg-is-ext [register] [form])
+  ;; (if-ext [register] [form])
   ;; expands to [form] if [register] is an extended register, else expands to nothing
-  (macro if-reg-is-ext
+  (macro if-ext
    (x86_64-linux
     (aarrp/barray-cat
      (REX B)"\x54"                                                             ; push r12
@@ -2163,7 +2168,7 @@
      (REX W B)"\x83"(RM 7 (qword r12 0 1 0))(imm 8 -3)                         ; cmp qword[r12], -3
      "\x0F\x84"(label-rel-ref good-arg-count 4 LE)                             ; je good-arg-count
 
-     (REX W)(aarrp/bsumLE "\xB8" (bregnum rdi))(if-reg-is-ext-bad-usage addr 8 LE)  ; mov rdi, error-msg
+     (REX W)(aarrp/bsumLE "\xB8" (bregnum rdi))(if-ext-bad-usage addr 8 LE)  ; mov rdi, error-msg
      (REX W)(aarrp/bsumLE "\xB8" (bregnum rax))(error-exit-fn barray-raw-addr 8 LE) ; mov rax, error-exit-fn
      "\xFF"(RM 2 rax)                                                               ; call rax
 
@@ -2206,6 +2211,76 @@
      ; return rax
 
      (label epilogue)
+     "\x5B"                                                                              ; pop rbx
+     (REX B)"\x5F"                                                                       ; pop r15
+     (REX B)"\x5E"                                                                       ; pop r14
+     (REX B)"\x5D"                                                                       ; pop r13
+     (REX B)"\x5C"                                                                       ; pop r12
+     "\xC3")))
+
+  (macro memop-base
+   (x86_64-linux
+    (aarrp/barray-cat
+     (REX B)"\x54"                                                             ; push r12
+     (REX B)"\x55"                                                             ; push r13
+     (REX B)"\x56"                                                             ; push r14
+     (REX B)"\x57"                                                             ; push r15
+     "\x53"                                                                    ; push rbx
+
+     (REX W R)"\x8B"(RM r12 rdi) ; mov r12, rdi - input structure
+     (REX W R)"\x8B"(RM r12 rdi) ; mov r13, rsi - output buffer
+
+     ;; Macroexpand tail of our input - rdi and rsi already correct
+     (REX W)"\xC7"(RM 0 rdx)(imm 32 2)                                 ; mov rdx, 2
+     "\x48\xB8" (aarrp/builtin-func-addr/structural-macro-expand-tail) ; mov rax, expand
+     "\xFF"(RM 2 rax)                                                  ; call rax
+     (REX W R)"\x8B"(RM r12 rax)                                       ; mov r12, rax
+
+     ;; TODO error if r12 not 1 element in size
+     ;; TODO error if qword[r12+8] not a parray of 5 elements in size
+
+     (REX W B)"\x8B"(RM rsi (m64 r12 0 1 8)) ; mov rsi, qword[r12+8]
+     (REX W)"\x8B"(RM rdi (m64 rsi 0 1 16)) ; mov rdi, qword[rsi+16]
+     (REX W B)"\x8B"(RM rsi r13) ; mov rsi, r13
+     (REX W)"\xC7"(RM 0 rdx)(imm 32 2)                                 ; mov rdx, 2
+     "\x48\xB8" (aarrp/builtin-func-addr/structural-macro-expand)      ; mov rax, expand
+     "\xFF"(RM 2 rax)                                                  ; call rax
+
+     "\x5B"                                                                              ; pop rbx
+     (REX B)"\x5F"                                                                       ; pop r15
+     (REX B)"\x5E"                                                                       ; pop r14
+     (REX B)"\x5D"                                                                       ; pop r13
+     (REX B)"\x5C"                                                                       ; pop r12
+     "\xC3")))
+
+  (macro memop-index
+   (x86_64-linux
+    (aarrp/barray-cat
+     (REX B)"\x54"                                                             ; push r12
+     (REX B)"\x55"                                                             ; push r13
+     (REX B)"\x56"                                                             ; push r14
+     (REX B)"\x57"                                                             ; push r15
+     "\x53"                                                                    ; push rbx
+
+     (REX W R)"\x8B"(RM r12 rdi) ; mov r12, rdi - input structure
+     (REX W R)"\x8B"(RM r12 rdi) ; mov r13, rsi - output buffer
+
+     ;; Macroexpand tail of our input - rdi and rsi already correct
+     (REX W)"\xC7"(RM 0 rdx)(imm 32 2)                                 ; mov rdx, 2
+     "\x48\xB8" (aarrp/builtin-func-addr/structural-macro-expand-tail) ; mov rax, expand
+     "\xFF"(RM 2 rax)                                                  ; call rax
+     (REX W R)"\x8B"(RM r12 rax)                                       ; mov r12, rax
+
+     ;; TODO error if r12 not 1 element in size
+     ;; TODO error if qword[r12+8] not a parray of 5 elements in size
+
+     (REX W B)"\x8B"(RM rsi (m64 r12 0 1 8)) ; mov rsi, qword[r12+8]
+     (REX W)"\x8B"(RM rdi (m64 rsi 0 1 24)) ; mov rdi, qword[rsi+24]
+     (REX W B)"\x8B"(RM rsi r13) ; mov rsi, r13
+     (REX W)"\xC7"(RM 0 rdx)(imm 32 2)                                 ; mov rdx, 2
+     "\x48\xB8" (aarrp/builtin-func-addr/structural-macro-expand)      ; mov rax, expand
+     "\xFF"(RM 2 rax)                                                  ; call rax
+
      "\x5B"                                                                              ; pop rbx
      (REX B)"\x5F"                                                                       ; pop r15
      (REX B)"\x5E"                                                                       ; pop r14
@@ -2621,12 +2696,13 @@
    ;(cmp 5 rcx)
    ;(mov (m8 rdi 0 1 0) rsi)
 
-;(if-reg-is-ext r12 B)
+;(if-ext r12 B)
    (asm/x86_64
+   (pop rdi)
     ;(label my-label)
    ; (movabs rax my-label)
-    (mov r13 rdi)
-    ;(cmp rdi rax)
+  ;  (mov (m64 r12 rdi 1 0) rsi)
+    ;(cmp r12 rdi)
     ;(mov rsi (m64 rdx 0 1 8))
     )
 )
