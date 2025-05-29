@@ -882,6 +882,8 @@ compare_barrays:
 
 ;; This is my spot for having nasm assemble random things for me lel
 tmpaoeu:
-  ;mov rdi, qword[compare_barrays]
+
+      mov rdi, r12
+      mov rsi, rsi
   ret
 

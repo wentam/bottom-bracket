@@ -2466,7 +2466,7 @@ _withm_push_definition:
  ;;; For the below modes, we want to use a fully expanded definition, not just the name.
  ;; Greedy macroexpand the definition
  mov rdi, r12 ; rdi = pointer to definition parray
- mov rsi, r15
+ mov rsi, qword[rbp-48]
  mov rdx, 2 ; greedy
  call structural_macro_expand
  mov r12, rax ; rbx = name barray

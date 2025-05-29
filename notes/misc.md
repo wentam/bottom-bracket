@@ -534,3 +534,4 @@ Interestingly, that means that even with this design there are certain situation
     * Some compilers support extra-big integers like 128-bit. It would be interesting to experiment with this once we have lowering logic in the IR.
         * Would be cool if we could make it width-arbitrary lowering, and support 512-bit integers or whatever.
             * This makes sense because if the width is fixed - even when it's really wide - we can be more optimal than generalized bignums.
+* Instead of having noexpand-data, threadlocal-data, threadlocal-noexpand-data, we could have you say (data (noexpand threadlocal) name my-data). Could remain compatible with the (data name my-data) syntax because it's clear there's flags there if it's a parray.

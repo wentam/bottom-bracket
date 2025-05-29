@@ -199,6 +199,8 @@ realloc:
   push r12
   push r13
   push r14
+  push r15
+  sub rsp, 8
 
   mov r12, rdi
   mov r13, rsi
@@ -219,7 +221,7 @@ realloc:
   sub r12, ALLOCATION_DATA_OFFSET ; Walk back to our full allocation struct
 
   mov rdx, qword[r12 + ALLOCATION_CHUNK_PTR_OFFSET]
-  mov rcx, qword[r12 + ALLOCATION_LENGTH_OFFSET]
+  mov r15, qword[r12 + ALLOCATION_LENGTH_OFFSET]
 
   cmp rdx, 0
   je .is_syscall_alloc
@@ -238,6 +240,7 @@ realloc:
   jz .failed
 
   ;; Clamp copy length to new size
+  mov rcx, r15
   cmp rcx, r13
   cmova rcx, r13
 
@@ -278,6 +281,8 @@ realloc:
   mov rax, 0
 
   .epilogue:
+  add rsp, 8
+  pop r15
   pop r14
   pop r13
   pop r12
