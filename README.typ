@@ -30,6 +30,8 @@
   float: true,
   text()[
     #align(center)[
+      #v(1cm)
+
       #text(17pt)[ *ARRP (ARRay Processing)* ]
 
       _What if we didn't assume our abstractions; what if we derived them?_
@@ -80,7 +82,7 @@
 
     #v(1cm)
 
-    #line(length: 100%, stroke: white) // TODO black in light mode
+    #line(length: 100%) // TODO black in light mode
 
     #v(1cm)
 

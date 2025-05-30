@@ -64,6 +64,7 @@ docs/typ-build/%-dark.typ.pdf: %.typ
 	mkdir -p "$$(dirname $@)"
 	tmpfile="$$(mktemp)"; \
 	echo "#set page(margin: (x: 0pt, y: 0pt))" > $$tmpfile; \
+	echo "#set line(stroke: white)" >> $$tmpfile; \
 	echo "#set text(fill: white)" >> $$tmpfile; \
 	cat "$<" >> $$tmpfile; \
 	typst compile "$$tmpfile" $@
@@ -73,6 +74,7 @@ docs/typ-build/%-embed-dark.typ.pdf: %.typ
 	tmpfile="$$(mktemp)"; \
 	echo "#set page(margin: (x: 20pt, y: 20pt))" > $$tmpfile; \
 	echo '#set page(fill: rgb("0d1117"))' >> $$tmpfile; \
+	echo "#set line(stroke: white)" >> $$tmpfile; \
 	echo "#set text(fill: white)" >> $$tmpfile; \
 	cat "$<" >> $$tmpfile; \
 	typst compile "$$tmpfile" $@
