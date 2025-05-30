@@ -99,7 +99,7 @@ structural_macro_expand:
 ;;;
 ;;;   If you're not sure, you probably want a greedy expand.
 ;;;
-;;;   To understarnd why 'shy' expansions are needed, look at how aarrp/with-macros manages
+;;;   To understarnd why 'shy' expansions are needed, look at how arrp/with-macros manages
 ;;;   to behave like let* where each macro definition can use the last.
 ;;;
 ;;;   Uses buffer-relative pointers, thus not yet a valid AARRP structure.

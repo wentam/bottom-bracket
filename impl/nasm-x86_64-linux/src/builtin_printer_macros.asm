@@ -89,7 +89,7 @@ data:
   push r12
   push r13
   push r15
-  mov r12, rdi ; aarrp expression data
+  mov r12, rdi ; arrp expression data
   mov r13, rsi ; fd
 
   %ifdef ASSERT_STACK_ALIGNMENT

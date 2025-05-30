@@ -1,15 +1,15 @@
-(aarrp/with
+(arrp/with
  ((data my-thing       "foo")
   (data my-other-thing (a (a b) b))
   (data internal-ref   (my-thing))
 
   (macro my-nothing-macro
    (x86_64-linux
-    (aarrp/barray-cat
+    (arrp/barray-cat
      "\x48\xB8\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF" ; mov rax, -1
      "\xC3")))
 
-  (macro unsupported-macro (a (aarrp/barray-cat "\xFF" (my-nothing-macro))))
+  (macro unsupported-macro (a (arrp/barray-cat "\xFF" (my-nothing-macro))))
   )
 
  ((my-nothing-macro)

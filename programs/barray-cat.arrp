@@ -1,4 +1,4 @@
-(aarrp/barray-cat
+(arrp/barray-cat
   "foo"
   (label-abs-ref foo 8 LE)  ; can reference a label before the label as long as it's in-scope
   (label-abs-ref foo 8 BE)  ; or big endian

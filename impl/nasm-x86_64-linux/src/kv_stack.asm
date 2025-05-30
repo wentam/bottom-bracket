@@ -2,7 +2,7 @@
 ;;;   * optionally executable TODO make this actually optional and don't always allocate executable
 ;;;   * useful if you need a key-value store
 ;;;   * useful if you need a stack
-;;;   * definitely useful when you want something with both properties. This is the;;;     case with aarrp's macro system.
+;;;   * definitely useful when you want something with both properties. This is the;;;     case with arrp's macro system.
 
 ;;; TODO it might be beneficial to have a hashmap index for fast by-name lookups
 ;;; TODO it might be beneficial to have a hashmap index for fast by-id lookups
