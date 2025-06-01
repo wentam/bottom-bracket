@@ -71,4 +71,3 @@
   * Look at if-reg-is-ext for an example on how much cleaner this is.
   * Just be careful about macro return values being shifted
 * Many of our error messages are wrong regarding the 'with' macro since we refactored it (used to be 'with' and 'with-macros', but we combined them)
-* expose rel-to-abs as public function

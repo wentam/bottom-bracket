@@ -2515,27 +2515,26 @@
     [REX W]"\x89"[RM rax [m64 rbp 0 1 -48]]; mov qword[rbp-48], rax - = id
     [REX W]"\x83"[RM 0 rsp][imm 8 16] ; add rsp, 16
 
-
     ;; Encode instruction [qword[r13]]
 
     [REX W B]"\x8B"[RM rdi [m64 r13 0 1 0]] ; mov rdi, qword[r13]
     [REX W B]"\x8B"[RM rsi r14] ; mov rsi, r14
     [REX W]"\xC7"[RM 0 rdx][imm 32 2]                                         ; mov rdx, 2 - greedy expand
-     "\xB9\x00\x00\x00\x00"                                            ; mov rcx, 0
+    "\xB9\x01\x00\x00\x00"                                                    ; mov rcx, 1 - RELATIVE
     [REX W][bb/bsumLE "\xB8" [bregnum rax]][bb/builtin-func-addr/structural-macro-expand-tail] ; mov rax, structural-macro-expand-tail
     "\xFF"[RM 2 rax]                                                               ; call rax
     [REX W R]"\x8B"[RM r13 rax] ; mov r13, rax - r13 = our new parray to push
+
+    [REX W B]"\x8B"[RM rdi r14] ; mov rdi, r14
+    [REX W][bb/bsumLE "\xB8" [bregnum rax]][bb/builtin-func-addr/byte-buffer-get-buf] ; mov rax, bb-get-buf
+    "\xFF"[RM 2 rax]                                                               ; call rax
+    [REX W R]"\x03"[RM r13 rax]; add r13 , rax
 
     ;; Pop p-macro by id
     [REX W][bb/bsumLE "\xB8" [bregnum rdi]][bb/builtin-addr/macro-stack-structural] ; mov rdi, macro-stack-structural
     [REX W]"\x8B"[RM rsi [m64 rbp 0 1 -48]] ; mov rsi, qword[rbp-48]
     [REX W][bb/bsumLE "\xB8" [bregnum rax]][bb/builtin-func-addr/kv-stack-pop-by-id]     ; mov rax, kv-stack-pop-by-id
     "\xFF"[RM 2 rax]                                                                      ; call rax
-
-    [REX W B]"\x8B"[RM rdi r14] ; mov rdi, r14
-    [REX W][bb/bsumLE "\xB8" [bregnum rax]][bb/builtin-func-addr/byte-buffer-get-buf] ; mov rax, bb-get-buf
-    "\xFF"[RM 2 rax]                                                               ; call rax
-    [REX W R]"\x8B"[RM r12 rax] ; mov r12, rax - r12 = data length
 
     ;; Copy return parray's pointers to our output parary, except as buffer-relative
     [REX W B]"\x8B"[RM rbx [m64 r13 0 1 0]] ; mov rbx, qword[r13]
@@ -2548,7 +2547,7 @@
 
      [REX W B]"\x8B"[RM rdi r15]             ; mov rdi, r15
      [REX W B]"\x8B"[RM rsi [m64 r13 0 1 0]] ; mov rsi, qword[r13]
-     [REX W B]"\x2B"[RM rsi r12] ; sub rsi, r12
+     ;[REX W B]"\x2B"[RM rsi r12] ; sub rsi, r12
      [REX W][bb/bsumLE "\xB8" [bregnum rax]][bb/builtin-func-addr/byte-buffer-push-int64]; mov rax, bb-push-int64
      "\xFF"[RM 2 rax]                                                               ; call rax
 
@@ -2691,17 +2690,12 @@
      [REX W B]"\x8B"[RM rdi r12]                                               ; mov rdi, r12
      [REX W B]"\x8B"[RM rsi r13]                                               ; mov rsi, r13
      [REX W]"\xC7"[RM 0 rdx][imm 32 0]                                         ; mov rdx, 0
-     "\xB9\x00\x00\x00\x00"                                            ; mov rcx, 0
+     "\xB9\x01\x00\x00\x00"                                                    ; mov rcx, 1 - RELATIVE
      [REX W]"\xB8"[bb/builtin-func-addr/structural-macro-expand]               ; mov rax, structural-macro-expand
      "\xFF"[RM 2 rax]                                                          ; call rax
      [REX W]"\x8B"[RM rbx rax]                                                 ; mov rbx, rax
 
      ;; Write a buffer-relative pointer to the thing we should expanded to our parray
-     [REX W B]"\x8B"[RM rdi r13]                                               ; mov rdi, r13
-     [REX W]"\xB8"[bb/builtin-func-addr/byte-buffer-get-buf]                   ; mov rax, byte-buffer-get-buf
-     "\xFF"[RM 2 rax]                                                          ; call rax
-     [REX W]"\x2B"[RM rbx rax]                                                 ; sub rbx, rax
-
      [REX W B]"\x8B"[RM rdi r14]                                               ; mov rdi, r14
      [REX W]"\x8B"[RM rsi rbx]                                                 ; mov rsi, rbx
      [REX W]"\xB8"[bb/builtin-func-addr/byte-buffer-push-int64]                ; mov rax, byte-buffer-push-int64
@@ -2756,11 +2750,19 @@
      [REX W]"\xB8"[bb/builtin-func-addr/byte-buffer-push-int64]                       ; mov rax, bb_push_int64
      "\xFF"[RM 2 rax]                                                                    ; call rax
 
-     ;; Write a pointer to a static barray of "bb/barray-cat" as the first element
-     ;; of our parray output
+     ;; Write a pointer to "bb/barray-cat" as the first element
+     ;; of our parray output. We need to copy it into our output buffer because we're
+     ;; working with relative pointers in this macro.
+     [REX W][bb/bsumLE "\xB8" [bregnum rdi]][barray-cat-macro-name addr 8 LE] ; mov rdi, barray-cat-macro-name
+     [REX W B]"\x8B"[RM rsi r13] ; mov rsi, r13
+     [REX W]"\xC7"[RM 0 rdx][imm 32 0] ; mov rdx, 0
+     [REX W]"\xC7"[RM 0 rcx][imm 32 1] ; mov rcx, 1
+     [REX W]"\xB8"[bb/builtin-func-addr/structural-macro-expand]               ; mov rax, structural-macro-expand
+     "\xFF"[RM 2 rax]                                                          ; call rax
+
      [REX W R]"\x89"[RM r14 rdi]                                                         ; mov rdi, r14
-     [REX W][bb/bsumLE "\xB8" [bregnum rsi]][barray-cat-macro-name addr 8 LE]         ; mov rsi, barray-cat-macro-name
-     [REX W]"\xB8"[bb/builtin-func-addr/byte-buffer-push-int64]                       ; mov rax, bb_push_int64
+     [REX W]"\x8B"[RM rsi rax]                                                           ; mov rsi, rax
+     [REX W]"\xB8"[bb/builtin-func-addr/byte-buffer-push-int64]                          ; mov rax, bb_push_int64
      "\xFF"[RM 2 rax]                                                                    ; call rax
 
      ;; Create input tail macroexpand byte buffer
@@ -2815,28 +2817,15 @@
      ;;   * Needed because our output buffer is still growing when we write the parray pointers
      ;;     * Growing == invalidating absolute pointers for a byte buffer
 
-     [REX W B]"\x8B"[RM rdi r13]                                                         ; mov rdi, r13
+     [REX W B]"\x8B"[RM rdi r13]                                                      ; mov rdi, r13
      [REX W]"\xB8"[bb/builtin-func-addr/byte-buffer-get-buf]                          ; mov rax, bb-get-buf
-     "\xFF"[RM 2 rax]                                                                    ; call rax
+     "\xFF"[RM 2 rax]                                                                 ; call rax
 
-     [REX W B]"\x8B"[RM rdi r15]                                                         ; mov rdi, r15
-     [REX W]"\x03"[RM rdi rax]                                                           ; add rdi, rax - rdi = absolute address to parray
-     [REX W]"\x8B"[RM rsi [m64 rdi 0 1 0]]                                               ; mov rsi, qword[rdi]
-     [REX W]"\xF7"[RM 2 rsi]                                                             ; not rsi
-     [REX W]"\xFF"[RM 1 rsi]                                                             ; dec rsi - rsi = length -1
-     [REX W]"\x83"[RM 0 rdi][imm 8 16]                                                   ; add rdi, 16 - move past length, first list item
-
-     [label rel-to-abs-loop]
-     [label-scope
-      [REX W]"\x83"[RM 7 rsi][imm 8 0]                                                   ; cmp rsi, 0
-      "\x0F\x84"[label-rel-ref rel-to-abs-loop-break 4 LE]                               ; je rel-to-abs-loop-break
-
-      [REX W]"\x01"[RM rax [m64 rdi 0 1 0]]                                              ; add qword[rdi], rax - ptr += buf address
-
-      [REX W]"\x83"[RM 0 rdi][imm 8 8]                                                   ; add rdi, 8
-      [REX W]"\xFF"[RM 1 rsi]                                                            ; dec rsi
-      "\xE9"[label-rel-ref rel-to-abs-loop 4 LE]]                                        ; jmp rel-to-abs-loop
-     [label rel-to-abs-loop-break]
+     [REX W B]"\x8B"[RM rdi r15]                                                        ; mov rdi, r15
+     [REX W]"\x03"[RM rdi rax]                                                          ; add rdi, rax - rdi = absolute address to parray
+     [REX W B]"\x8B"[RM rsi r13]                                                        ; mov rsi, r13 - output buffer
+     [REX W]"\xB8"[bb/builtin-func-addr/rel-to-abs]                                     ; mov rax, bb-push-bb
+     "\xFF"[RM 2 rax]                                                                   ; call rax
 
      ;; Free our parray output byte buffer
      [REX W R]"\x89"[RM r14 rdi] ; mov rdi, r14
@@ -2848,7 +2837,7 @@
      [REX W]"\xB8"[bb/builtin-func-addr/byte-buffer-free]                             ; mov rax, bb-free
      "\xFF"[RM 2 rax]                                                                    ; call rax
 
-     ;; Return buffer-rel pointer to our parray output in the output byte buffer
+     ;; Return pointer to our parray output in the output byte buffer
      [REX W R]"\x89"[RM r13 rdi]                                                         ; mov rdi, r13
      [REX W]"\xB8"[bb/builtin-func-addr/byte-buffer-get-buf]                             ; mov rax, bb_get_buf
      "\xFF"[RM 2 rax]                                                                    ; call rax
@@ -2906,7 +2895,8 @@
      [pop r14]
      [pop r13]
      [pop r12]
-     [ret]]]]]
+     [ret]]]]
+  ]
  [
  ;[bb/barray-cat [REX W]"\x89"[RM rdi [m64 rax 0 1 0]]]
  ;[REX [barray-test]]
@@ -2931,7 +2921,8 @@
  ;[asm/x86_64
  ; ;[mov rdi [raw-imm [label-rel-ref aoeu 4 LE]]]
  ; [label aoeu]
- ; ;[pop rdi]
+ ; [mov rdi rsi]
+ ;; [pop rdi]
  ; ;[callabs r12]
  ;; [ret]
  ; ;[movabs rax my-label]

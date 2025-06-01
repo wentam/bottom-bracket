@@ -32,7 +32,7 @@ section .rodata
 
 section .text
 
-;;; structural_macro_expand_relptr(*data, *output_byte_buffer, shy_greedy, abs_rel) -> ptr
+;;; structural_macro_expand(*data, *output_byte_buffer, shy_greedy, abs_rel) -> ptr
 ;;;
 ;;; rel_abs: 0 = absolute pointers 1 = relative pointers.
 ;;; Includes the return value - will be relative if 1.
