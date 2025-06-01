@@ -56,9 +56,22 @@ docs/typ-build/%.typ.html: %.typ
 	echo '  </a>' >> $@
 	echo '</p>' >> $@
 
-docs/typ-build/%.typ.svg: docs/typ-build/%.typ.pdf
+docs/typ-build/%-dark.typ.svg: %.typ
 	mkdir -p "$$(dirname $@)"
-	inkscape --without-gui --file="$<" --pdf-poppler --export-plain-svg="$@"
+	tmpfile="$$(mktemp)"; \
+	echo "#set page(margin: (x: 0pt, y: 0pt), fill:none)" > $$tmpfile; \
+	echo "#set line(stroke: white)" >> $$tmpfile; \
+	echo "#set text(fill: white)" >> $$tmpfile; \
+	cat "$<" >> $$tmpfile; \
+	typst compile -f svg $$tmpfile $@
+
+docs/typ-build/%-light.typ.svg: %.typ
+	mkdir -p "$$(dirname $@)"
+	tmpfile="$$(mktemp)"; \
+	echo "#set page(margin: (x: 0pt, y: 0pt), fill:none)" > $$tmpfile; \
+	echo "#set text(fill: black)" >> $$tmpfile; \
+	cat "$<" >> $$tmpfile; \
+	typst compile -f svg $$tmpfile $@
 
 docs/typ-build/%-dark.typ.pdf: %.typ
 	mkdir -p "$$(dirname $@)"
