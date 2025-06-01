@@ -39,6 +39,7 @@ extern parse_uint
 extern barray_deposit_bytes
 extern malloc
 extern barray_equalp
+extern rel_to_abs
 
 extern kv_stack_new
 extern kv_stack_pop
@@ -64,6 +65,7 @@ barray_cat_macro_name: db 13,0,0,0,0,0,0,0,"bb/barray-cat"
 with_macro_name: db 7,0,0,0,0,0,0,0,"bb/with"
 withm_macro_name: db 7,0,0,0,0,0,0,0,"bb/with"
 builtin_print_macro_name: db 26,0,0,0,0,0,0,0,"bb/builtin-func-addr/print"
+builtin_rel_to_abs_macro_name: db 31,0,0,0,0,0,0,0,"bb/builtin-func-addr/rel-to-abs"
 builtin_macro_stack_structural_macro_name: db 38,0,0,0,0,0,0,0,"bb/builtin-addr/macro-stack-structural"
 builtin_kv_stack_push_macro_name: db 34,0,0,0,0,0,0,0,"bb/builtin-func-addr/kv-stack-push"
 builtin_kv_stack_pop_macro_name: db 33,0,0,0,0,0,0,0,"bb/builtin-func-addr/kv-stack-pop"
@@ -85,10 +87,17 @@ bsumLE_macro_name: db 9,0,0,0,0,0,0,0,"bb/bsumLE"
 builtin_sma_macro_name: db 44,0,0,0,0,0,0,0,"bb/builtin-func-addr/structural-macro-expand"
 builtin_smat_macro_name: db 49,0,0,0,0,0,0,0,"bb/builtin-func-addr/structural-macro-expand-tail"
 
+
 barray_literal_macro_name: db 17,0,0,0,0,0,0,0,"test_macro_barray"
 barray_test_expansion: db 17,0,0,0,0,0,0,0,"test_macro_barray"
 barray_name: db 4,0,0,0,0,0,0,0,"name"
 shstrtab_name: db 9,0,0,0,0,0,0,0,".shstrtab"
+
+
+platform_expansion: db 12,0,0,0,0,0,0,0,"x86_64-linux"
+arch_expansion: db 6,0,0,0,0,0,0,0,"x86_64"
+platform_macro_name: db 11,0,0,0,0,0,0,0,"bb/platform"
+arch_macro_name: db 7,0,0,0,0,0,0,0,"bb/arch"
 
 parray_element: db 3,0,0,0,0,0,0,0,"foo"
 parray_element_2: db 4,0,0,0,0,0,0,0,"foo2"
@@ -197,6 +206,28 @@ push_builtin_structural_macros:
   call kv_stack_push
   add rsp, 16
 
+
+  ;; Push platform macro
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], platform_macro
+  mov rdi, qword[macro_stack_structural]   ; macro stack
+  mov rsi, platform_macro_name          ; macro name
+  mov rdx, rsp                             ; code
+  call kv_stack_push
+  add rsp, 16
+
+  ;; Push arch macro
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], arch_macro
+  mov rdi, qword[macro_stack_structural]   ; macro stack
+  mov rsi, arch_macro_name          ; macro name
+  mov rdx, rsp                             ; code
+  call kv_stack_push
+  add rsp, 16
+
+
   ;; Push builtin_bb_push_int64 macro
   sub rsp, 16
   mov qword[rsp], 8
@@ -233,6 +264,16 @@ push_builtin_structural_macros:
   mov qword[rsp+8], builtin_print
   mov rdi, qword[macro_stack_structural]    ; macro stack
   mov rsi, builtin_print_macro_name ; macro name
+  mov rdx, rsp                              ; code
+  call kv_stack_push
+  add rsp, 16
+
+  ;; Push builtin_rel_to_abs macro
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], builtin_rel_to_abs
+  mov rdi, qword[macro_stack_structural]    ; macro stack
+  mov rsi, builtin_rel_to_abs_macro_name ; macro name
   mov rdx, rsp                              ; code
   call kv_stack_push
   add rsp, 16
@@ -467,6 +508,14 @@ barray_test:
   ret
 barray_test_end:
 
+platform_macro:
+  mov rax, platform_expansion
+  ret
+
+arch_macro:
+  mov rax, arch_expansion
+  ret
+
 
 section .rodata
 push_int64_ptr_barray: dq 8, byte_buffer_push_int64
@@ -494,6 +543,13 @@ print_ptr_barray: dq 8, print
 section .text
 builtin_print:
  mov rax, print_ptr_barray
+ ret
+
+section .rodata
+rel_to_abs_ptr_barray: dq 8, rel_to_abs
+section .text
+builtin_rel_to_abs:
+ mov rax, rel_to_abs_ptr_barray
  ret
 
 section .rodata
@@ -1683,6 +1739,7 @@ barray_cat:
   mov rdi, r12
   mov rsi, qword[rbp-48]
   mov rdx, 2 ; greedy expand
+  mov rcx, 0
   mov rax, structural_macro_expand_tail
   call rax
   mov r12, rax ; r12 = macroexpanded tail of input structure
@@ -1866,6 +1923,7 @@ _with_template_macro:
   mov rdi, r14
   mov rsi, r13
   mov rdx, 0 ; copy mode
+  mov rcx, 0
   mov rax, structural_macro_expand
   call rax
 
@@ -2121,6 +2179,7 @@ bsumLE:
 
   mov rdi, r12
   mov rsi, qword[rbp-48]
+  mov rcx, 0
   call structural_macro_expand_tail
   mov rbx, rax ; rbx = tail
 
@@ -2348,6 +2407,7 @@ _withm_push_data_macro:
   mov rdi, qword[r12+24]
   mov rsi, rax
   mov rdx, 0 ; cp
+  mov rcx, 0
   call structural_macro_expand
   mov qword[rbp-56], rax
 
@@ -2445,6 +2505,7 @@ _withm_push_definition:
  mov rdi, qword[r12+8] ; rdi = pointer to definition parray
  mov rsi, r15
  mov rdx, 2 ; greedy
+ mov rcx, 0
  call structural_macro_expand
  mov rbx, rax ; rbx = name barray
 
@@ -2468,6 +2529,7 @@ _withm_push_definition:
  mov rdi, r12 ; rdi = pointer to definition parray
  mov rsi, qword[rbp-48]
  mov rdx, 2 ; greedy
+ mov rcx, 0
  call structural_macro_expand
  mov r12, rax ; rbx = name barray
 
@@ -2566,6 +2628,7 @@ _withm_push_macros:
   mov rdi, qword[rbx] ; rdi = pointer to definition parray
   mov rsi, qword[rbp-48]
   mov rdx, 1 ; shy
+  mov rcx, 0
   call structural_macro_expand
 
   ;; Push our access/reference macro referencing the byte buffer
@@ -2623,6 +2686,7 @@ withm:
   mov rdi, qword[r12+16]
   mov rsi, r13
   mov rdx, 1 ; shy
+  mov rcx, 0
   call structural_macro_expand
   mov qword[rbp-48], rax ; qword[rbp-48] = shy expansion of definition list
 
@@ -2636,6 +2700,7 @@ withm:
   mov rdi, qword[r12+24] ; 3rd item from input structure
   mov rsi, r13           ; output byte buffer
   mov rdx, 2             ; greedy
+  mov rcx, 0
   call structural_macro_expand
   mov qword[rbp-56], rax ; qword[rbp-56] = abs pointer to output
 

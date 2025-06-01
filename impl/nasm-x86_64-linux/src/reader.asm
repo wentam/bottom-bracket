@@ -10,8 +10,6 @@ global _read ; for reader macros
 global free_read_result
 global dump_read_result_buffer
 global dump_read_result
-global _relative_to_abs ; TODO move this somewhere not reader-specific as
-                        ; the macroexpander uses it
 
 ;; TODO cleanup unused
 extern read_char
@@ -26,6 +24,7 @@ extern BUFFERED_READER_EOF
 extern assert_stack_aligned
 extern bindump
 extern write_as_base
+extern rel_to_abs
 
 extern buffered_fd_reader_new
 extern buffered_fd_reader_free
@@ -174,7 +173,7 @@ read:
   sub rsp, 8
   mov rdi, rax
   mov rsi, r14
-  call _relative_to_abs
+  call rel_to_abs
   add rsp, 8
   pop rax
 
@@ -198,71 +197,6 @@ free_read_result:
 
   .done:
   add rsp, 8
-  ret
-
-;;; _relative_to_abs(*read_result, *byte_buffer)
-;;;   Recursively modifies pointers in a read result that uses buffer-relative
-;;;   pointers (like from _read) to convert them to absolute.
-;;;
-;;;   We need this because if _read was to use absolute pointers further
-;;;   writes would invalidate the pointers. _read produces relative pointers
-;;;   and we convert them to absolute right before we return to the user.
-_relative_to_abs:
-  push r12
-  push r13
-  push r14
-  push r15
-  sub rsp, 8
-
-  cmp rdi, 0
-  je .epilogue
-
-  mov r12, rdi ; read result ptr
-  mov r13, rsi ; byte buffer
-
-  ;; Start of actual buffer -> r14
-  mov rdi, r13
-  call byte_buffer_get_buf
-  mov r14, rax
-
-  %ifdef ASSERT_STACK_ALIGNMENT
-  call assert_stack_aligned
-  %endif
-
-  mov r15, qword[r12] ; Length of parray/barray -> r15
-
-  ;; If this is a barray, do nothing
-  cmp r15, 0
-  jge .epilogue
-
-  not r15 ; Make parray length positive
-
-  ;; If this is an parray, recursively convert
-  add r12, 8 ; move past parray length
-
-  .convert_loop:
-    cmp r15, 0
-    je .convert_loop_break
-
-    add qword[r12], r14
-
-    mov rdi, qword[r12]
-    mov rsi, r13
-    call _relative_to_abs
-
-    add r12, 8
-    dec r15
-    jmp .convert_loop
-
-
-  .convert_loop_break:
-
-  .epilogue:
-  add rsp, 8
-  pop r15
-  pop r14
-  pop r13
-  pop r12
   ret
 
 ;;; _read(*buffered_fd_reader, *output_buffer) -> ptr

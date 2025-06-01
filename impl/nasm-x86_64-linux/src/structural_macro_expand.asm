@@ -11,7 +11,7 @@ extern byte_buffer_new
 extern byte_buffer_free
 extern byte_buffer_reset
 extern byte_buffer_push_int64
-extern _relative_to_abs
+extern rel_to_abs
 
 extern macro_stack_structural
 
@@ -32,17 +32,24 @@ section .rodata
 
 section .text
 
+;;; structural_macro_expand_relptr(*data, *output_byte_buffer, shy_greedy, abs_rel) -> ptr
+;;;
+;;; rel_abs: 0 = absolute pointers 1 = relative pointers.
+;;; Includes the return value - will be relative if 1.
 structural_macro_expand:
+  push rbp
+  mov rbp, rsp
   push r12
   push r13
   push r14
   push r15
   push rbx
+  sub rsp, 8
 
   mov r12, rdi  ; data
   mov r13, rsi  ; output byte buffer
   mov rbx, rdx
-
+  mov qword[rbp-48], rcx ; 0 for abs 1 for rel
 
   call byte_buffer_new
   mov r15, rax
@@ -57,32 +64,36 @@ structural_macro_expand:
   mov rax, 0
   .not_nothing:
 
-
   mov r14, rax ; expansion relative ptr
 
-  ; make r14 an absolute pointer
+  cmp qword[rbp-48], 1
+  je .rel
+
+  ;; Make r14 an absolute pointer
   mov rdi, r13
   call byte_buffer_get_buf
-  add rax, r14
+  add r14, rax
 
-  push rax
-  sub rsp, 8
-  mov rdi, rax
+  ;; Make all pointers absolute
+  mov rdi, r14
   mov rsi, r13
-  call _relative_to_abs
+  call rel_to_abs
+
+  .rel:
 
   mov rdi, r15
   call byte_buffer_free
 
-  add rsp, 8
-  pop rax
+  mov rax, r14
 
   .done:
+  add rsp, 8
   pop rbx
   pop r15
   pop r14
   pop r13
   pop r12
+  pop rbp
   ret
 
 ;;; structural_macro_expand_relptr(*data, *output_byte_buffer, shy_greedy, *pool_buffer) -> ptr
@@ -303,20 +314,24 @@ structural_macro_expand_relptr:
   ret
 
 
-;;; structural_macro_expand_tail(*parray, *output_byte_buffer)
+;;; structural_macro_expand_tail(*parray, *output_byte_buffer, abs_rel)
 ;;;   Macroexpands input parray excluding the first element of the parray.
 ;;;
 ;;;   Undefined behavior if input isn't a parray.
 structural_macro_expand_tail:
+  push rbp
+  mov rbp, rsp
   push r12
   push r13
   push r14
   push r15
   push rbx
+  sub rsp, 8
 
   mov r12, rdi ; data
   mov r13, rsi ; output byte buffer
   mov rbx, rdx ; cp_shy_greedy
+  mov qword[rbp-48], rcx
 
   ;; If our input is length 1, just return a zero-length parray
   mov rdi, qword[r12]
@@ -341,6 +356,7 @@ structural_macro_expand_tail:
   mov rdi, r14
   mov rsi, r13
   mov rdx, rbx
+  mov rcx, qword[rbp-48]
   call structural_macro_expand
   mov r15, rax ; r15 = macroexpanded tail
 
@@ -349,12 +365,14 @@ structural_macro_expand_tail:
   call free
 
   mov rax, r15
-  .epilogue
+  .epilogue:
+  add rsp, 8
   pop rbx
   pop r15
   pop r14
   pop r13
   pop r12
+  pop rbp
   ret
 
 dump_expand_count:

@@ -30,9 +30,6 @@ global error_exit
 global exit
 global read_char
 global write_char
-;global malloc
-;global realloc
-;global free
 extern malloc
 extern realloc
 extern free
@@ -47,9 +44,11 @@ global alpha10p
 global byte_in_barray_p
 global visible_char_p
 global compare_barrays
+global rel_to_abs
 
 extern byte_buffer_new
 extern byte_buffer_free
+extern byte_buffer_get_buf
 extern byte_buffer_push_byte
 extern byte_buffer_push_barray
 extern byte_buffer_write_contents
@@ -880,10 +879,70 @@ compare_barrays:
   add rsp, 8
   ret
 
+;;; rel_to_abs(*structure, *byte_buffer)
+;;;   Recursively modifies pointers in a structure that uses buffer-relative
+;;;   pointers to convert them to absolute.
+;;;
+;;;   The structure's data must be entirely contained within the byte buffer and use
+;;;   pointers relative to the start of that buffer for this to make any sense.
+rel_to_abs:
+  push r12
+  push r13
+  push r14
+  push r15
+  sub rsp, 8
+
+  cmp rdi, 0
+  je .epilogue
+
+  mov r12, rdi ; read result ptr
+  mov r13, rsi ; byte buffer
+
+  ;; Start of actual buffer -> r14
+  mov rdi, r13
+  call byte_buffer_get_buf
+  mov r14, rax
+
+  %ifdef ASSERT_STACK_ALIGNMENT
+  call assert_stack_aligned
+  %endif
+
+  mov r15, qword[r12] ; Length of parray/barray -> r15
+
+  ;; If this is a barray, do nothing
+  cmp r15, 0
+  jge .epilogue
+
+  not r15 ; Make parray length positive
+
+  ;; If this is a parray, recursively convert
+  add r12, 8 ; move past parray length
+
+  .convert_loop:
+    cmp r15, 0
+    je .convert_loop_break
+
+    add qword[r12], r14
+
+    mov rdi, qword[r12]
+    mov rsi, r13
+    call rel_to_abs
+
+    add r12, 8
+    dec r15
+    jmp .convert_loop
+  .convert_loop_break:
+
+  .epilogue:
+  add rsp, 8
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  ret
+
 ;; This is my spot for having nasm assemble random things for me lel
 tmpaoeu:
-
-      mov rdi, r12
-      mov rsi, rsi
+  mov rcx, 0
   ret
 

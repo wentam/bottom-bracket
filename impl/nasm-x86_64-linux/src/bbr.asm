@@ -247,6 +247,7 @@ _start:
   mov rdi, r12
   mov rsi, r14
   mov rdx, 2 ; greedy expand
+  mov rcx, 0
   call structural_macro_expand
   mov r15, rax
 

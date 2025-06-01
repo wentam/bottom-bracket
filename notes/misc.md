@@ -533,17 +533,15 @@ Interestingly, that means that even with this design there are certain situation
         * Would be cool if we could make it width-arbitrary lowering, and support 512-bit integers or whatever.
             * This makes sense because if the width is fixed - even when it's really wide - we can be more optimal than generalized bignums.
 * Instead of having noexpand-data, threadlocal-data, threadlocal-noexpand-data, we could have you say (data (noexpand threadlocal) name my-data). Could remain compatible with the (data name my-data) syntax because it's clear there's flags there if it's a parray.
-* name thinkin
-    * "derive"
-    * bicycle-related words 
-    * "AP" array processing
-    * "UP"
-        * bad googleabdility/SEO cuz common
-        * cuz btm-up abstraciton
-        * existing file extensions?
-    * "kek-lang"
-    * "bottom-up" BU
-    * "bup" for bottom-up
-    * bottom bracket
-        * bottom up abstraction
-        * brackets [][]()(){}{}
+* Note on recursive functions in bb/with
+    * bb-time functions/macros are expected to be position-independent. Calling yourself at an absolute address is not position-indepedent.
+    * If you want to recurse, you need to call a relative address. To call a relative address, use a label. Hence, to recurse, place a label at the top of your function and call that.
+    * We should not support recursion at the bb/with level
+        * This is really hard to do, and would need to be done with a trampoline to maintain position-independence in recursive cases.
+    * Inter-dependent recursive functions can exist in the same "data" entry calling eachother with labels. This maintains position independence.
+* Another argument for macros using absolute pointers:
+    * Macros who simply work internally using pure relative pointers and convert everything at the end to absolute with rel-to-abs are doing exactly the same work that we would need to do anyway: before the printer can print something, it needs to know where it is in memory, meaning at some point that pointer is getting converted to absolute either way.
+    * The pattern can be clearly documented - build using relative pointers, convert to absolute with rel-to-abs function, return
+    * We could probably rewrite some of our existing stuff to use this pattern more
+    * Maintains the full flexibility of absolute pointers such as being able to return data in 'with' directly without copying.
+    * If macros use absolute pointers, you have a choice: do I want to work in relative or absolute pointers? If macros use relative pointers, you're locked into relative pointers.

@@ -138,6 +138,8 @@
 ;; This also means the assembler needs to recognize "label-rel-ref" things as imm*
 ;; values when looking up instructions.
 
+;; TODO accessory functions we don't want to publicly expose can be hidden by including them
+;; in the public function that uses them and calling them with a label.
 
 ;; TODO: imm* macros should accept stuff like [imm 64 0xFF] along with base 10 version.
 ;; [imm 64 0cb] for chars? [imm 64 'b']?
@@ -1014,6 +1016,7 @@
      "\x4C\x89\xEF"                                                    ; mov rdi, r13
      "\x4C\x89\xFE"                                                    ; mov rsi, r15
      "\xBA\x02\x00\x00\x00"                                            ; mov rdx, 2 - greedy
+     "\xB9\x00\x00\x00\x00"                                            ; mov rcx, 0
      "\x48\xB8" [bb/builtin-func-addr/structural-macro-expand-tail] ; mov rax, expand_tail
      "\xFF\xD0"                                                        ; call rax
      "\x49\x89\xC5"                                                    ; mov r13, rax
@@ -1179,6 +1182,7 @@
      "\x4C\x89\xE7"                                                    ; mov rdi, r12
      "\x48\x8B\x75\xD0"                                                ; mov rsi, qword[rbp-48]
      "\xBA\x02\x00\x00\x00"                                            ; mov rdx, 2 - greedy
+     "\xB9\x00\x00\x00\x00"                                            ; mov rcx, 0
      "\x48\xB8" [bb/builtin-func-addr/structural-macro-expand-tail] ; mov rax, expand_tail
      "\xFF\xD0"                                                        ; call rax
 
@@ -1325,6 +1329,7 @@
      "\x4C\x89\xE7"                                                    ; mov rdi, r12
      "\x48\x8B\x75\xD0"                                                ; mov rsi, qword[rbp-48]
      "\xBA\x02\x00\x00\x00"                                            ; mov rdx, 2 - greedy
+     "\xB9\x00\x00\x00\x00"                                            ; mov rcx, 0
      "\x48\xB8" [bb/builtin-func-addr/structural-macro-expand-tail] ; mov rax, expand_tail
      "\xFF\xD0"                                                        ; call rax
      "\x49\x89\xC4"                                                    ; mov r12, rax
@@ -1602,6 +1607,7 @@
      "\x4C\x89\xE7"                                                    ; mov rdi, r12
      "\x4C\x89\xFE"                                                    ; mov rsi, r15
      "\xBA\x02\x00\x00\x00"                                            ; mov rdx, 2 - greedy
+     "\xB9\x00\x00\x00\x00"                                            ; mov rcx, 0
      "\x48\xB8" [bb/builtin-func-addr/structural-macro-expand-tail] ; mov rax, expand_tail
      "\xFF\xD0"                                                        ; call rax
      "\x49\x89\xC4"                                                    ; mov r12, rax
@@ -2304,6 +2310,7 @@
 
      ;; Macroexpand tail of our input - rdi and rsi already correct
      [REX W]"\xC7"[RM 0 rdx][imm 32 2]                                 ; mov rdx, 2
+     "\xB9\x00\x00\x00\x00"                                            ; mov rcx, 0
      "\x48\xB8" [bb/builtin-func-addr/structural-macro-expand-tail] ; mov rax, expand
      "\xFF"[RM 2 rax]                                                  ; call rax
      [REX W R]"\x8B"[RM r12 rax]                                       ; mov r12, rax
@@ -2350,6 +2357,7 @@
      [REX W B]"\x8B"[RM rdi [m64 r12 0 1 16]] ; mov rdi, qword[r12+16]
      [REX W B]"\x8B"[RM rsi r13] ; mov rsi, r13
      [REX W]"\xC7"[RM 0 rdx][imm 32 0] ; mov rdx, 0
+     "\xB9\x00\x00\x00\x00"                                            ; mov rcx, 0
      "\x48\xB8" [bb/builtin-func-addr/structural-macro-expand] ; mov rax, expand
      "\xFF"[RM 2 rax]                                                                     ; call rax
      ; return rax
@@ -2376,6 +2384,7 @@
 
      ;; Macroexpand tail of our input - rdi and rsi already correct
      [REX W]"\xC7"[RM 0 rdx][imm 32 2]                                 ; mov rdx, 2
+     "\xB9\x00\x00\x00\x00"                                            ; mov rcx, 0
      "\x48\xB8" [bb/builtin-func-addr/structural-macro-expand-tail] ; mov rax, expand
      "\xFF"[RM 2 rax]                                                  ; call rax
      [REX W R]"\x8B"[RM r12 rax]                                       ; mov r12, rax
@@ -2387,6 +2396,7 @@
      [REX W]"\x8B"[RM rdi [m64 rsi 0 1 16]] ; mov rdi, qword[rsi+16]
      [REX W B]"\x8B"[RM rsi r13] ; mov rsi, r13
      [REX W]"\xC7"[RM 0 rdx][imm 32 2]                                 ; mov rdx, 2
+     "\xB9\x00\x00\x00\x00"                                            ; mov rcx, 0
      "\x48\xB8" [bb/builtin-func-addr/structural-macro-expand]      ; mov rax, expand
      "\xFF"[RM 2 rax]                                                  ; call rax
 
@@ -2411,6 +2421,7 @@
 
      ;; Macroexpand tail of our input - rdi and rsi already correct
      [REX W]"\xC7"[RM 0 rdx][imm 32 2]                                 ; mov rdx, 2
+     "\xB9\x00\x00\x00\x00"                                            ; mov rcx, 0
      "\x48\xB8" [bb/builtin-func-addr/structural-macro-expand-tail] ; mov rax, expand
      "\xFF"[RM 2 rax]                                                  ; call rax
      [REX W R]"\x8B"[RM r12 rax]                                       ; mov r12, rax
@@ -2422,6 +2433,7 @@
      [REX W]"\x8B"[RM rdi [m64 rsi 0 1 24]] ; mov rdi, qword[rsi+24]
      [REX W B]"\x8B"[RM rsi r13] ; mov rsi, r13
      [REX W]"\xC7"[RM 0 rdx][imm 32 2]                                 ; mov rdx, 2
+     "\xB9\x00\x00\x00\x00"                                            ; mov rcx, 0
      "\x48\xB8" [bb/builtin-func-addr/structural-macro-expand]      ; mov rax, expand
      "\xFF"[RM 2 rax]                                                  ; call rax
 
@@ -2509,6 +2521,7 @@
     [REX W B]"\x8B"[RM rdi [m64 r13 0 1 0]] ; mov rdi, qword[r13]
     [REX W B]"\x8B"[RM rsi r14] ; mov rsi, r14
     [REX W]"\xC7"[RM 0 rdx][imm 32 2]                                         ; mov rdx, 2 - greedy expand
+     "\xB9\x00\x00\x00\x00"                                            ; mov rcx, 0
     [REX W][bb/bsumLE "\xB8" [bregnum rax]][bb/builtin-func-addr/structural-macro-expand-tail] ; mov rax, structural-macro-expand-tail
     "\xFF"[RM 2 rax]                                                               ; call rax
     [REX W R]"\x8B"[RM r13 rax] ; mov r13, rax - r13 = our new parray to push
@@ -2556,6 +2569,46 @@
 
   [data assemble-fn
    [bb/barray-cat
+    [REX B]"\x54"                                                                       ; push r12
+    [REX B]"\x55"                                                                       ; push r13
+    [REX B]"\x56"                                                                       ; push r14
+    [REX B]"\x57"                                                                       ; push r15
+    "\x53"                                                                              ; push rbx
+
+    [REX W B]"\x89"[RM rdi r12]                                                         ; mov r12, rdi - input - parray* of instructions and stuff
+    [REX W B]"\x89"[RM rsi r13]                                                         ; mov r13, rsi - output byte buffer*
+    [REX W B]"\x89"[RM rdx r14]                                                         ; mov r14, rdx - output parray*
+
+    [REX W R B]"\x8B"[RM r15 [m64 r12 0 1 0]]                                           ; mov r15, qword[r12]
+    [REX W B]"\xF7"[RM 2 r15]                                                           ; not r15
+
+    [REX W B]"\x83"[RM 0 r12][imm 8 8]                                                  ; add r12, 8 - move past length
+
+    [label element-loop]
+    [label-scope
+     [REX W B]"\x83"[RM 7 r15][imm 8 0]                                                 ; cmp r15, 0
+     "\x0F\x84"[label-rel-ref element-loop-break 4 LE]                                  ; je element-loop-break
+
+     [REX W B]"\x8B"[RM rdi [m64 r12 0 1 0]]                                            ; mov rdi, qword[r12]
+     [REX W B]"\x8B"[RM rsi r13]                                                        ; mov rsi, r13 - output buffer
+     [REX W B]"\x8B"[RM rdx r14]                                                        ; mov rdx, r14 - output parray
+     "\xE8"[label-rel-ref assemble-element-fn 4 LE]                                     ; call assemble-element-fn
+
+     [REX W B]"\x83"[RM 0 r12][imm 8 8]                                                 ; add r12, 8
+     [REX W B]"\xFF"[RM 1 r15]                                                          ; dec r15
+     "\xE9"[label-rel-ref element-loop 4 LE]]                                           ; jmp element-loop
+    [label element-loop-break]
+
+    "\x5B"                                                                              ; pop rbx
+    [REX B]"\x5F"                                                                       ; pop r15
+    [REX B]"\x5E"                                                                       ; pop r14
+    [REX B]"\x5D"                                                                       ; pop r13
+    [REX B]"\x5C"                                                                       ; pop r12
+    "\xC3"
+
+    ;; --------------
+
+    [label assemble-element-fn]
     [REX B]"\x54"                                                             ; push r12
     [REX B]"\x55"                                                             ; push r13
     [REX B]"\x56"                                                             ; push r14
@@ -2625,26 +2678,33 @@
     [label table-loop-break]
 
     [label not-instruction]
+    ;; TODO it's not an instruction name. If it's a label-scope, we need to recurse.
+    ;; TODO create new output parray, this time starting with 'label-scope'
+    ;; TODO recurse with same output buffer, new output parray, tail of label-scope as input
+    ;; TODO copy new output parray to output byte buffer
+
+
     [label-scope
-     ;; It's not an instruction name, just forward this parray to barray-cat
+     ;; It's not an instruction name or label-scope, just forward this parray to barray-cat
 
      ;; Recursive copy this input using macroexpand into our output buffer
      [REX W B]"\x8B"[RM rdi r12]                                               ; mov rdi, r12
      [REX W B]"\x8B"[RM rsi r13]                                               ; mov rsi, r13
      [REX W]"\xC7"[RM 0 rdx][imm 32 0]                                         ; mov rdx, 0
-     [REX W]"\xB8"[bb/builtin-func-addr/structural-macro-expand]            ; mov rax, structural-macro-expand
+     "\xB9\x00\x00\x00\x00"                                            ; mov rcx, 0
+     [REX W]"\xB8"[bb/builtin-func-addr/structural-macro-expand]               ; mov rax, structural-macro-expand
      "\xFF"[RM 2 rax]                                                          ; call rax
      [REX W]"\x8B"[RM rbx rax]                                                 ; mov rbx, rax
 
      ;; Write a buffer-relative pointer to the thing we should expanded to our parray
      [REX W B]"\x8B"[RM rdi r13]                                               ; mov rdi, r13
-     [REX W]"\xB8"[bb/builtin-func-addr/byte-buffer-get-buf]                ; mov rax, byte-buffer-get-buf
+     [REX W]"\xB8"[bb/builtin-func-addr/byte-buffer-get-buf]                   ; mov rax, byte-buffer-get-buf
      "\xFF"[RM 2 rax]                                                          ; call rax
      [REX W]"\x2B"[RM rbx rax]                                                 ; sub rbx, rax
 
      [REX W B]"\x8B"[RM rdi r14]                                               ; mov rdi, r14
      [REX W]"\x8B"[RM rsi rbx]                                                 ; mov rsi, rbx
-     [REX W]"\xB8"[bb/builtin-func-addr/byte-buffer-push-int64]             ; mov rax, byte-buffer-push-int64
+     [REX W]"\xB8"[bb/builtin-func-addr/byte-buffer-push-int64]                ; mov rax, byte-buffer-push-int64
      "\xFF"[RM 2 rax]                                                          ; call rax
 
      "\xE9"[label-rel-ref epilogue 4 LE]]                                      ; jmp epilogue
@@ -2712,35 +2772,17 @@
      "\x4C\x89\xE7"                                                                      ; mov rdi, r12
      "\x48\x89\xDE"                                                                      ; mov rsi, rbx
      "\xBA\x02\x00\x00\x00"                                                              ; mov rdx, 2 - greedy
+     "\xB9\x00\x00\x00\x00"                                            ; mov rcx, 0
      "\x48\xB8"[bb/builtin-func-addr/structural-macro-expand-tail]                    ; mov rax, expand_tail
      "\xFF\xD0"                                                                          ; call rax
      [REX W]"\x89"[RM rax [m64 rbp 0 1 -48]]                                             ; mov qword[rbp-48], rax
 
-     ;; Iterate over our tail, assembling stuff and producing a new barray-cat parray
-
-     [REX W]"\x8B"[RM rdi [m64 rax 0 1 0]]                                               ; mov rdi, qword[rax]
-     [REX W]"\x89"[RM rdi [m64 rbp 0 1 -56]]                                             ; mov qword[rbp-56], rdi
-     [REX W]"\xF7"[RM 2 [m64 rbp 0 1 -56]]                                               ; not qword[rbp-56]
-
-     [REX W]"\x83"[RM 0 [m64 rbp 0 1 -48]][imm 8 8]                                      ; add qword[rbp-48], 8 - move past length
-
-     [label element-loop]
-     [label-scope
-      [REX W]"\x83"[RM 7 [m64 rbp 0 1 -56]][imm 8 0]                                     ; cmp qword[rbp-56], 0
-      "\x0F\x84"[label-rel-ref element-loop-break 4 LE]                                  ; je element-loop-break
-
-      [REX W]"\x8B"[RM rsi [m64 rbp 0 1 -48]]                                            ; mov rsi, qword[rbp-48]
-
-      [REX W]"\x8B"[RM rdi [m64 rsi 0 1 0]]                                              ; mov rdi, qword[rsi]
-      [REX W B]"\x8B"[RM rsi r13]                                                        ; mov rsi, r13 - output buffer
-      [REX W B]"\x8B"[RM rdx r14]                                                        ; mov rdx, r14 - output parray
-      [REX W][bb/bsumLE "\xB8" [bregnum rax]][assemble-fn barray-raw-addr 8 LE]       ; mov rax, assemble-fn
-      "\xFF"[RM 2 rax]                                                                   ; call rax
-
-      [REX W]"\x83"[RM 0 [m64 rbp 0 1 -48]][imm 8 8]                                     ; add qword[rbp-48], 8
-      [REX W]"\xFF"[RM 1 [m64 rbp 0 1 -56]]                                              ; dec qword[rbp-56]
-      "\xE9"[label-rel-ref element-loop 4 LE]]                                           ; jmp element-loop
-     [label element-loop-break]
+     ;; Assemble our tail, producing a new barray-cat parray
+     [REX W]"\x8B"[RM rdi rax] ; mov rdi, rax
+     [REX W B]"\x8B"[RM rsi r13]                                                        ; mov rsi, r13 - output buffer
+     [REX W B]"\x8B"[RM rdx r14]                                                        ; mov rdx, r14 - output parray
+     [REX W][bb/bsumLE "\xB8" [bregnum rax]][assemble-fn barray-raw-addr 8 LE]          ; mov rax, assemble-fn
+     "\xFF"[RM 2 rax]                                                                   ; call rax
 
      ;; Update parray output buffer length [currently placeholder]
      [REX W R]"\x89"[RM r14 rdi]                                                         ; mov rdi, r14
