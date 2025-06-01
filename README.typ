@@ -30,11 +30,13 @@
   float: true,
   text()[
     #align(center)[
-      #v(1cm)
+      #v(1.25cm)
 
       #text(17pt)[ *[bottom-bracket]* ]
 
       _What if we didn't assume our abstractions; what if we derived them?_
+
+      #v(0.5cm)
     ]
 
     #v(1cm)
