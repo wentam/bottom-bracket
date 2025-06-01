@@ -59,7 +59,7 @@ extern write_as_base
 
 section .rodata
 
-parray_literal_macro_name: db 1,0,0,0,0,0,0,0,"("
+parray_literal_macro_name: db 1,0,0,0,0,0,0,0,"["
 byte_string_macro_name: db 1,0,0,0,0,0,0,0,'"'
 comment_literal_macro_name: db 1,0,0,0,0,0,0,0,";"
 
@@ -67,7 +67,7 @@ comment_literal_macro_name: db 1,0,0,0,0,0,0,0,";"
 ;; this may cause name conflicts
 barray_literal_macro_name: db 8,0,0,0,0,0,0,0,"catchall"
 
-unexpected_eof_parray_str: db "ERROR: Unexpected EOF while reading parray (are your parenthesis mismatched?)",10
+unexpected_eof_parray_str: db "ERROR: Unexpected EOF while reading parray (are your brackets mismatched?)",10
 unexpected_eof_parray_str_len: equ $ - unexpected_eof_parray_str
 
 unexpected_eof_bstring_str: db "ERROR: Unexpected EOF while reading byte string (are your double quotes mismatched?)",10
@@ -88,7 +88,7 @@ invalid_dec_str_len: equ $ - invalid_dec_str
 %define NEWLINE 10
 %define TAB 9
 
-barray_invalid_chars: db 6,0,0,0,0,0,0,0,'(',')',' ','"',NEWLINE,TAB
+barray_invalid_chars: db 6,0,0,0,0,0,0,0,'[',']',' ','"',NEWLINE,TAB
 
 section .text
 
@@ -457,7 +457,7 @@ byte_string:
 byte_string_end:
 
 ;;; parray_literal(*buffered_fd_reader, *output_byte_buffer) -> buf-relative-ptr
-;;;   Reader macro for parrays using '(' and ')'
+;;;   Reader macro for parrays using '[' and ']'
 parray_literal:
   push r12
   push r14
@@ -474,7 +474,7 @@ parray_literal:
   mov r12, rdi ; Preserve buffered reader
   mov r14, rsi ; Preserve output buffer
 
-  ;; Consume the leading '(' TODO assert that it is actually '('?
+  ;; Consume the leading '[' TODO assert that it is actually '['?
   mov rdi, r12
   mov rax, buffered_fd_reader_read_byte
   call rax
@@ -486,8 +486,8 @@ parray_literal:
   mov rax, buffered_fd_reader_consume_leading_whitespace
   call rax
 
-  ;; Peek the next char (consume whitespace also peeks). If it's ')' we're done.
-  cmp rax, ')'
+  ;; Peek the next char (consume whitespace also peeks). If it's ']' we're done.
+  cmp rax, ']'
   je .done
 
   ;; Error if it's EOF here
@@ -522,7 +522,7 @@ parray_literal:
 
   .done:
 
-  ;; Consume the trailing ')'
+  ;; Consume the trailing ']'
   mov rdi, r12
   mov rax, buffered_fd_reader_read_byte
   call rax
@@ -602,7 +602,7 @@ barray_literal:
   mov rax, buffered_fd_reader_consume_leading_whitespace
   call rax
 
-  cmp rax, ')'
+  cmp rax, ']'
   jne .no_closeparen
 
   mov rdi, unexpected_paren_str
@@ -631,8 +631,8 @@ barray_literal:
   ;; Read characters until the end of the barray
   mov rbx, 0 ;; char counter
   .char:
-  ;; Peek the next char - if it's '(', ')' or whitespace, we're done.
-  ;; We cannot consume because consuming '(' or ')' would be damaging.
+  ;; Peek the next char - if it's '[', ']' or whitespace, we're done.
+  ;; We cannot consume because consuming '[' or ']' would be damaging.
   mov rdi, r12 ; buffered reader
   mov rax, buffered_fd_reader_peek_byte
   call rax

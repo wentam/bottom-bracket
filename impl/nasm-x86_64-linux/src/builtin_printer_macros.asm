@@ -89,7 +89,7 @@ data:
   push r12
   push r13
   push r15
-  mov r12, rdi ; arrp expression data
+  mov r12, rdi ; expression data
   mov r13, rsi ; fd
 
   %ifdef ASSERT_STACK_ALIGNMENT
@@ -329,8 +329,8 @@ parray:
   not r15             ; Make length positive
   add r12, 8          ; Move past parray length in data
 
-  ;; Write leading '('
-  mov rdi, '('
+  ;; Write leading '['
+  mov rdi, '['
   mov rsi, r13
   mov rax, write_char
   call rax
@@ -361,8 +361,8 @@ parray:
 
   .print_child_break:
 
-  ;; Write trailing ')'
-  mov rdi, ')'
+  ;; Write trailing ']'
+  mov rdi, ']'
   mov rsi, r13
   mov rax, write_char
   call rax

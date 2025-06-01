@@ -1,6 +1,6 @@
-# Contributor License Agreement (CLA) for arrp
+# Contributor License Agreement (CLA) for bottom-bracket
 
-Thank you for your interest in contributing to the arrp project ("the Project"). In order to clarify the intellectual property license granted with Contributions, and to ensure the project's ethical licensing model is upheld, we require contributors to accept the following terms.
+Thank you for your interest in contributing to the bottom-bracket project ("the Project"). In order to clarify the intellectual property license granted with Contributions, and to ensure the project's ethical licensing model is upheld, we require contributors to accept the following terms.
 
 By submitting a Contribution (as defined below), you agree to the following:
 

@@ -8,7 +8,7 @@ Annoying, but necessary because:
 
 I'm not trying to exploit contributors, but trying to maintain the ability to uphold certain values
 and possibly fund what I view as a community project. As evidence to this, note that third-party
-implementations of arrp (under their own licensing) are explicitly permitted and encouraged in the
+implementations of bottom-bracket (under their own licensing) are explicitly permitted and encouraged in the
 license.
 
 See CLA.md.

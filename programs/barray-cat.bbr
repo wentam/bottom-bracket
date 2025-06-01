@@ -1,0 +1,47 @@
+[bb/barray-cat
+ "foo"
+ [label-abs-ref foo 8 LE]  ; can reference a label before the label as long as it's in-scope
+ [label-abs-ref foo 8 BE]  ; or big endian
+ [label-rel-ref foo 11 LE] ; or a weird size and relative
+ [label-abs-ref foo 3 BE]  ; or another weird size
+ "oof"
+
+ [label foo]
+ [label-scope
+  "foo"
+  [global-label global-inside-scope]
+  "eh"
+  "bar"
+  [label bar]
+  "aoeu"
+
+  [label-scope
+   "can"
+   "nest"
+   [label-rel-ref deep 8 LE]
+   "as"
+   [label deep]
+   "deeply as"
+   "needed"]
+
+  "baz"
+  [label-abs-ref foo 8 LE]
+  [label-abs-ref bar 8 LE]
+  [label-abs-ref baz 8 LE]
+  "boz"]
+ [label after]
+
+ [label-scope
+  "1"
+  [label another]
+  "2"]
+
+ "lorem"
+ [global-label baz]
+ "ipsum"
+ "doler"
+ [label-abs-ref global-inside-scope 8 LE]
+ [label-rel-ref foo 8 LE] ; replaced by relative address to foo
+ [label-abs-ref foo 8 LE] ; replaced by absolute address to foo
+ "ofo"
+ "bar"]

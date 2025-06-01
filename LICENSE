@@ -1,4 +1,4 @@
-arrp License v1.0
+bottom-bracket License v1.0
 Copyright (c) 2025 Matthew Egeler
 
 The "Original Author" referred to in this license is: Matthew Egeler.
@@ -37,9 +37,9 @@ copy, modify, and distribute the Software, subject to the following conditions:
    Original Author at licensing@wentam.net for inquiries regarding commercial
    use.
 
-3. The arrp language specification
+3. The bottom-bracket language specification
 
-   The arrp language specification is intended to be open and portable.
+   The bottom-bracke language specification is intended to be open and portable.
    Independent reimplementations of the language are allowed and encouraged
    to foster a healthy ecosystem, and may be licensed under different terms,
    provided they do not copy from this implementation.
@@ -49,10 +49,10 @@ copy, modify, and distribute the Software, subject to the following conditions:
 
 4. Use in other work
 
-   Authors of programs written in the arrp language may choose their own
+   Authors of programs written in the bottom-bracket language may choose their own
    license terms for their own code, including permissive or copyleft licenses
    such as MIT, GPL, or Apache. However, this freedom does not waive the
-   commercial or ethical restrictions on use of this arrp implementation or
+   commercial or ethical restrictions on use of this bottom-bracket implementation or
    associated tooling.
 
 5. Contributions

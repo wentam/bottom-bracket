@@ -32,7 +32,7 @@
     #align(center)[
       #v(1cm)
 
-      #text(17pt)[ *ARRP (ARRay Processing)* ]
+      #text(17pt)[ *[bottom-bracket]* ]
 
       _What if we didn't assume our abstractions; what if we derived them?_
 
@@ -43,7 +43,7 @@
 
     #text(14pt)[*Abstract*]
 
-    ARRP is a homoiconic language designed to express the compilation of anything
+    Bottom-bracket (BB) is a homoiconic language designed to express the compilation of anything
     to anything through bottom-up abstraction via macros written in anything.
 
     It's intended to serve as a minimal top-down to bottom-up abstraction turnaround point at as
@@ -51,7 +51,7 @@
 
     This is done with compilation of code to machine language in mind, but it's open-ended.
 
-    Using ARRP without any libraries, you start at machine language with macros. Programming
+    Using BB without any libraries, you start at machine language with macros. Programming
     languages are just macro libraries.
 
     #v(0.5cm)
@@ -70,7 +70,7 @@
       - Changes to parameters and interfaces of builtin functions
       - Changes to which builtin functions are exposed
 
-      This doesn't mean don't build stuff with arrp. This means use a pinned version of arrp for
+      This doesn't mean don't build stuff with BB. This means use a pinned version of BB for
       anything you need to stay working, and be ready for migration work.
     ])
 
@@ -124,14 +124,14 @@ and we just work to keep it to a minimum. The benefit of minimizing abstraction 
 though: the less each layer leaks, the higher we can stack abstractions without accumulating
 frustrating behaviors and performance issues.
 
-ARRP embraces the bottom-up philosophy. It is built for bottom-up abstraction (enabled by macros)
+Bottom-bracket embraces the bottom-up philosophy. It is built for bottom-up abstraction (enabled by macros)
 to minimize abstraction leakage. In contrast to most lisps, it does not start at a high-level of
 abstraction, but starts right at the machine-language level.
 
-// TODO talk about how ARRP also makes it so that you can always build towards the target problem
+// TODO talk about how BB also makes it so that you can always build towards the target problem
 // from any abstraction in a goo-like way.
 
-= ARRP's lifecycle: read -> expand macros -> print
+= Bottom-bracket's lifecycle: read -> expand macros -> print
 
 That's it! That's the whole thing!
 
@@ -139,7 +139,7 @@ That's it! That's the whole thing!
 
 == The _default_ syntax
 
-Emphasis on *default* because users of ARRP have control over this through reader and printer
+Emphasis on *default* because users of bottom-bracket have control over this through reader and printer
 macros.
 
 ```lisp
@@ -153,12 +153,12 @@ macros.
 
 === barray
 
-= ARRP is a minimal core
+= Bottom-bracket is a minimal core
 
-Implementations of ARRP itself are extremely minimal. The version written in x86_64 assembly
+Implementations of bottom-bracket itself are extremely minimal. The version written in x86_64 assembly
 currently sets around 5,000 lines total.
 
-Generally speaking, if it can be done inside the arrp language and not as a builtin, it should be.
+Generally speaking, if it can be done inside the BB language and not as a builtin, it should be.
 
 // TODO no special operators
 // TODO limited set of builtin macros that you can re-create yourself.
@@ -170,10 +170,10 @@ Generally speaking, if it can be done inside the arrp language and not as a buil
 
 = Structure of this repository
 
-- impl     - implementations of ARRP.
+- impl     - implementations of bottom-bracket.
 - docs     - rendered docs for github pages (not user-facing)
 - notes    - almost anything
-- programs - misc programs written in arrp
+- programs - misc programs written in BB
 
 // TODO reader and printer macros
 

@@ -1,6 +1,6 @@
 ;;; Bump allocator
 ;;;
-;;; The memory allocation patterns inside arrp align perfectly for the fastest
+;;; The memory allocation patterns inside bb align perfectly for the fastest
 ;;; type of allocator: a bump allocator. This is that.
 ;;;
 ;;; This attribute really helps mitigate the fact that recursive macroexpansion

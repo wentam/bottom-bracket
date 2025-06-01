@@ -1,0 +1,13 @@
+[[bb/with
+   [[macro aoeu [x86_64-linux "\xC3"]]
+    [macro my-nothing-macro
+     [x86_64-linux [bb/barray-cat
+                    "\x48\xB8\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF" ; mov rax, -1
+                    "\xC3"]]]                                  ; ret
+    [macro unsupported-macro [a [bb/barray-cat "\xFF" [my-nothing-macro]]]]
+    ;[unsupported-macr2o [a [bb/barray-cat "\xFF" [my-nothing-macro]]]]
+    ;[uunsupported-macr2o [a [bb/barray-cat "\xFF" [my-nothing-macro]]]]
+    ]
+   [a b [my-nothing-macro] [aunsupported-macro]]]
+
+   [my-nothing-macro] [unsupported-macro]]

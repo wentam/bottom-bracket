@@ -1,0 +1,11 @@
+[elf64-relocatable    ; https://refspecs.linuxbase.org/elf/gabi4+/contents.html
+  [machine amd64]     ; TODO make this do something
+  [endianness little] ; TODO make this do something
+  [sections
+    [[name    .text]
+     [type    PROGBITS]
+     [flags   ALLOC EXECINSTR]
+     [link    0]
+     [info    0]
+     [entsize 0]
+     [data    "\xBA\x0E\x00\x00\x00\x48\xBE\x00\x00\x00\x00\x00\x00\x00\x00\xBF\x00\x00\x00\x00\xB8\x01\x00\x00\x00\x0F\x05\xBF\x00\x00\x00\x00\xB8\x3C\x00\x00\x00\x0F\x05\x00\x00\x00\x00\x00\x00\x00\x00\x00"]]]]

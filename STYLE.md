@@ -1,4 +1,4 @@
-For code written in arrp in this repo:
+For code written in bottom-bracket in this repo:
 
 * Indent with 1 space (ASCII 0x20 only)
     * Plenty enough to make nesting visible.

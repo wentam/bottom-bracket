@@ -1,4 +1,4 @@
-;; TODO: all builtin macros should be prefixed with arrp/
+;; TODO: all builtin macros should be prefixed with bb/
 
 section .text
 global push_builtin_structural_macros
@@ -60,30 +60,30 @@ barray_test_macro_name: db 11,0,0,0,0,0,0,0,"barray-test"
 parray_test_macro_name: db 11,0,0,0,0,0,0,0,"parray-test"
 nothing_macro_name: db 7,0,0,0,0,0,0,0,"nothing"
 elf64_relocatable_macro_name: db 17,0,0,0,0,0,0,0,"elf64-relocatable"
-barray_cat_macro_name: db 15,0,0,0,0,0,0,0,"arrp/barray-cat"
-with_macro_name: db 9,0,0,0,0,0,0,0,"arrp/with"
-withm_macro_name: db 9,0,0,0,0,0,0,0,"arrp/with"
-builtin_print_macro_name: db 28,0,0,0,0,0,0,0,"arrp/builtin-func-addr/print"
-builtin_macro_stack_structural_macro_name: db 40,0,0,0,0,0,0,0,"arrp/builtin-addr/macro-stack-structural"
-builtin_kv_stack_push_macro_name: db 36,0,0,0,0,0,0,0,"arrp/builtin-func-addr/kv-stack-push"
-builtin_kv_stack_pop_macro_name: db 35,0,0,0,0,0,0,0,"arrp/builtin-func-addr/kv-stack-pop"
-builtin_kv_stack_pop_by_id_macro_name: db 41,0,0,0,0,0,0,0,"arrp/builtin-func-addr/kv-stack-pop-by-id"
-builtin_bb_push_int64_macro_name: db 45,0,0,0,0,0,0,0,"arrp/builtin-func-addr/byte-buffer-push-int64"
-builtin_bb_push_int32_macro_name: db 45,0,0,0,0,0,0,0,"arrp/builtin-func-addr/byte-buffer-push-int32"
-builtin_bb_push_int16_macro_name: db 45,0,0,0,0,0,0,0,"arrp/builtin-func-addr/byte-buffer-push-int16"
-builtin_bb_push_bb_macro_name: db 51,0,0,0,0,0,0,0,"arrp/builtin-func-addr/byte-buffer-push-byte-buffer"
-builtin_bb_push_int8_macro_name: db 44,0,0,0,0,0,0,0,"arrp/builtin-func-addr/byte-buffer-push-int8"
-builtin_bb_push_barray_macro_name: db 46,0,0,0,0,0,0,0,"arrp/builtin-func-addr/byte-buffer-push-barray"
-builtin_bb_data_len_macro_name: db 50,0,0,0,0,0,0,0,"arrp/builtin-func-addr/byte-buffer-get-data-length"
-builtin_bb_get_buf_macro_name: db 42,0,0,0,0,0,0,0,"arrp/builtin-func-addr/byte-buffer-get-buf"
-builtin_bb_get_write_ptr_macro_name: db 48,0,0,0,0,0,0,0,"arrp/builtin-func-addr/byte-buffer-get-write-ptr"
-builtin_bb_write_int64_macro_name: db 46,0,0,0,0,0,0,0,"arrp/builtin-func-addr/byte-buffer-write-int64"
-builtin_bb_new_macro_name: db 38,0,0,0,0,0,0,0,"arrp/builtin-func-addr/byte-buffer-new"
-builtin_bb_free_macro_name: db 39,0,0,0,0,0,0,0,"arrp/builtin-func-addr/byte-buffer-free"
-builtin_barray_equalp_macro_name: db 36,0,0,0,0,0,0,0,"arrp/builtin-func-addr/barray-equalp"
-bsumLE_macro_name: db 11,0,0,0,0,0,0,0,"arrp/bsumLE"
-builtin_sma_macro_name: db 46,0,0,0,0,0,0,0,"arrp/builtin-func-addr/structural-macro-expand"
-builtin_smat_macro_name: db 51,0,0,0,0,0,0,0,"arrp/builtin-func-addr/structural-macro-expand-tail"
+barray_cat_macro_name: db 13,0,0,0,0,0,0,0,"bb/barray-cat"
+with_macro_name: db 7,0,0,0,0,0,0,0,"bb/with"
+withm_macro_name: db 7,0,0,0,0,0,0,0,"bb/with"
+builtin_print_macro_name: db 26,0,0,0,0,0,0,0,"bb/builtin-func-addr/print"
+builtin_macro_stack_structural_macro_name: db 38,0,0,0,0,0,0,0,"bb/builtin-addr/macro-stack-structural"
+builtin_kv_stack_push_macro_name: db 34,0,0,0,0,0,0,0,"bb/builtin-func-addr/kv-stack-push"
+builtin_kv_stack_pop_macro_name: db 33,0,0,0,0,0,0,0,"bb/builtin-func-addr/kv-stack-pop"
+builtin_kv_stack_pop_by_id_macro_name: db 39,0,0,0,0,0,0,0,"bb/builtin-func-addr/kv-stack-pop-by-id"
+builtin_bb_push_int64_macro_name: db 43,0,0,0,0,0,0,0,"bb/builtin-func-addr/byte-buffer-push-int64"
+builtin_bb_push_int32_macro_name: db 43,0,0,0,0,0,0,0,"bb/builtin-func-addr/byte-buffer-push-int32"
+builtin_bb_push_int16_macro_name: db 43,0,0,0,0,0,0,0,"bb/builtin-func-addr/byte-buffer-push-int16"
+builtin_bb_push_bb_macro_name: db 49,0,0,0,0,0,0,0,"bb/builtin-func-addr/byte-buffer-push-byte-buffer"
+builtin_bb_push_int8_macro_name: db 42,0,0,0,0,0,0,0,"bb/builtin-func-addr/byte-buffer-push-int8"
+builtin_bb_push_barray_macro_name: db 44,0,0,0,0,0,0,0,"bb/builtin-func-addr/byte-buffer-push-barray"
+builtin_bb_data_len_macro_name: db 48,0,0,0,0,0,0,0,"bb/builtin-func-addr/byte-buffer-get-data-length"
+builtin_bb_get_buf_macro_name: db 40,0,0,0,0,0,0,0,"bb/builtin-func-addr/byte-buffer-get-buf"
+builtin_bb_get_write_ptr_macro_name: db 46,0,0,0,0,0,0,0,"bb/builtin-func-addr/byte-buffer-get-write-ptr"
+builtin_bb_write_int64_macro_name: db 44,0,0,0,0,0,0,0,"bb/builtin-func-addr/byte-buffer-write-int64"
+builtin_bb_new_macro_name: db 36,0,0,0,0,0,0,0,"bb/builtin-func-addr/byte-buffer-new"
+builtin_bb_free_macro_name: db 37,0,0,0,0,0,0,0,"bb/builtin-func-addr/byte-buffer-free"
+builtin_barray_equalp_macro_name: db 34,0,0,0,0,0,0,0,"bb/builtin-func-addr/barray-equalp"
+bsumLE_macro_name: db 9,0,0,0,0,0,0,0,"bb/bsumLE"
+builtin_sma_macro_name: db 44,0,0,0,0,0,0,0,"bb/builtin-func-addr/structural-macro-expand"
+builtin_smat_macro_name: db 49,0,0,0,0,0,0,0,"bb/builtin-func-addr/structural-macro-expand-tail"
 
 barray_literal_macro_name: db 17,0,0,0,0,0,0,0,"test_macro_barray"
 barray_test_expansion: db 17,0,0,0,0,0,0,0,"test_macro_barray"
@@ -100,7 +100,7 @@ sections_str: db 8,0,0,0,0,0,0,0,"sections"
 barray_error: db "ERROR: Got barray in section, expecting parrays only",10
 barray_error_len:  equ $ - barray_error
 
-cat_parray_error: db "ERROR: Got parray in arrp/barray-cat, expecting barrays only",10
+cat_parray_error: db "ERROR: Got parray in bb/barray-cat, expecting barrays only",10
 cat_parray_error_len:  equ $ - cat_parray_error
 
 ;;; Stuff for barray-cat macro:
@@ -112,34 +112,34 @@ barray_cat_global_label_name: db 12,0,0,0,0,0,0,0,"global-label"
 barray_cat_be_name: db 2,0,0,0,0,0,0,0,"BE"
 
 
-barray_cat_element_error: db "ERROR: Invalid element in arrp/barray-cat. Must be one of: raw barray, label, global-label, label-scope, label-abs-ref, label-rel-ref",10
+barray_cat_element_error: db "ERROR: Invalid element in bb/barray-cat. Must be one of: raw barray, label, global-label, label-scope, label-abs-ref, label-rel-ref",10
 barray_cat_element_error_len:  equ $ - barray_cat_element_error
 
-barray_cat_no_label_error: db "ERROR: Unable to find referenced label in arrp/barray-cat",10
+barray_cat_no_label_error: db "ERROR: Unable to find referenced label in bb/barray-cat",10
 barray_cat_no_label_error_len:  equ $ - barray_cat_no_label_error
 
 ;;; Stuff for with macro:
 ;;; TODO cleanup unused stuff, include stuff for with-macros
-with_definitions_not_list_error: db "ERROR: Definitions list in arrp/with is not a parray. Should be a parray. Try (arrp/with ((my-thing foo) (my-other-thing foo)) my-shit)",10
+with_definitions_not_list_error: db "ERROR: Definitions list in bb/with is not a parray. Should be a parray. Try (bb/with ((my-thing foo) (my-other-thing foo)) my-shit)",10
 with_definitions_not_list_error_len:  equ $ - with_definitions_not_list_error
 
-with_definition_not_2_error: db "ERROR: A definition in arrp/with isn't a parray of length 2. It must be.",10
+with_definition_not_2_error: db "ERROR: A definition in bb/with isn't a parray of length 2. It must be.",10
 with_definition_not_2_error_len:  equ $ - with_definition_not_2_error
 
-with_definition_not_3_error: db "ERROR: A definition in arrp/with isn't a parray of length 3. It must be. Try: (macro|data|noexpand-data my-name data|code).",10
+with_definition_not_3_error: db "ERROR: A definition in bb/with isn't a parray of length 3. It must be. Try: (macro|data|noexpand-data my-name data|code).",10
 with_definition_not_3_error_len:  equ $ - with_definition_not_3_error
 
-with_definition_bad_type_error: db "ERROR: Bad type in definition in arrp/with. Try 'macro' or 'data'.",10
+with_definition_bad_type_error: db "ERROR: Bad type in definition in bb/with. Try 'macro' or 'data'.",10
 with_definition_bad_type_error_len:  equ $ - with_definition_bad_type_error
 
-with_definition_not_barray_error: db "ERROR: A definition in arrp/with doesn't start with a barray (as the name). It must.",10
+with_definition_not_barray_error: db "ERROR: A definition in bb/with doesn't start with a barray (as the name). It must.",10
 with_definition_not_barray_error_len:  equ $ - with_definition_not_barray_error
 
 
 with_rawref_not_barray_error: db "ERROR: Accessor using barray-raw-addr references value that's not a barray. barray-raw-addr only works with barray values.",10
 with_rawref_not_barray_error_len:  equ $ - with_rawref_not_barray_error
 
-with_access_bad_form_error: db "ERROR: Accessor macro call (from arrp/with) has invalid form.",10
+with_access_bad_form_error: db "ERROR: Accessor macro call (from bb/with) has invalid form.",10
 with_access_bad_form_error_len:  equ $ - with_access_bad_form_error
 
 with_be_name: db 2,0,0,0,0,0,0,0,"BE"
@@ -151,28 +151,28 @@ _with_macro_name: db 5,0,0,0,0,0,0,0,"macro"
 
 ;;; Stuff for with-macros macro:
 
-with_macros_need_parray_error: db "ERROR: Got barray for the macro list in arrp/with-macros. Must be parray of macro specifiers.",10
+with_macros_need_parray_error: db "ERROR: Got barray for the macro list in bb/with-macros. Must be parray of macro specifiers.",10
 with_macros_need_parray_error_len:  equ $ - with_macros_need_parray_error
 
-with_macros_need_parray_2_error: db "ERROR: Got barray for a macro specifier in arrp/with-macros. Must be parray like (my-macro (my-platform machine-code)).",10
+with_macros_need_parray_2_error: db "ERROR: Got barray for a macro specifier in bb/with-macros. Must be parray like (my-macro (my-platform machine-code)).",10
 with_macros_need_parray_2_error_len:  equ $ - with_macros_need_parray_2_error
 
-with_macros_name_not_barray_error: db "ERROR: Got parray instead of barray for macro name in arrp/with. Should be barray.",10
+with_macros_name_not_barray_error: db "ERROR: Got parray instead of barray for macro name in bb/with. Should be barray.",10
 with_macros_name_not_barray_error_len:  equ $ - with_macros_name_not_barray_error
 
-with_macros_spec_too_short_error: db "ERROR: Macro spec too short for a macro in arrp/with. Should have at least 3 elements: (macro macro-name (platform-1 machine-code-1))",10
+with_macros_spec_too_short_error: db "ERROR: Macro spec too short for a macro in bb/with. Should have at least 3 elements: (macro macro-name (platform-1 machine-code-1))",10
 with_macros_spec_too_short_error_len:  equ $ - with_macros_spec_too_short_error
 
-with_macros_impl_spec_not_parray_error: db "ERROR: Got barray for implementation specifier in arrp/with-macros. Should be parray like (my-platform machine-code).",10
+with_macros_impl_spec_not_parray_error: db "ERROR: Got barray for implementation specifier in bb/with-macros. Should be parray like (my-platform machine-code).",10
 with_macros_impl_spec_not_parray_error_len:  equ $ - with_macros_impl_spec_not_parray_error
 
-with_macros_impl_spec_wrong_len_error: db "ERROR: Implementation specifier wrong length in arrp/with-macros. Should be two barray elements like (platform machine-code).",10
+with_macros_impl_spec_wrong_len_error: db "ERROR: Implementation specifier wrong length in bb/with-macros. Should be two barray elements like (platform machine-code).",10
 with_macros_impl_spec_wrong_len_error_len:  equ $ - with_macros_impl_spec_wrong_len_error
 
-with_macros_impl_spec_platform_not_barray_error: db "ERROR: First element of implementation specifier in arrp/with-macros is not a barray. Should be a barray of the platform name like x86_64-linux."
+with_macros_impl_spec_platform_not_barray_error: db "ERROR: First element of implementation specifier in bb/with-macros is not a barray. Should be a barray of the platform name like x86_64-linux."
 with_macros_impl_spec_platform_not_barray_error_len:  equ $ - with_macros_impl_spec_platform_not_barray_error
 
-with_macros_impl_spec_machine_code_not_barray_error: db "ERROR: Third element of macro definition in arrp/with is not a barray. Should be a barray of machine code for the given platform.",10
+with_macros_impl_spec_machine_code_not_barray_error: db "ERROR: Third element of macro definition in bb/with is not a barray. Should be a barray of machine code for the given platform.",10
 with_macros_impl_spec_machine_code_not_barray_error_len:  equ $ - with_macros_impl_spec_machine_code_not_barray_error
 
 with_macros_unsupported_platform_error: db "ERROR: Attempt to expand a macro that doesn't have an implementation for a platform we support. Supported platforms: x86_64-linux."
@@ -1040,8 +1040,8 @@ _elf64_relocatable_pad_to_nearest:
 ;;; TODO should this just be elf_relocatable and not be written to be
 ;;; 64-bit specific?
 ;;; TODO should this just be 'elf' and not relocatable specific?
-;;; TODO should this be a builtin macro? might be fine to just be implemented in arrp as a lib
-;;; TODO: macroexpand all children like arrp/barray-cat does
+;;; TODO should this be a builtin macro? might be fine to just be implemented in bb as a lib
+;;; TODO: macroexpand all children like bb/barray-cat does
 elf64_relocatable:
   push rbp
   push r12
@@ -1177,7 +1177,7 @@ elf64_relocatable:
   ret
 
 
-;;; arrp/barray-cat
+;;; bb/barray-cat
 
 ;;; _barray_cat_push_layer(parray*, label_stack*, output_byte_buffer*)
 ;;;   * pushes all labels in this layer

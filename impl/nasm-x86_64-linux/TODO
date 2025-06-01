@@ -1,3 +1,4 @@
+* Support other brackets ()[]{}<>
 * Macroexpansion rework:
   * Each macro just returns an absolute pointer to it's output
   * The byte buffer passed to each macro is just an optional
@@ -18,12 +19,12 @@
 * implement unified 'with' macro
   * data, functions, macros
   * needed because of memory lifecycle
-  * needed so we can (arrp/with (include "foo.arrp") my-stuff) and get code data etc
+  * needed so we can (bb/with (include "foo.bbr") my-stuff) and get code data etc
   * only allocate functions as 'executable' memory.
 * make an implicit barray-cat for defining macro with with-macros?
 * now that builtin macros are called directly, not on the heap, we should be able to call directly everywhere instead of mov rax, foo; call foo
 * implement x86_64 assembler (not as a builtin, and in machine code)
-* implement arrp/include (as a builtin probably)
+* implement bb/include (as a builtin probably)
   * probably use buffered_fd_reader
 * implement elf64-relocatable (or maybe just elf-relocatable?)
   * Remove the incomplete builtin one
@@ -39,7 +40,7 @@
 * parray-cat
 * implement macroexpand-1 in structural_macro_expand
 * build macroexpand "walker" macro that allows you to tap spacebar to macroexpand-1 repeatedly.
-   * problem: if I macroexpand-1 a 'with' macro, he greedy macroexpands his children so you can't really watch it go very well. I really want to try to come up with a way to do this nicely. Maybe simply allow you to put arrp into a mode where structural_macro_expand always stops prints and waits for spacebar after each expansion. This could be exposed via a (with-macroexpand-walker my-stuff) macro that enters and exits this mode around my-stuff.
+   * problem: if I macroexpand-1 a 'with' macro, he greedy macroexpands his children so you can't really watch it go very well. I really want to try to come up with a way to do this nicely. Maybe simply allow you to put bb into a mode where structural_macro_expand always stops prints and waits for spacebar after each expansion. This could be exposed via a (with-macroexpand-walker my-stuff) macro that enters and exits this mode around my-stuff.
 * with-namespace
   * (with-namespace x86_64-asm (mov rdi 5) (something-else)) will apply the prefix x86_64-asm to every macro it can where there is a macro defined for that prefix. Meaning it doesn't such something-else, but does touch mov
   * It would only effect locally-visible forms AKA implemented recursively BEFORE macroexpansion
@@ -50,12 +51,12 @@
   * builtin because it's needed to make the language practical
 * namespace all the assembler macros
 * builtin function address macro changes:
-  * remove "builtin-" prefix - just (arrp/func-addr/foo)
+  * remove "builtin-" prefix - just (bb/func-addr/foo)
   * require the user specifies the platform they want the
-  function address for like (arrp/func-addr/foo x86_64-linux)
+  function address for like (bb/func-addr/foo x86_64-linux)
   * See if there's a good way to simplify defining these macros
-  inside arrp. Maybe use a template macro.
-* We probably want the allocator to use thread-local storage to make it thread-safe in case the user spawns threads (even though arrp itself is single-threaded right now).
+  inside bb. Maybe use a template macro.
+* We probably want the allocator to use thread-local storage to make it thread-safe in case the user spawns threads (even though bb itself is single-threaded right now).
 * line numbers in errors
 * buffered writer or mmap writer to minimize those syscalls
 * Expose all builtin functions that the builtin macros use

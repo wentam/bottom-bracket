@@ -62,7 +62,7 @@ the tree.
 * macros can output arrays of not just text, but arbitrary binary
 * built-in macros implement the language and ultimately expand to a
   single array of bytes to be outputted to the file/stdout/whatever
-* the above means that compiling an arrp program doesn't need to actually
+* the above means that compiling a BB program doesn't need to actually
   produce a compiled program, but any output you please
   (text file?).
 * We may need a syntax that will cause the reader to error out - like lisp's
@@ -140,8 +140,6 @@ design.
 * byte strings syntax
 * the reader and printer should be defined entirely through reader and printer
   macros - such that the user can replace the behavior entirely should they choose.
-* remove the first 'a' from arrp? the only way arrp is assembly-aware is in
-  the 'asm' macro.
 
 TODO: we've been assuming the array deliminators are '(' and ')'. Could we
 instead allow the user to choose what chars they want at compile time?

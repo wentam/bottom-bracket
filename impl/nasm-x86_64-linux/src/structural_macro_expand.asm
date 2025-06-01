@@ -95,11 +95,11 @@ structural_macro_expand:
 ;;;   TODO make it so if it's 3, we do macroexpand-1
 ;;;     * or maybe 1, since that's a more logical number choice. Would require redoing
 ;;;       all our calls tho. Depends on if we do this before or after other people
-;;;       start using arrp
+;;;       start using bb
 ;;;
 ;;;   If you're not sure, you probably want a greedy expand.
 ;;;
-;;;   To understarnd why 'shy' expansions are needed, look at how arrp/with-macros manages
+;;;   To understarnd why 'shy' expansions are needed, look at how bb/with-macros manages
 ;;;   to behave like let* where each macro definition can use the last.
 ;;;
 ;;;   Uses buffer-relative pointers, thus not yet a valid AARRP structure.
