@@ -35,8 +35,6 @@
       #text(17pt)[ *[bottom-bracket]* ]
 
       _What if we didn't assume our abstractions; what if we derived them?_
-
-      #text(10pt)[Matthew Egeler]
     ]
 
     #v(1cm)
