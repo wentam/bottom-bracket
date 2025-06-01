@@ -172,6 +172,7 @@
   [data zero 0]
 
   [data barray-cat-macro-name "bb/barray-cat"]
+  [data label-scope-name "label-scope"]
 
   [data valid-registers [rax eax   ax    al
                          rcx ecx   cx    cl
@@ -2566,8 +2567,126 @@
     "\x5D"                                                                              ; pop rbp
     "\xC3"]]
 
-  [data assemble-fn
+  ;; TODO separate functions with label scopes
+  [data asm-rel-fn
    [bb/barray-cat
+    ;; ------------------
+    ;; Top-level asm function, returns buffer-relative pointer to output parray (starting with barray-cat or label-scope)
+    [label asm-rel-fn]
+    "\x55"                                                                              ; push rbp
+    "\x48\x89\xE5"                                                                      ; mov rbp, rsp
+    [REX B]"\x54"                                                                       ; push r12
+    [REX B]"\x55"                                                                       ; push r13
+    [REX B]"\x56"                                                                       ; push r14
+    [REX B]"\x57"                                                                       ; push r15
+    "\x53"                                                                              ; push rbx
+    "\x48\x83\xEC\x18"                                                                  ; sub rsp, 24
+
+    ;; Save our inputs into callee-preserve registers
+    [REX W B]"\x89"[RM rdi r12]                                                         ; mov r12, rdi - input structure*
+    [REX W B]"\x89"[RM rsi r13]                                                         ; mov r13, rsi - output byte buffer*
+    [REX W R]"\x8B"[RM r15 rdx]                                                         ; mov r15, rdx - say barray-cat (0) or label-scope (1)
+
+    ;; Start a new byte buffer for our parray output
+    [REX W][bb/bsumLE "\xB8" [bregnum rax]][bb/builtin-func-addr/byte-buffer-new] ; mov rax, bb_new
+    "\xFF"[RM 2 rax]                                                                    ; call rax
+    [REX W B]"\x89"[RM rax r14]                                                         ; mov r14, rax
+
+    ;; Write a placeholder parray length to our parray output byte buffer
+    [REX W R]"\x89"[RM r14 rdi]                                                         ; mov rdi, r14
+    [REX W]"\xC7"[RM 0 rsi][imm 32 -1]                                                  ; mov rsi, -1
+    [REX W]"\xB8"[bb/builtin-func-addr/byte-buffer-push-int64]                       ; mov rax, bb_push_int64
+    "\xFF"[RM 2 rax]                                                                    ; call rax
+
+    ;; Write a pointer to "bb/barray-cat" or "label-scope" as the first element
+    ;; of our parray output. We need to copy it into our output buffer because we're
+    ;; working with relative pointers in this macro.
+    [REX W][bb/bsumLE "\xB8" [bregnum rdi]][label-scope-name addr 8 LE] ; mov rdi, label-scope-name
+    [REX W][bb/bsumLE "\xB8" [bregnum rsi]][barray-cat-macro-name addr 8 LE] ; mov rsi, barray-cat-macro-name
+    [REX W B]"\x83"[RM 7 r15][imm 8 0]; cmp r15, 0
+    [REX W]"\x0F\x44"[RM rdi rsi]
+
+    [REX W B]"\x8B"[RM rsi r13] ; mov rsi, r13
+    [REX W]"\xC7"[RM 0 rdx][imm 32 0] ; mov rdx, 0
+    [REX W]"\xC7"[RM 0 rcx][imm 32 1] ; mov rcx, 1
+    [REX W]"\xB8"[bb/builtin-func-addr/structural-macro-expand]               ; mov rax, structural-macro-expand
+    "\xFF"[RM 2 rax]                                                          ; call rax
+
+    [REX W R]"\x89"[RM r14 rdi]                                                         ; mov rdi, r14
+    [REX W]"\x8B"[RM rsi rax]                                                           ; mov rsi, rax
+    [REX W]"\xB8"[bb/builtin-func-addr/byte-buffer-push-int64]                          ; mov rax, bb_push_int64
+    "\xFF"[RM 2 rax]                                                                    ; call rax
+
+    ;; Create input tail macroexpand byte buffer
+    [REX W][bb/bsumLE "\xB8" [bregnum rax]][bb/builtin-func-addr/byte-buffer-new] ; mov rax, bb_new
+    "\xFF"[RM 2 rax]                                                                    ; call rax
+    [REX W]"\x89"[RM rax rbx]                                                           ; mov rbx, rax
+
+    ;; Macroexpand tail of our input into input tail buffer
+    "\x4C\x89\xE7"                                                                      ; mov rdi, r12
+    "\x48\x89\xDE"                                                                      ; mov rsi, rbx
+    "\xBA\x02\x00\x00\x00"                                                              ; mov rdx, 2 - greedy
+    "\xB9\x00\x00\x00\x00"                                            ; mov rcx, 0
+    "\x48\xB8"[bb/builtin-func-addr/structural-macro-expand-tail]                    ; mov rax, expand_tail
+    "\xFF\xD0"                                                                          ; call rax
+    [REX W]"\x89"[RM rax [m64 rbp 0 1 -48]]                                             ; mov qword[rbp-48], rax
+
+    ;; Assemble our tail, producing a new barray-cat parray
+    [REX W]"\x8B"[RM rdi rax] ; mov rdi, rax
+    [REX W B]"\x8B"[RM rsi r13]                                                        ; mov rsi, r13 - output buffer
+    [REX W B]"\x8B"[RM rdx r14]                                                        ; mov rdx, r14 - output parray
+    "\xE8"[label-rel-ref assemble-fn 4 LE]          ; call assemble-fn
+
+    ;; Update parray output buffer length [currently placeholder]
+    [REX W R]"\x89"[RM r14 rdi]                                                         ; mov rdi, r14
+    [REX W]"\xB8"[bb/builtin-func-addr/byte-buffer-get-data-length]                  ; mov rax, bb-data-len
+    "\xFF"[RM 2 rax]                                                                    ; call rax
+    [REX W]"\x83"[RM 5 rax][imm 8 8]                                                    ; sub rax, 8 - don't include length itself
+    [REX W]"\xC1"[RM 5 rax][imm 8 3]                                                    ; shr rax, 3 - /8
+    [REX W]"\xF7"[RM 2 rax]                                                             ; not rax
+
+    [REX W R]"\x89"[RM r14 rdi]                                                         ; mov rdi, r14
+    [REX W]"\xC7"[RM 0 rsi][imm 32 0]                                                   ; mov rsi, 0
+    [REX W]"\x89"[RM rax rdx]                                                           ; mov rdx, rax
+    [REX W]"\xB8"[bb/builtin-func-addr/byte-buffer-write-int64]                      ; mov rax, bb-write-int64
+    "\xFF"[RM 2 rax]                                                                    ; call rax
+
+    ;; Grab our current data len in output buffer to use as our return relpointer
+    [REX W R]"\x89"[RM r13 rdi]                                                         ; mov rdi, r13
+    [REX W]"\xB8"[bb/builtin-func-addr/byte-buffer-get-data-length]                  ; mov rax, bb-get-data-len
+    "\xFF"[RM 2 rax]                                                                    ; call rax
+    [REX W B]"\x89"[RM rax r15]                                                         ; mov r15, rax
+
+    ;; Output our parray output byte buffer to our output byte buffer
+    [REX W R]"\x89"[RM r13 rdi]                                                         ; mov rdi, r13
+    [REX W R]"\x89"[RM r14 rsi]                                                         ; mov rsi, r14
+    [REX W]"\xB8"[bb/builtin-func-addr/byte-buffer-push-byte-buffer]                 ; mov rax, bb-push-bb
+    "\xFF"[RM 2 rax]                                                                    ; call rax
+
+    ;; Free our parray output byte buffer
+    [REX W R]"\x89"[RM r14 rdi] ; mov rdi, r14
+    [REX W]"\xB8"[bb/builtin-func-addr/byte-buffer-free]                             ; mov rax, bb-free
+    "\xFF"[RM 2 rax]                                                                    ; call rax
+
+    ;; Free our tail macroexpand buffer
+    [REX W]"\x89"[RM rbx rdi]                                                           ; mov rdi, rbx
+    [REX W]"\xB8"[bb/builtin-func-addr/byte-buffer-free]                             ; mov rax, bb-free
+    "\xFF"[RM 2 rax] ; call rax
+
+    [REX W B]"\x8B"[RM rax r15]; mov rax, r15
+
+    "\x48\x83\xC4\x18"                                                                  ; add rsp, 24
+    "\x5B"                                                                              ; pop rbx
+    [REX B]"\x5F"                                                                       ; pop r15
+    [REX B]"\x5E"                                                                       ; pop r14
+    [REX B]"\x5D"                                                                       ; pop r13
+    [REX B]"\x5C"                                                                       ; pop r12
+    "\x5D"                                                                              ; pop rbp
+    "\xC3"
+
+    ;; ----------------------
+
+    [label assemble-fn]
     [REX B]"\x54"                                                                       ; push r12
     [REX B]"\x55"                                                                       ; push r13
     [REX B]"\x56"                                                                       ; push r14
@@ -2677,11 +2796,27 @@
     [label table-loop-break]
 
     [label not-instruction]
-    ;; TODO it's not an instruction name. If it's a label-scope, we need to recurse.
-    ;; TODO create new output parray, this time starting with 'label-scope'
-    ;; TODO recurse with same output buffer, new output parray, tail of label-scope as input
-    ;; TODO copy new output parray to output byte buffer
+    ;; It's not an instruction name. If it's a label-scope, we need to recurse.
+    [REX W B]"\x8B"[RM rdi [m64 r12 0 1 8]] ; mov rdi, qword[r12+8]
+    [REX W][bb/bsumLE "\xB8" [bregnum rsi]][label-scope-name addr 8 LE]    ; mov rsi, label-scope-name
+    [REX W]"\xB8"[bb/builtin-func-addr/barray-equalp]                     ; mov rax, barray-equalp
+    "\xFF"[RM 2 rax]                                                         ; call rax
+    [REX W]"\x83"[RM 7 rax][imm 8 1]                                         ; cmp rax, 1
+    "\x0F\x85"[label-rel-ref not-scope 4 LE]                                                  ; jne not-scope
 
+    ;; Recurse w/ relative version with same output buffer, tail of label-scope as input
+    [REX W B]"\x8B"[RM rdi r12] ; mov rdi, r12
+    [REX W B]"\x8B"[RM rsi r13] ; mov rsi, r13
+    [REX W]"\xC7"[RM 0 rdx][imm 32 1] ; mov rdx, 1 - we want label scope
+    "\xE8"[label-rel-ref asm-rel-fn 4 LE] ; call asm-rel-fn
+
+    ;; Copy new output parray to output byte buffer
+    [REX W B]"\x8B"[RM rdi r14]                                               ; mov rdi, r14
+    [REX W]"\x8B"[RM rsi rax]                                                 ; mov rsi, rax
+    [REX W]"\xB8"[bb/builtin-func-addr/byte-buffer-push-int64]                ; mov rax, byte-buffer-push-int64
+    "\xFF"[RM 2 rax]                                                          ; call rax
+    "\xE9"[label-rel-ref epilogue 4 LE]                                      ; jmp epilogue
+    [label not-scope]
 
     [label-scope
      ;; It's not an instruction name or label-scope, just forward this parray to barray-cat
@@ -2721,7 +2856,9 @@
     [REX B]"\x5E"                                                                       ; pop r14
     [REX B]"\x5D"                                                                       ; pop r13
     [REX B]"\x5C"                                                                       ; pop r12
-    "\xC3"]]
+    "\xC3"
+
+    ]]
 
   [macro asm/x86_64
    [x86_64-linux
@@ -2735,82 +2872,14 @@
      "\x53"                                                                              ; push rbx
      "\x48\x83\xEC\x18"                                                                  ; sub rsp, 24
 
-     ;; Save our inputs into callee-preserve registers
-     [REX W B]"\x89"[RM rdi r12]                                                         ; mov r12, rdi - input structure*
-     [REX W B]"\x89"[RM rsi r13]                                                         ; mov r13, rsi - output byte buffer*
 
-     ;; Start a new byte buffer for our parray output
-     [REX W][bb/bsumLE "\xB8" [bregnum rax]][bb/builtin-func-addr/byte-buffer-new] ; mov rax, bb_new
-     "\xFF"[RM 2 rax]                                                                    ; call rax
-     [REX W B]"\x89"[RM rax r14]                                                         ; mov r14, rax
+    [REX W B]"\x89"[RM rdi r12]                                                         ; mov r12, rdi - input structure*
+    [REX W B]"\x89"[RM rsi r13]                                                         ; mov r13, rsi - output byte buffer*
 
-     ;; Write a placeholder parray length to our parray output byte buffer
-     [REX W R]"\x89"[RM r14 rdi]                                                         ; mov rdi, r14
-     [REX W]"\xC7"[RM 0 rsi][imm 32 -1]                                                  ; mov rsi, -1
-     [REX W]"\xB8"[bb/builtin-func-addr/byte-buffer-push-int64]                       ; mov rax, bb_push_int64
-     "\xFF"[RM 2 rax]                                                                    ; call rax
-
-     ;; Write a pointer to "bb/barray-cat" as the first element
-     ;; of our parray output. We need to copy it into our output buffer because we're
-     ;; working with relative pointers in this macro.
-     [REX W][bb/bsumLE "\xB8" [bregnum rdi]][barray-cat-macro-name addr 8 LE] ; mov rdi, barray-cat-macro-name
-     [REX W B]"\x8B"[RM rsi r13] ; mov rsi, r13
-     [REX W]"\xC7"[RM 0 rdx][imm 32 0] ; mov rdx, 0
-     [REX W]"\xC7"[RM 0 rcx][imm 32 1] ; mov rcx, 1
-     [REX W]"\xB8"[bb/builtin-func-addr/structural-macro-expand]               ; mov rax, structural-macro-expand
-     "\xFF"[RM 2 rax]                                                          ; call rax
-
-     [REX W R]"\x89"[RM r14 rdi]                                                         ; mov rdi, r14
-     [REX W]"\x8B"[RM rsi rax]                                                           ; mov rsi, rax
-     [REX W]"\xB8"[bb/builtin-func-addr/byte-buffer-push-int64]                          ; mov rax, bb_push_int64
-     "\xFF"[RM 2 rax]                                                                    ; call rax
-
-     ;; Create input tail macroexpand byte buffer
-     [REX W][bb/bsumLE "\xB8" [bregnum rax]][bb/builtin-func-addr/byte-buffer-new] ; mov rax, bb_new
-     "\xFF"[RM 2 rax]                                                                    ; call rax
-     [REX W]"\x89"[RM rax rbx]                                                           ; mov rbx, rax
-
-     ;; Macroexpand tail of our input into input tail buffer
-     "\x4C\x89\xE7"                                                                      ; mov rdi, r12
-     "\x48\x89\xDE"                                                                      ; mov rsi, rbx
-     "\xBA\x02\x00\x00\x00"                                                              ; mov rdx, 2 - greedy
-     "\xB9\x00\x00\x00\x00"                                            ; mov rcx, 0
-     "\x48\xB8"[bb/builtin-func-addr/structural-macro-expand-tail]                    ; mov rax, expand_tail
-     "\xFF\xD0"                                                                          ; call rax
-     [REX W]"\x89"[RM rax [m64 rbp 0 1 -48]]                                             ; mov qword[rbp-48], rax
-
-     ;; Assemble our tail, producing a new barray-cat parray
-     [REX W]"\x8B"[RM rdi rax] ; mov rdi, rax
-     [REX W B]"\x8B"[RM rsi r13]                                                        ; mov rsi, r13 - output buffer
-     [REX W B]"\x8B"[RM rdx r14]                                                        ; mov rdx, r14 - output parray
-     [REX W][bb/bsumLE "\xB8" [bregnum rax]][assemble-fn barray-raw-addr 8 LE]          ; mov rax, assemble-fn
-     "\xFF"[RM 2 rax]                                                                   ; call rax
-
-     ;; Update parray output buffer length [currently placeholder]
-     [REX W R]"\x89"[RM r14 rdi]                                                         ; mov rdi, r14
-     [REX W]"\xB8"[bb/builtin-func-addr/byte-buffer-get-data-length]                  ; mov rax, bb-data-len
-     "\xFF"[RM 2 rax]                                                                    ; call rax
-     [REX W]"\x83"[RM 5 rax][imm 8 8]                                                    ; sub rax, 8 - don't include length itself
-     [REX W]"\xC1"[RM 5 rax][imm 8 3]                                                    ; shr rax, 3 - /8
-     [REX W]"\xF7"[RM 2 rax]                                                             ; not rax
-
-     [REX W R]"\x89"[RM r14 rdi]                                                         ; mov rdi, r14
-     [REX W]"\xC7"[RM 0 rsi][imm 32 0]                                                   ; mov rsi, 0
-     [REX W]"\x89"[RM rax rdx]                                                           ; mov rdx, rax
-     [REX W]"\xB8"[bb/builtin-func-addr/byte-buffer-write-int64]                      ; mov rax, bb-write-int64
-     "\xFF"[RM 2 rax]                                                                    ; call rax
-
-     ;; Grab our current data len in output buffer to use as our return relpointer
-     [REX W R]"\x89"[RM r13 rdi]                                                         ; mov rdi, r13
-     [REX W]"\xB8"[bb/builtin-func-addr/byte-buffer-get-data-length]                  ; mov rax, bb-get-data-len
-     "\xFF"[RM 2 rax]                                                                    ; call rax
-     [REX W B]"\x89"[RM rax r15]                                                         ; mov r15, rax
-
-     ;; Output our parray output byte buffer to our output byte buffer
-     [REX W R]"\x89"[RM r13 rdi]                                                         ; mov rdi, r13
-     [REX W R]"\x89"[RM r14 rsi]                                                         ; mov rsi, r14
-     [REX W]"\xB8"[bb/builtin-func-addr/byte-buffer-push-byte-buffer]                 ; mov rax, bb-push-bb
-     "\xFF"[RM 2 rax]                                                                    ; call rax
+     [REX W]"\xC7"[RM 0 rdx][imm 32 0] ; mov rdx, 1
+     [REX W]"\xB8"[asm-rel-fn barray-raw-addr 8 LE]                                 ; mov rax, asm-rel-fn
+     "\xFF"[RM 2 rax]                                                                 ; call rax
+     [REX W R]"\x8B"[RM r15 rax] ; mov r15, rax
 
      ;; Convert the buffer-relative pointers in our output parray to absolute pointers.
      ;;   * Skip the first element - bb/barray-cat - because that's already absolute
@@ -2824,18 +2893,8 @@
      [REX W B]"\x8B"[RM rdi r15]                                                        ; mov rdi, r15
      [REX W]"\x03"[RM rdi rax]                                                          ; add rdi, rax - rdi = absolute address to parray
      [REX W B]"\x8B"[RM rsi r13]                                                        ; mov rsi, r13 - output buffer
-     [REX W]"\xB8"[bb/builtin-func-addr/rel-to-abs]                                     ; mov rax, bb-push-bb
+     [REX W]"\xB8"[bb/builtin-func-addr/rel-to-abs]                                     ; mov rax, rel-to-abs
      "\xFF"[RM 2 rax]                                                                   ; call rax
-
-     ;; Free our parray output byte buffer
-     [REX W R]"\x89"[RM r14 rdi] ; mov rdi, r14
-     [REX W]"\xB8"[bb/builtin-func-addr/byte-buffer-free]                             ; mov rax, bb-free
-     "\xFF"[RM 2 rax]                                                                    ; call rax
-
-     ;; Free our tail macroexpand buffer
-     [REX W]"\x89"[RM rbx rdi]                                                           ; mov rdi, rbx
-     [REX W]"\xB8"[bb/builtin-func-addr/byte-buffer-free]                             ; mov rax, bb-free
-     "\xFF"[RM 2 rax]                                                                    ; call rax
 
      ;; Return pointer to our parray output in the output byte buffer
      [REX W R]"\x89"[RM r13 rdi]                                                         ; mov rdi, r13
@@ -2879,16 +2938,17 @@
      [mov r14 10]
 
      [label loop]
-     [cmp r14 0]
-     [je-rel loop-break]
+     [label-scope
+      [cmp r14 0]
+      [je-rel loop-break]
 
-     [mov rdi [raw-imm [hello-world-str addr 8 LE]]]
-     [mov rsi 2]
-     [mov rax [raw-imm [write-barray-to-fd-fn barray-raw-addr 8 LE]]]
-     [call-abs rax]
+      [mov rdi [raw-imm [hello-world-str addr 8 LE]]]
+      [mov rsi 2]
+      [mov rax [raw-imm [write-barray-to-fd-fn barray-raw-addr 8 LE]]]
+      [call-abs rax]
 
-     [dec r14]
-     [jmp-rel loop]
+      [dec r14]
+      [jmp-rel loop]]
      [label loop-break]
 
      [mov rax -1] ; Expand into nothing, we're a side-effect macro
@@ -2922,6 +2982,11 @@
  ; ;[mov rdi [raw-imm [label-rel-ref aoeu 4 LE]]]
  ; [label aoeu]
  ; [mov rdi rsi]
+ ; [label-scope
+ ;  [label-scope
+ ; [mov rdi rsi]
+ ;   ]
+ ;  ]
  ;; [pop rdi]
  ; ;[callabs r12]
  ;; [ret]
@@ -2932,7 +2997,3 @@
  ; ;[mov rsi [m64 rdx 0 1 8]]
  ; ]
  ]]
-
-; [m64 rdi 0 1 0]
-
-;; TODO: find a way to fix label scopes in assembler.
