@@ -10,17 +10,17 @@
 
 #let warning-box(title, body) = block[
   #let warning = [
-  #box(fill: rgb("#ff444422"),
+  #box(fill: rgb("#ff44441F"),
        width: 100%,
        radius: (top: 5pt),
-       inset: 16pt,
+       inset: 12pt,
        title)
 
-    #box(inset:(left: 16pt, right: 16pt, bottom: 16pt, top: 4pt), body)
+    #box(inset:(left: 12pt, right: 12pt, bottom: 12pt, top: 4pt), body)
   ]
 
   #box(radius: (bottom: 5pt),
-       fill: rgb("#ff444422"),
+       fill: rgb("#ff44441F"),
        warning)
 ]
 
