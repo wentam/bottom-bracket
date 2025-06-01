@@ -1,4 +1,4 @@
-GITHUB_PAGES_URL = "https://wentam.github.io/arrp/"
+GITHUB_PAGES_URL = "https://wentam.github.io/bottom-bracket/"
 
 rwildcard=$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2)) 
 
