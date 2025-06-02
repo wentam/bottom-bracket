@@ -1,4 +1,3 @@
-* read() should read the result into a byte buffer that you provide, then return the pointer.
 * read() should support producing both absolute and relative pointers, much like structural_macro_expand
 * add size/length for data entries in bb/with
   * might only make sense for barrays
@@ -7,21 +6,15 @@
   * Oh, this might be needed b/c we're holding pointers to the data and can't realloc
 * clean up unused data entries in builtin_structural_macros
 * make an implicit barray-cat for defining macro with with-macros?
-* now that builtin macros are called directly, not on the heap, we should be able to call directly everywhere instead of mov rax, foo; call foo
-* implement bb/include (as a builtin probably)
-  * probably use buffered_fd_reader
 * implement elf64-relocatable (or maybe just elf-relocatable?)
   * Remove the incomplete builtin one
 * don't always malloc executable, make sure macro stack mallocs executable except when serving as data stack
-* rework macro interface and all builtins to not use byte_buffer?
-  * One thing we could say: if your expansion is less than X bytes, you can just write directly to the buffer. We could even pass you the value of get_buf as your third argument - so you don't need to call any functions at all for small expansions.
-  * A macro could just be a pair of functions: the expander ond the cleanup. The expander provides a userdata pointer. Either explicitly two functions, or the expander returns a cleanup function pointer, userdata pointer, and expansion pointer.
 * are compare_barrays and barray_equalp the same function? We need to either remove one or document the difference.
 * Put barray utility functions into a barray.asm, not util.asm
 * make malloc not always executable (split into malloc and malloc_linux as per notes so that public malloc is never executable)
 * make macro stack not always executable
 * fix kv_stack_pop_by_key
-* parray-cat
+* implement bb/parray-cat
 * implement macroexpand-1 in structural_macro_expand
 * build macroexpand "walker" macro that allows you to tap spacebar to macroexpand-1 repeatedly.
    * problem: if I macroexpand-1 a 'with' macro, he greedy macroexpands his children so you can't really watch it go very well. I really want to try to come up with a way to do this nicely. Maybe simply allow you to put bb into a mode where structural_macro_expand always stops prints and waits for spacebar after each expansion. This could be exposed via a (with-macroexpand-walker my-stuff) macro that enters and exits this mode around my-stuff.
@@ -58,7 +51,7 @@
 * Support other brackets ()[]{}<>
 * memory operand normalizer for x86_64 assembler for more ergonomic memory operands like rdi+rsi+8+2
 * x86_64 assembler imm* macros should accept hex literal like 0xFF and 0xFF should be considered an immediate operand type in operand-type-fn
-* We're not getting as much benifit out of our caller-owned memory model with byte buffers as we could be internally right now. We should go through everything and ensure we're re-using byte buffers as much as possible.
+* We're not getting as much benefit out of our caller-owned memory model with byte buffers as we could be internally right now. We should go through everything and ensure we're re-using byte buffers as much as possible.
   * Remember that we have tools to make it easy to work with relative pointers internally, then call rel_to_abs at the edge.
   * You can pass multiple unrelated functions the same byte buffer if they just append.
   * Set our allocator's spill threshold to 0 and use strace -c to observe how many allocations are happening. Try to minimize this.
@@ -66,3 +59,6 @@
 * We might be able to use arenas/byte buffers and caller-owned memory pretty much everywhere we currently use malloc. More faster.
 * clean up all the commonts and unused strings in src/bbr.asm
 * Set up safe_call macro instead of our current stack alignment audit strategy
+* rework bb/with to have 'flags' for data entries instead of a bunch of diff names.
+  * Should be able to say [data [noexpand exec threadlocal] foo]
+* implement binary format bbrb

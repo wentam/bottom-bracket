@@ -1018,8 +1018,7 @@ _elf64_relocatable_write_shstrtab:
 
   ;; Grab pointer to section headers
   mov rdi, r13
-  mov rax, byte_buffer_get_buf
-  call rax
+  call byte_buffer_get_buf
   mov r8, rax
 
   add r8, 8  ; Move past length
@@ -1129,19 +1128,16 @@ elf64_relocatable:
   ;; Push a barray length placeholder
   mov rdi, r13
   mov rsi, 0
-  mov rax, byte_buffer_push_int64
-  call rax
+  call byte_buffer_push_int64
 
   ;; Make room for elf header in byte buffer
   mov rdi, r13
   mov rsi, 64
-  mov rax, byte_buffer_extend
-  call rax
+  call byte_buffer_extend
 
   ;; Grab pointer to backing buffer
   mov rdi, r13
-  mov rax, byte_buffer_get_buf
-  call rax
+  call byte_buffer_get_buf
   mov r14, rax
 
   add r14, 8 ; Move past length
@@ -1172,8 +1168,7 @@ elf64_relocatable:
 
   ;; Find sections parray in input structure
   mov rdi, r12
-  mov rax, _elf64_relocatable_find_sections_parray
-  call rax
+  call _elf64_relocatable_find_sections_parray
   mov r15, rax
 
   ;; write section count to header
@@ -1189,13 +1184,11 @@ elf64_relocatable:
   ;; write section headers
   mov rdi, r15
   mov rsi, r13
-  mov rax, _elf64_relocatable_write_section_headers
-  call rax
+  call _elf64_relocatable_write_section_headers
 
   ;; Update section header to point to where the shstrtab will be
   mov rdi, r13
-  mov rax, byte_buffer_get_data_length
-  call rax
+  call byte_buffer_get_data_length
   mov rbx, rax
   sub rbx, 8 ; remove barray length
   mov qword[r14+152], rbx
@@ -1203,19 +1196,16 @@ elf64_relocatable:
   ;; Write section header string tabulation
   mov rdi, r15
   mov rsi, r13
-  mov rax, _elf64_relocatable_write_shstrtab
-  call rax
+  call _elf64_relocatable_write_shstrtab
 
   ;; Pad to nearest 16 byte boundary
   mov rdi, r13
   mov rsi, 16
-  mov rax, _elf64_relocatable_pad_to_nearest
-  call rax
+  call _elf64_relocatable_pad_to_nearest
 
   ;; Update section header to specify size of shstrtab
   mov rdi, r13
-  mov rax, byte_buffer_get_data_length
-  call rax
+  call byte_buffer_get_data_length
   sub rax, 8 ; remove barray length
   sub rax, rbx
   mov qword[r14+160], rax
@@ -1224,15 +1214,13 @@ elf64_relocatable:
 
   ;; Update barray length with our byte buffer's data length
   mov rdi, r13
-  mov rax, byte_buffer_get_data_length
-  call rax
+  call byte_buffer_get_data_length
 
   mov rdi, r13
   mov rsi, 0
   mov rdx, rax
   sub rdx, 8
-  mov rax, byte_buffer_write_int64
-  call rax
+  call byte_buffer_write_int64
 
   mov rdi, r13
   call byte_buffer_get_buf
@@ -1747,57 +1735,48 @@ barray_cat:
   mov r13, rsi ; output byte buffer
 
   ;; Macroexpand tail of our input
-  mov rax, byte_buffer_new
-  call rax
+  call byte_buffer_new
   mov qword[rbp-48], rax ; qword[rbp-48] = macroexpansion backing buffer
 
   mov rdi, r12
   mov rsi, qword[rbp-48]
   mov rdx, 2 ; greedy expand
   mov rcx, 0
-  mov rax, structural_macro_expand_tail
-  call rax
+  call structural_macro_expand_tail
   mov r12, rax ; r12 = macroexpanded tail of input structure
 
   ;; Push a length placeholder
   mov rdi, r13
   mov rsi, 0
-  mov rax, byte_buffer_push_int64
-  call rax
+  call byte_buffer_push_int64
 
   ;; Create label stack
-  mov rax, kv_stack_new
-  call rax
+  call kv_stack_new
   mov qword[rbp-56], rax ; qword[rbp-56] = label stack
 
   ;; Push the layer
   mov rdi, r12
   mov rsi, qword[rbp-56]
   mov rdx, r13
-  mov rax, _barray_cat_push_layer
-  call rax
+  call _barray_cat_push_layer
 
   ;; Free label stack
   mov rdi, qword[rbp-56]
-  mov rax, kv_stack_free
-  call rax
+  call kv_stack_free
 
   ;; Update output length
   mov rdi, r13
-  mov rax, byte_buffer_get_data_length
-  call rax
+  call byte_buffer_get_data_length
   sub rax, 8
 
   mov rdi, r13
   mov rsi, 0
   mov rdx, rax
-  mov rax, byte_buffer_write_int64
-  call rax
+  call byte_buffer_write_int64
 
   ;; Free our macroexpansion
   mov rdi, qword[rbp-48]
-  mov rax, byte_buffer_free
-  call rax
+  call byte_buffer_free
 
   mov rdi, r13
   call byte_buffer_get_buf
@@ -2414,8 +2393,7 @@ _withm_push_data_macro:
   ;; We do this in our own buffer because we need to point absolute pointers here and
   ;; putting everything directly in the data byte buffer - which grows and reallocs -
   ;; would invalidate those pointers
-  mov rax, byte_buffer_new
-  call rax
+  call byte_buffer_new
   mov rbx, rax ; rbx = our data byte buffer
 
   ;; Copy this definition's data to our new byte buffer using macroexpand in cp mode
@@ -2429,8 +2407,7 @@ _withm_push_data_macro:
   ;; Push a pointer to our byte buffer to the data byte buffer
   mov rdi, r14
   mov rsi, rbx
-  mov rax, byte_buffer_push_int64
-  call rax
+  call byte_buffer_push_int64
 
   ;; Malloc space for template macro
   mov rdi, (_with_template_macro_end - _with_template_macro)
