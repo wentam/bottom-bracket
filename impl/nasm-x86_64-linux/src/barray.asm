@@ -82,24 +82,42 @@ barray_equalp:
   ;; Unless we otherwise determine it, we return 0
   mov rax, 0
 
+  ;; If they differ in length, they're different
+  cmp r8, r9
+  jne .epilogue
+
   ;; Move past barray lengths
   add rdi, 8
   add rsi, 8
 
-  cmp r8, r9
-  jne .epilogue
+  mov rcx, r8
+  shr rcx, 3 ; rcx = number of 8-byte blocks
+  and r8, 7 ; remaining 0-7 bytes
 
-  .byte_loop:
-    cmp r8, 0
-    je .byte_loop_break
-
-    ;; Compare the byte
-    mov cl, byte[rdi+r8-1]
-    cmp byte[rsi+r8-1], cl
+  ;; Compare bulk in qword chunks
+  .qword_loop:
+    test rcx, rcx
+    jz .qword_loop_break
+    mov rdx, qword[rsi]
+    cmp rdx, qword[rdi]
     jne .epilogue
+    add rsi, 8
+    add rdi, 8
+    dec rcx
+    jmp .qword_loop
+  .qword_loop_break:
 
+  ;; Compare tail bytes byte-by-byte (unrolled loop)
+  %rep 7
+    test r8, r8
+    jz .byte_loop_break
+    mov cl, byte[rdi]
+    cmp byte[rsi], cl
+    jne .epilogue
+    inc rdi
+    inc rsi
     dec r8
-    jmp .byte_loop
+  %endrep
 
   .byte_loop_break:
 

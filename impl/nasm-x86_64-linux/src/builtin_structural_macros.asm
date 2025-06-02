@@ -2795,6 +2795,8 @@ withm_end:
 
 %define O_CLOEXEC 0x01000000
 %define O_RDONLY 0
+%define O_DIRECT 0x4000
+%define O_NOATIME 0x40000
 %define SYS_OPENAT 257
 %define SYS_CLOSE 3
 %define AT_FDCWD -100
@@ -2809,8 +2811,8 @@ include:
   push rbx
   sub rsp, 8
 
-  mov r12, rdi ; - input structure
-  mov r13, rsi ; - output buffer
+  mov r12, rdi ; input structure
+  mov r13, rsi ; output buffer
 
   ;; Macroexpand tail
   mov rdi, r12
@@ -2861,7 +2863,7 @@ include:
   ;; Open the file to include
   mov rdi, AT_FDCWD
   mov rsi, rax           ; filename
-  mov rdx, (O_CLOEXEC | O_RDONLY) ; flags
+  mov rdx, (O_CLOEXEC | O_RDONLY | O_NOATIME) ; flags
   mov r10, 0                      ; mode (not needed for O_RDONLY)
   mov rax, SYS_OPENAT
   syscall
@@ -2893,7 +2895,6 @@ include:
   syscall
 
   mov rax, r15
-  ;mov rax, -1
   add rsp, 8
   pop rbx
   pop r15
