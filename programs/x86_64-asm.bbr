@@ -116,9 +116,6 @@
 ;;      scale can only be 1 2 4 8
 ;;      Should error: rdi + rax * 2 + rcx * 4
 
-;; TODO in our memory operands, in addition to qword dword byte etc, we should accept something
-;;      like mem8 mem4 mem2 mem1 because that's less annoying.
-
 ;; TODO support legacy ah, bh, ch, dh registers?
 
 ;; TODO find some kind of assembler encoding test suite
@@ -145,10 +142,6 @@
 ;; [imm 64 0cb] for chars? [imm 64 'b']?
 ;;  Would just need to change the parse-int function.
 ;; default to base 10.
-;; TODO: We could define all the macros in the 'with', not 'with-macros' block, then
-;; have the with-x86_64-asm macro push those macros before assembling each instruction,
-;; then pop them. This way these macros are not 'exposed' to the user of the assembler,
-;; and we don't need to worry about namespacing them.
 ;; TODO: show usage w/ "Usage:" for all functions/macros above them
 
 [bb/with
@@ -283,9 +276,6 @@
     [ret      [[                      ] "\xC3"]]
     [dec      [[[r64 re64]            ] [REX W [if-ext [p 0] B]] "\xFF" [RM 1 [p 0]]]]
     [call-abs [[[r64 re64]            ] [if-ext [p 0] [REX B]] "\xFF"[RM 2 [p 0]]]]]]
-
-  ; [[[r64 re64] [r64 re64]] [REX W [p 1 R-if-ext] [p 0 B-if-ext]] "\x89" [RM [p 1] [p 0]]]
-
 
   ;; writes a barray's bytes to fd [use me to print stuff to stdout/stderr]
   [data write-barray-to-fd-fn

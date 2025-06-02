@@ -260,7 +260,7 @@ realloc:
   .is_syscall_alloc:
 
   mov rdi, r12 ; old address
-  mov rsi, rcx ; old size
+  mov rsi, r15 ; old size
   mov rdx, r13 ; new size
   add rdx, ALLOCATION_DATA_OFFSET
   mov r10, MREMAP_MAYMOVE

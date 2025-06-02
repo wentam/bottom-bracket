@@ -1,29 +1,13 @@
-* Support other brackets ()[]{}<>
-* Macroexpansion rework:
-  * Each macro just returns an absolute pointer to it's output
-  * The byte buffer passed to each macro is just an optional
-  pool of memory to play with
-    * This doesn't really cost the macroexpander anything because
-    we can use a single byte buffer for all macroexpansions and
-    just reset it
-    * Provides you a pool to store things that we be 'freed'
+* read() should read the result into a byte buffer that you provide, then return the pointer.
+* read() should support producing both absolute and relative pointers, much like structural_macro_expand
+* add size/length for data entries in bb/with
+  * might only make sense for barrays
 * Replace -1 as non-expand sigil: should be 0/NULL ptr now
-* Make third argument to macros == byte_buffer_get_buf?
-  * You could expand macros up to 64 bytes without any function
-  calls.
 * Does the 'with' macro need to create a new byte buffer for each data entry? Why not just push the data directly to the 'data' byte buffer then free the whole buffer when we're done?
   * Oh, this might be needed b/c we're holding pointers to the data and can't realloc
-* remove old with-macros and with
 * clean up unused data entries in builtin_structural_macros
-* rename withm->with
-* implement unified 'with' macro
-  * data, functions, macros
-  * needed because of memory lifecycle
-  * needed so we can (bb/with (include "foo.bbr") my-stuff) and get code data etc
-  * only allocate functions as 'executable' memory.
 * make an implicit barray-cat for defining macro with with-macros?
 * now that builtin macros are called directly, not on the heap, we should be able to call directly everywhere instead of mov rax, foo; call foo
-* implement x86_64 assembler (not as a builtin, and in machine code)
 * implement bb/include (as a builtin probably)
   * probably use buffered_fd_reader
 * implement elf64-relocatable (or maybe just elf-relocatable?)
@@ -71,3 +55,14 @@
   * Look at if-reg-is-ext for an example on how much cleaner this is.
   * Just be careful about macro return values being shifted
 * Many of our error messages are wrong regarding the 'with' macro since we refactored it (used to be 'with' and 'with-macros', but we combined them)
+* Support other brackets ()[]{}<>
+* memory operand normalizer for x86_64 assembler for more ergonomic memory operands like rdi+rsi+8+2
+* x86_64 assembler imm* macros should accept hex literal like 0xFF and 0xFF should be considered an immediate operand type in operand-type-fn
+* We're not getting as much benifit out of our caller-owned memory model with byte buffers as we could be internally right now. We should go through everything and ensure we're re-using byte buffers as much as possible.
+  * Remember that we have tools to make it easy to work with relative pointers internally, then call rel_to_abs at the edge.
+  * You can pass multiple unrelated functions the same byte buffer if they just append.
+  * Set our allocator's spill threshold to 0 and use strace -c to observe how many allocations are happening. Try to minimize this.
+* Rename byte buffer to "arena". It's basically an arena allocator and clarifies our intended access/usage patterns. Also shorter.
+* We might be able to use arenas/byte buffers and caller-owned memory pretty much everywhere we currently use malloc. More faster.
+* clean up all the commonts and unused strings in src/bbr.asm
+* Set up safe_call macro instead of our current stack alignment audit strategy

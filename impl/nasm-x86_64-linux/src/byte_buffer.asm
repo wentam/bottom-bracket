@@ -250,7 +250,7 @@ byte_buffer_push_int64:
   push r13
   sub rsp, 8
 
-  mov r12, rsi ; byte
+  mov r12, rsi ; int64
   mov r13, rdi ; Byte buffer
 
   %ifdef ASSERT_STACK_ALIGNMENT
@@ -272,6 +272,7 @@ byte_buffer_push_int64:
   jge .good_buf_size
 
   ;; Expand the buffer
+
   mov rdi, qword[r13+BYTE_BUFFER_BUF_OFFSET]         ; buffer
   mov rsi, qword[r13+BYTE_BUFFER_BUF_LENGTH_OFFSET]  ; new size = current size
   shl rsi, 1                                         ; * 2

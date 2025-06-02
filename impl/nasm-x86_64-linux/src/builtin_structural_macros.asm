@@ -40,6 +40,7 @@ extern barray_deposit_bytes
 extern malloc
 extern barray_equalp
 extern rel_to_abs
+extern read
 
 extern kv_stack_new
 extern kv_stack_pop
@@ -87,17 +88,16 @@ bsumLE_macro_name: db 9,0,0,0,0,0,0,0,"bb/bsumLE"
 builtin_sma_macro_name: db 44,0,0,0,0,0,0,0,"bb/builtin-func-addr/structural-macro-expand"
 builtin_smat_macro_name: db 49,0,0,0,0,0,0,0,"bb/builtin-func-addr/structural-macro-expand-tail"
 
-
 barray_literal_macro_name: db 17,0,0,0,0,0,0,0,"test_macro_barray"
 barray_test_expansion: db 17,0,0,0,0,0,0,0,"test_macro_barray"
 barray_name: db 4,0,0,0,0,0,0,0,"name"
 shstrtab_name: db 9,0,0,0,0,0,0,0,".shstrtab"
 
-
 platform_expansion: db 12,0,0,0,0,0,0,0,"x86_64-linux"
 arch_expansion: db 6,0,0,0,0,0,0,0,"x86_64"
 platform_macro_name: db 11,0,0,0,0,0,0,0,"bb/platform"
 arch_macro_name: db 7,0,0,0,0,0,0,0,"bb/arch"
+include_macro_name: db 10,0,0,0,0,0,0,0,"bb/include"
 
 parray_element: db 3,0,0,0,0,0,0,0,"foo"
 parray_element_2: db 4,0,0,0,0,0,0,0,"foo2"
@@ -119,7 +119,6 @@ barray_cat_label_name: db 5,0,0,0,0,0,0,0,"label"
 barray_cat_label_scope_name: db 11,0,0,0,0,0,0,0,"label-scope"
 barray_cat_global_label_name: db 12,0,0,0,0,0,0,0,"global-label"
 barray_cat_be_name: db 2,0,0,0,0,0,0,0,"BE"
-
 
 barray_cat_element_error: db "ERROR: Invalid element in bb/barray-cat. Must be one of: raw barray, label, global-label, label-scope, label-abs-ref, label-rel-ref",10
 barray_cat_element_error_len:  equ $ - barray_cat_element_error
@@ -143,7 +142,6 @@ with_definition_bad_type_error_len:  equ $ - with_definition_bad_type_error
 
 with_definition_not_barray_error: db "ERROR: A definition in bb/with doesn't start with a barray (as the name). It must.",10
 with_definition_not_barray_error_len:  equ $ - with_definition_not_barray_error
-
 
 with_rawref_not_barray_error: db "ERROR: Accessor using barray-raw-addr references value that's not a barray. barray-raw-addr only works with barray values.",10
 with_rawref_not_barray_error_len:  equ $ - with_rawref_not_barray_error
@@ -188,6 +186,13 @@ with_macros_unsupported_platform_error: db "ERROR: Attempt to expand a macro tha
 with_macros_unsupported_platform_error_len: equ $ - with_macros_unsupported_platform_error
 
 with_macros_supported_platform_barray: db 12,0,0,0,0,0,0,0,"x86_64-linux"
+
+
+include_bad_input_error: db "ERROR: Bad input to bb/include. Try [bb/include path]"
+include_bad_input_error_len: equ $ - include_bad_input_error
+
+include_open_error: db "ERROR: Failed to open file in bb/include"
+include_open_error_len: equ $ - include_open_error
 
 section .text
 
@@ -264,6 +269,16 @@ push_builtin_structural_macros:
   mov qword[rsp+8], builtin_print
   mov rdi, qword[macro_stack_structural]    ; macro stack
   mov rsi, builtin_print_macro_name ; macro name
+  mov rdx, rsp                              ; code
+  call kv_stack_push
+  add rsp, 16
+
+  ;; Push include macro
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], include
+  mov rdi, qword[macro_stack_structural]    ; macro stack
+  mov rsi, include_macro_name ; macro name
   mov rdx, rsp                              ; code
   call kv_stack_push
   add rsp, 16
@@ -2777,4 +2792,114 @@ withm:
   pop rbp
   ret
 withm_end:
+
+%define O_CLOEXEC 0x01000000
+%define O_RDONLY 0
+%define SYS_OPENAT 257
+%define SYS_CLOSE 3
+%define AT_FDCWD -100
+
+include:
+  push rbp
+  mov rbp, rsp
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+  sub rsp, 8
+
+  mov r12, rdi ; - input structure
+  mov r13, rsi ; - output buffer
+
+  ;; Macroexpand tail
+  mov rdi, r12
+  mov rsi, r13
+  mov rdx, 2 ; greedy expand
+  mov rcx, 0 ; absolute pointers
+  call structural_macro_expand_tail
+  mov r12, rax
+
+
+  ;; Error if input structure tail not 1 element
+  cmp qword[r12], -2
+  je .good_input_size
+
+  mov rdi, include_bad_input_error
+  mov rsi, include_bad_input_error_len
+  call error_exit
+
+  .good_input_size:
+
+  ;; Error if path not a barray
+  mov rdi, qword[r12+8]
+  cmp qword[rdi], 0
+  jge .is_barray
+
+  mov rdi, include_bad_input_error
+  mov rsi, include_bad_input_error_len
+  call error_exit
+
+  .is_barray:
+
+  ;; Create a NULL-terminated string of our filepath
+  mov rbx, qword[r12+8] ; rdi = filename barray
+  mov rdi, qword[rbx]
+  add rdi, 8
+  call malloc
+  mov qword[rbp-48], rax
+
+  mov rdi, rax ; dest
+  mov rsi, rbx ; src
+  add rsi, 8   ; move past len
+  mov rcx, qword[rbx] ; len
+  cld
+  rep movsb ; copy
+  mov rcx, qword[rbx] ; len
+  mov byte[rax+rcx], 0 ; NULL terminate
+
+  ;; Open the file to include
+  mov rdi, AT_FDCWD
+  mov rsi, rax           ; filename
+  mov rdx, (O_CLOEXEC | O_RDONLY) ; flags
+  mov r10, 0                      ; mode (not needed for O_RDONLY)
+  mov rax, SYS_OPENAT
+  syscall
+  mov r14, rax ; r14 = fd
+
+  ;; Free our NULL-terminated filename
+  mov rdi, qword[rbp-48]
+  call free
+
+  ;; Error if we failed to open the file
+  cmp r14, 0
+  jge .good_open
+
+  mov rdi, include_open_error
+  mov rsi, include_open_error_len
+  call error_exit
+
+  .good_open:
+
+  ;; read() into our output byte buffer
+  mov rdi, r14
+  mov rsi, r13
+  call read
+  mov r15, rax
+
+  ;; Close the file
+  mov rdi, r14
+  mov rax, SYS_CLOSE
+  syscall
+
+  mov rax, r15
+  ;mov rax, -1
+  add rsp, 8
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  pop rbp
+  ret
 

@@ -314,7 +314,7 @@ structural_macro_expand_relptr:
   ret
 
 
-;;; structural_macro_expand_tail(*parray, *output_byte_buffer, abs_rel)
+;;; structural_macro_expand_tail(*parray, *output_byte_buffer, cp_shy_greedy, abs_rel)
 ;;;   Macroexpands input parray excluding the first element of the parray.
 ;;;
 ;;;   Undefined behavior if input isn't a parray.
@@ -331,7 +331,7 @@ structural_macro_expand_tail:
   mov r12, rdi ; data
   mov r13, rsi ; output byte buffer
   mov rbx, rdx ; cp_shy_greedy
-  mov qword[rbp-48], rcx
+  mov qword[rbp-48], rcx ; abs_rel
 
   ;; If our input is length 1, just return a zero-length parray
   mov rdi, qword[r12]

@@ -545,3 +545,13 @@ Interestingly, that means that even with this design there are certain situation
     * We could probably rewrite some of our existing stuff to use this pattern more
     * Maintains the full flexibility of absolute pointers such as being able to return data in 'with' directly without copying.
     * If macros use absolute pointers, you have a choice: do I want to work in relative or absolute pointers? If macros use relative pointers, you're locked into relative pointers.
+* Instead of having an x86_64-linux implementation, we might be able to have a general x86_64-posix.
+    * syscall interface is *not* standardized across posix, but they will all have similar interfaces available
+        * Or even do the branching at build-time - one codebase, build for each posix platform.
+        * on non-linux you need to use libc
+    * linux, BSD, macOS - all in one asm implementation.
+    * we don't really need fancy linux-only tools here.
+    * libc OS interfaces are an ugly abstraction inversion, but it's how many OSes work. Would much prefer everything to have a stable syscall interface, but that's how it is.
+    * Maybe we have a build time branch where we switch between:
+        * Clean syscalls for linux
+        * A single, build-time glue layer for all other platforms that depend on having libc

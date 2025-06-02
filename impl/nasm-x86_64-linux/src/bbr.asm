@@ -37,7 +37,6 @@ extern parse_uint
 extern read
 extern assert_stack_aligned
 extern bindump
-extern free_read_result
 extern dump_read_result_buffer
 extern dump_read_result
 extern print
@@ -131,117 +130,25 @@ section .text
 ;;
 ;;       pay attention to what happens when a reader macro/structural macro expands into nothing.
 _start:
-  ;mov rdi, 2
-  ;call malloc
-
-  ;mov rdi, rax
-  ;mov rsi, 5129
-  ;call realloc
-
-  ;mov rdi, rax
-  ;mov rsi, 16
-  ;call realloc
-
-  ;mov rdi, rax
-  ;mov rsi, 500
-  ;call realloc
-
-  ;mov qword[rax], 5
-
-  ;;mov rdi, rax
-  ;;call free
-
-  ;mov rdi, 0
-  ;call exit
-
-  ;; Output welcome string to stderr
-  ;;mov rdi, welcome_msg
-  ;;mov rsi, welcome_msg_len
-  ;;mov rdx, stderr_fd
-  ;;call write
-
   %ifdef ASSERT_STACK_ALIGNMENT
   call assert_stack_aligned
   %endif
 
   call init_macro_stacks
 
-  ;; Dump reader macro stack
-  ;mov rdi, readermac_msg
-  ;mov rsi, readermac_msg_len
-  ;mov rdx, stderr_fd
-  ;call write
-
-  ;mov rdi, qword[macro_stack_reader]
-  ;mov rsi, stderr_fd
-  ;mov rdx, 16
-  ;call kv_stack_bindump_buffers
-
-  ;; Dump printer macro stack
-  ;mov rdi, printermac_msg
-  ;mov rsi, printermac_msg_len
-  ;mov rdx, stderr_fd
-  ;call write
-
-  ;mov rdi, qword[macro_stack_printer]
-  ;mov rsi, stderr_fd
-  ;mov rdx, 16
-  ;call kv_stack_bindump_buffers
-
-  ;; Dump structural macro stack
-  ;mov rdi, structuralmac_msg
-  ;mov rsi, structuralmac_msg_len
-  ;mov rdx, stderr_fd
-  ;call write
-
-  ;mov rdi, qword[macro_stack_structural]
-  ;mov rsi, stderr_fd
-  ;mov rdx, 16
-  ;call kv_stack_bindump_buffers
-
-  mov rdi, stdin_fd
-  call read
-  mov r12, rax
-
-  ;; Dump read result
-  ;mov rdi, buffer_msg
-  ;mov rsi, buffer_msg_len
-  ;mov rdx, stderr_fd
-  ;call write
-
-  ;mov rdi, r12
-  ;mov rsi, stderr_fd
-  ;mov rdx, 16
-  ;call dump_read_result_buffer
-
-  ;mov rdi, result_msg
-  ;mov rsi, result_msg_len
-  ;mov rdx, stderr_fd
-  ;call write
-
-  ;mov rdi, r12
-  ;mov rsi, stderr_fd
-  ;mov rdx, 16
-  ;call dump_read_result
-
-  ;; Print pre-expanded read
-  ;mov rdi, print_msg
-  ;mov rsi, print_msg_len
-  ;mov rdx, stderr_fd
-  ;call write
-
-  ;mov rdi, r12
-  ;mov rsi, stderr_fd
-  ;call print
-
-  ;; Create macroexpansion backing buffer
+  ;; Make an arena for reader and macroexpander
+  ;;
+  ;; We can't share an arena because the reader uses absolute pointers.
+  call byte_buffer_new
+  mov rbx, rax
   call byte_buffer_new
   mov r14, rax
 
-  ;; Newline
-  ;mov rdi, 10
-  ;mov rsi, stderr_fd
-  ;call write_char
+  ;; Read
+  mov rdi, stdin_fd
+  mov rsi, rbx
+  call read
+  mov r12, rax
 
   ;; Macroexpand
   mov rdi, r12
@@ -251,55 +158,14 @@ _start:
   call structural_macro_expand
   mov r15, rax
 
-  ;; TODO tmp print return pointer
-  ;push rax
-  ;push rax
-  ;mov rdi, rax
-  ;mov rsi, 16
-  ;mov rdx, stderr_fd
-  ;mov rcx, 0
-  ;call write_as_base
-
-  ;; TODO tmp newline
-  ;mov rdi, 10
-  ;mov rsi, stderr_fd
-  ;call write_char
-
-  pop rax
-  pop rax
-
-  ;; TODO tmp print bytes at return pointer
-  ;mov rdi, rax
-  ;mov rsi, 32 ; len
-  ;mov rdx, stderr_fd
-  ;mov rcx, 16 ; base
-  ;call bindump
-
-
-  ;; Dump macroexpansion backing buffer
-  ;mov rdi, me_msg
-  ;mov rsi, me_msg_len
-  ;mov rdx, stderr_fd
-  ;call write
-
-  ;mov rdi, r14
-  ;mov rsi, stderr_fd
-  ;mov rdx, 16
-  ;call byte_buffer_bindump_buffer
-
-  ;; Print post-expanded read
-  ;mov rdi, print2_msg
-  ;mov rsi, print2_msg_len
-  ;mov rdx, stderr_fd
-  ;call write
-
+  ;; Print
   mov rdi, r15
   mov rsi, stdout_fd
   call print
 
-  mov rdi, r12
-  call free_read_result
-
+  ;; Free our arenas
+  mov rdi, rbx
+  call byte_buffer_free
   mov rdi, r14
   call byte_buffer_free
 
@@ -308,35 +174,11 @@ _start:
   mov rsi, stderr_fd
   call write_char
 
-  call free_macro_stacks
-
-  ;;sub rsp, 8
-  ;;mov byte[rsp], 'F'
-  ;;mov byte[rsp-1], 'F'
-  ;;sub rsp, 1
-  ;;push 2
-
-  ;;;;mov rdi, rsp
-  ;;;;mov rsi, 16
-  ;;;;mov rdx, stderr_fd
-  ;;;;mov rcx, 16
-  ;;;;call bindump
-
-  ;;mov rdi, rsp
-  ;;mov rsi, 16
-  ;;call parse_uint
-
-  ;;mov rdi, rax
-  ;;mov rsi, 10
-  ;;mov rdx, stderr_fd
-  ;;mov rcx, 0
-  ;;call write_as_base
-
-  ;;pop rdi
-  ;;add rsp, 10
-
+  ;; Print out how many macros we expanded
   call dump_expand_count
 
+  ;; Cleanup
+  call free_macro_stacks
   call malloc_cleanup
 
   ;; Exit

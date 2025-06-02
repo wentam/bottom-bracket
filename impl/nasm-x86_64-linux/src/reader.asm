@@ -71,50 +71,43 @@ catchall_macro_name: db 8,0,0,0,0,0,0,0,"catchall"
 
 section .text
 
-;;; read(fd) -> ptr
+;;; read(fd, byte_buffer*) -> ptr
 ;;;   Reads one expression from the file descriptor into internal representation
 ;;;
-;;;   You must free the result with free_read_result when done.
+;;;   Reads data into the byte buffer.
 ;;;
-;;;   Returns NULL if the read result is nothing.
+;;;   Returns pointer to result, or returns NULL if the read result is nothing.
 read:
-  push r15
-  push r14
-  push r13
   push r12
-  sub rsp, 8
+  push r13
+  push r14
 
   %ifdef ASSERT_STACK_ALIGNMENT
   call assert_stack_aligned
   %endif
 
-  mov r12, rdi ; We'll need this later but are about to clobber it
+  mov r12, rdi ; fd
+  mov r13, rsi ; our byte buffer
 
   ;; Create new buffered reader
   mov rdi, r12
   call buffered_fd_reader_new
-  mov r13, rax ; r13 = new buffered reader
+  mov r12, rax ; r12 = new buffered reader
 
-  ;; Allocate output byte buffer
-  call byte_buffer_new
-  mov r14, rax
-
-  ;; TODO put _read in a loop:
-  ;;        * Call _read
-  ;;        * If it returns -1 and the next char is not EOF, repeat
-  ;;        * Else break loop
+  ;; _read in a loop:
   .rloop:
 
-  ;; Call recursive implementation
-  mov rdi, r13
-  mov rsi, r14
+  ;; Call recursive, relptr implementation _read
+  mov rdi, r12
+  mov rsi, r13
   call _read
-  mov r15, rax
+  mov r14, rax
 
+  ;; If it returns -1 and the next char is not EOF, repeat. Else break loop.
   cmp rax, -1
   jne .rloop_break
 
-  mov rdi, r13
+  mov rdi, r12
   call buffered_fd_reader_consume_leading_whitespace
   cmp rax, BUFFERED_READER_EOF
   je .rloop_break
@@ -123,80 +116,31 @@ read:
   .rloop_break:
 
   ;; Free buffered reader
-  mov rdi, r13
+  mov rdi, r12
   call buffered_fd_reader_free
 
-  ;; Append a pointer to the byte buffer struct at the end of the data.
-  ;; This is needed to free the buffer later (and useful for any other function
-  ;; that wants to go from read result back to byte buffer struct)
-  mov rdi, r14
-  mov rsi, 0
-  call byte_buffer_push_int64
-
-  ;; TODO: lock writes in the byte buffer so nothing can invalidate any
-  ;; pointers from here forward?
-
-  ;; Overwrite the int64 we just wrote with the actual pointer
-  ;; now that it's done resizing (so we don't invalidate our own pointer by
-  ;; writing)
-  mov rdi, r14
-  call byte_buffer_get_data_length
-  mov rdi, rax
-
-  push rdi
-  push rdi
-  mov rdi, r14
-  call byte_buffer_get_buf
-  pop rdi
-  pop rdi
-  mov qword[rax+rdi-8], r14
-
-
-  mov rax, r15
-  mov r12, rax
-
-  cmp rax, -1
+  cmp r14, -1
   jne .not_null
-  mov rax, 0 ; We'll return NULL for this empty read result
+  mov r14, 0 ; We'll return NULL for this empty read result
   jmp .null
 
   .not_null:
-  ;; r12 contains a relative pointer, we need to return absolute.
-  mov rdi, r14
+  ;; r14 contains a relative pointer, we need to return absolute.
+  mov rdi, r13
   call byte_buffer_get_buf
-  add rax, r12
+  add r14, rax
 
   .null:
 
   ;; Convert relative pointers to absolute
-  push rax
-  sub rsp, 8
-  mov rdi, rax
-  mov rsi, r14
+  mov rdi, r14
+  mov rsi, r13
   call rel_to_abs
-  add rsp, 8
-  pop rax
 
-  add rsp, 8
-  pop r12 ; Restore
-  pop r13 ; Restore
+  mov rax, r14
   pop r14 ; Restore
-  pop r15
-  ret
-
-;;; free_read_result(*read_result)
-;;;   Frees all memory associated with a call to read().
-free_read_result:
-  sub rsp, 8
-  cmp rdi, 0 ; if NULL just return
-  je .done
-
-  call _get_byte_buf_from_read_result
-  mov rdi, rax
-  call byte_buffer_free
-
-  .done:
-  add rsp, 8
+  pop r13 ; Restore
+  pop r12 ; Restore
   ret
 
 ;;; _read(*buffered_fd_reader, *output_buffer) -> ptr
@@ -285,36 +229,6 @@ _read:
   pop r12
   ret
 
-;;; dump_read_result_buffer(*reader_result, fd, base)
-;;;   bindumps a read result's backing buffer to fd with base.
-dump_read_result_buffer:
-  push r12
-  push r13
-  sub rsp, 8
-
-  cmp rdi, 0
-  je .done
-
-  mov r12, rsi ; fd
-  mov r13, rdx ; base
-
-  %ifdef ASSERT_STACK_ALIGNMENT
-  call assert_stack_aligned
-  %endif
-
-  ;mov rdi, rdi
-  call _get_byte_buf_from_read_result
-  mov rdi, rax
-  mov rsi, r12
-  mov rdx, r13
-  call byte_buffer_bindump_buffer
-
-  .done:
-  add rsp, 8
-  pop r13
-  pop r12
-  ret
-
 ;; dump_read_result(*reader_result, fd, base)
 ;;   bindumps a read result
 dump_read_result:
@@ -366,38 +280,5 @@ dump_read_result:
   pop r15
   pop r14
   pop r13
-  pop r12
-  ret
-
-
-;;; _get_byte_buf_from_read_result(*reader_result) -> *byte_buffer
-;;;   Given a result turned by read(), returns a pointer to it's original
-;;;   backing buffer.
-_get_byte_buf_from_read_result:
-  push r12
-  mov r12, rdi ; reader result
-
-  %ifdef ASSERT_STACK_ALIGNMENT
-  call assert_stack_aligned
-  %endif
-
-  mov rax, qword[r12]
-  cmp rax, 0
-  jl .parray_buf
-
-  .barray_buf:
-  add r12, 8   ; move past the length
-  mov rax, qword[r12+rax]
-  jmp .epilogue
-
-  .parray_buf:
-  not rax ; parray lengths are negative one's complement, invert
-  add r12, 8 ; move past the length
-  imul rax, 8
-  mov rax, qword[r12+rax]
-  ;jmp .epilogue
-
-
-  .epilogue:
   pop r12
   ret
