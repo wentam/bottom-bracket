@@ -943,6 +943,6 @@ rel_to_abs:
 
 ;; This is my spot for having nasm assemble random things for me lel
 tmpaoeu:
-  mov rcx, 0
+   sub rax, rbx
   ret
 

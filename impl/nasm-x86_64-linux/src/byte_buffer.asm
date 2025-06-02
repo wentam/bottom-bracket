@@ -70,10 +70,30 @@ section .text
 ;;;   Free with byte_buffer_free when done.
 byte_buffer_new:
   push r12
+  push r13
+  push r14
 
   %ifdef ASSERT_STACK_ALIGNMENT
   call assert_stack_aligned
   %endif
+
+  ;; NOTE: we allocate the struct before the backing buffer - and free in the reverse
+  ;; order to keep our bump allocator happy and fast.
+
+  ;; Allocate struct
+  mov rdi, 32
+  call malloc
+  mov r13, rax
+
+  cmp r13, 0
+  jne .new_struct_good_malloc
+
+  ;; Error and exit if malloc failed
+  mov rdi, malloc_failed_error_str
+  mov rsi, malloc_failed_error_str_len
+  call error_exit
+
+  .new_struct_good_malloc:
 
   ;; Allocate backing buffer
   mov rdi, BYTE_BUFFER_START_SIZE
@@ -90,25 +110,13 @@ byte_buffer_new:
 
   .good_malloc:
 
-  ;; Allocate struct
-  mov rdi, 32
-  call malloc
-
-  cmp rax, 0
-  jne .new_struct_good_malloc
-
-  ;; Error and exit if malloc failed
-  mov rdi, malloc_failed_error_str
-  mov rsi, malloc_failed_error_str_len
-  call error_exit
-
-  .new_struct_good_malloc:
-
   ;; Initialize struct members
-  mov qword [rax+BYTE_BUFFER_DATA_LENGTH_OFFSET], 0
-  mov qword [rax+BYTE_BUFFER_BUF_LENGTH_OFFSET], BYTE_BUFFER_START_SIZE
-  mov qword [rax+BYTE_BUFFER_BUF_OFFSET], r12
-
+  mov qword [r13+BYTE_BUFFER_DATA_LENGTH_OFFSET], 0
+  mov qword [r13+BYTE_BUFFER_BUF_LENGTH_OFFSET], BYTE_BUFFER_START_SIZE
+  mov qword [r13+BYTE_BUFFER_BUF_OFFSET], r12
+  mov rax, r13
+  pop r14
+  pop r13
   pop r12
   ret
 

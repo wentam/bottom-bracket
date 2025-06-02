@@ -1,4 +1,3 @@
-* read() should support producing both absolute and relative pointers, much like structural_macro_expand
 * add size/length for data entries in bb/with
   * might only make sense for barrays
 * Replace -1 as non-expand sigil: should be 0/NULL ptr now
@@ -62,3 +61,4 @@
 * rework bb/with to have 'flags' for data entries instead of a bunch of diff names.
   * Should be able to say [data [noexpand exec threadlocal] foo]
 * implement binary format bbrb
+* read() should support producing both absolute and relative pointers, much like structural_macro_expand

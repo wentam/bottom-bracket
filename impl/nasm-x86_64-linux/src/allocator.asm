@@ -29,13 +29,7 @@
 ;;; allocates pages 'lazily' - it doesn't actually claim the memory until we touch the memory.
 ;;;
 ;;; That means the chunk size is not a minimum overhead, and in fact we may use far less memory.
-;;;
-;;; However, at the time of this writing, we only ever 'free' data by freeing entire chunks.
-;;; We don't decrement the bump pointer (TODO try this and see if it's fast!). This does
-;;; mean we'll use more memory with larger chunks because we never free anything.
-;;;
-;;; So we still need to be reasonable
-%define CHUNK_SIZE (4*1024*1024)
+%define CHUNK_SIZE (8*1024*1024)
 %define SYSCALL_SPILL_SIZE 512*1024 ;; Allocations larger than this will syscall
 
 %define MAP_ANONYMOUS  0x20
@@ -54,6 +48,8 @@ section .bss
 current_chunk_ptr: resb 8 ; Pointer to current chunk
 bump_ptr: resb 8          ; Pointer to first available byte in chunk
 
+;;tmpcount: resb 8
+
 section .text
 
 global malloc
@@ -61,6 +57,8 @@ global malloc_cleanup
 global realloc
 global free
 
+extern write_as_base
+extern write_char
 
 ;;; Cleans up last bump alloc chunk if it's around.
 malloc_cleanup:
@@ -72,6 +70,21 @@ malloc_cleanup:
  mov rsi, CHUNK_SIZE
  mov rax, SYS_MUNMAP
  syscall
+
+;mov rdi, '-'
+;mov rsi, 2
+;  call write_char
+; mov rdi, qword[tmpcount]
+; mov rsi, 10
+; mov rdx, 2
+; mov rcx, 0
+; call write_as_base
+;
+;mov rdi, '-'
+;mov rsi, 2
+;  call write_char
+
+
  ret
  .nope:
  ret
@@ -175,9 +188,9 @@ malloc:
    add rax, ALLOCATION_DATA_OFFSET
 
    ;; Increment and align bump pointer by our allocation struct size (rdi+overhead)
-   mov rsi, rdi
+   mov rsi, rdi ; len
    add rsi, ALLOCATION_DATA_OFFSET
-   add rsi, rcx
+   add rsi, rcx ; bump ptr
    add rsi, 15  ; 16-align the pointer
    and rsi, -16 ; ^^^^
    mov qword[bump_ptr], rsi
@@ -229,10 +242,42 @@ realloc:
   .is_bump_alloc:
 
   ;; For simplicity's sake, we just call malloc again and free the old result.
-  ;; TODO optimization: if we were this last allocation in this chunk and there's enough room,
-  ;; we could grow in-place
   ;; TODO optimization: if we're shrinking, we can always shrink in place
 
+
+  ;; If we were this last allocation in this chunk and there's enough room,
+  ;; we could grow in-place
+  mov rdx, r12
+  add rdx, qword[r12+ALLOCATION_LENGTH_OFFSET] ; rdx = r12 + allocation length
+  add rdx, ALLOCATION_DATA_OFFSET
+  add rdx, 15  ; 16-align the pointer
+  and rdx, -16 ; ^^^^
+  mov r9, qword[bump_ptr]
+  cmp rdx, r9
+  jne .not_inplace
+
+  mov rsi, qword[bump_ptr]
+  add rsi, r13
+  add rsi, ALLOCATION_DATA_OFFSET
+  sub rsi, qword[current_chunk_ptr]
+  cmp rsi, CHUNK_SIZE
+  jge .not_inplace
+
+  mov qword[r12+ALLOCATION_LENGTH_OFFSET], r13
+
+  mov rsi, r13 ; len
+  add rsi, ALLOCATION_DATA_OFFSET
+  add rsi, r12 ; old allocation start
+  add rsi, 15  ; 16-align the pointer
+  and rsi, -16 ; ^^^^
+  mov qword[bump_ptr], rsi
+
+  mov rax, r12
+  add rax, ALLOCATION_DATA_OFFSET
+  jmp .epilogue
+  .not_inplace:
+
+  ;; Can't grow in-place, need to malloc again
   mov rdi, r13
   call malloc
   mov r14, rax
@@ -309,6 +354,21 @@ free:
    mov rcx, qword[rsi+CHUNK_REFCOUNT_OFFSET]
    dec rcx
    mov qword[rsi+CHUNK_REFCOUNT_OFFSET], rcx
+
+   ;; If rdi + allocation length = bump pointer, decrement bump pointer by length
+   mov rdx, rdi
+   add rdx, qword[rdi+ALLOCATION_LENGTH_OFFSET] ; rdx = rdi + allocation length
+   add rdx, ALLOCATION_DATA_OFFSET
+   add rdx, 15  ; 16-align the pointer
+   and rdx, -16 ; ^^^^
+   mov r9, qword[bump_ptr]
+   cmp rdx, r9
+   ;jne .foo
+   ; inc qword[tmpcount]
+   ; mov r9, rdi
+   ;.foo:
+   cmove r9, rdi
+   mov qword[bump_ptr], r9
 
    ;; If ref count is now zero and it's not the current chunk, free the chunk
    cmp rsi, qword[current_chunk_ptr]

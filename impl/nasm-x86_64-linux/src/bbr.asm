@@ -134,6 +134,10 @@ _start:
   call assert_stack_aligned
   %endif
 
+  call byte_buffer_new
+  mov rdi, rax
+  call byte_buffer_free
+
   call init_macro_stacks
 
   ;; Make an arena for reader and macroexpander
