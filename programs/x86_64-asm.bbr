@@ -997,19 +997,21 @@
     ;; TODO error if either argument is a parray?
     ;;  * perhaps in parse-int
 
-    ;; Create byte buffer for our tail expansion
-    "\x48\xB8" [bb/builtin-func-addr/byte-buffer-new]              ; mov rax, bb_new
-    "\xFF\xD0"                                                        ; call rax
-    "\x49\x89\xC7"                                                    ; mov r15, rax
-
     ;; Create our tail macroexpansion
     "\x4C\x89\xEF"                                                    ; mov rdi, r13
-    "\x4C\x89\xFE"                                                    ; mov rsi, r15
+    "\x4C\x89\xE6"                                                    ; mov rsi, r12
     "\xBA\x02\x00\x00\x00"                                            ; mov rdx, 2 - greedy
     "\xB9\x00\x00\x00\x00"                                            ; mov rcx, 0
     "\x48\xB8" [bb/builtin-func-addr/structural-macro-expand-tail] ; mov rax, expand_tail
     "\xFF\xD0"                                                        ; call rax
     "\x49\x89\xC5"                                                    ; mov r13, rax
+
+
+    ;; Grab our data length so we know where our data starts
+    "\x4C\x89\xE7" ; mov rdi, r12
+    "\x48\xB8"[bb/builtin-func-addr/byte-buffer-get-data-length]     ; mov rax, bb_get_data_len
+    "\xFF\xD0"                                                       ; call rax
+    "\x49\x89\xC7"                                                   ; mov r15, rax
 
     ;; Parse first item in parray as signed base 10 ASCII integer [our width]
     "\x49\x8B\x7D\x08"                                                ; mov rdi, qword[r13+8]
@@ -1129,14 +1131,16 @@
     [label done]
 
     ;; Free our tail expansion
-    "\x4C\x89\xFF"                                                    ; mov rdi, r15
-    "\x48\xB8" [bb/builtin-func-addr/byte-buffer-free]             ; mov rax, bb_free
-    "\xFF\xD0"                                                        ; call rax
+    ;"\x4C\x89\xFF"                                                    ; mov rdi, r15
+    ;"\x48\xB8" [bb/builtin-func-addr/byte-buffer-free]             ; mov rax, bb_free
+    ;"\xFF\xD0"                                                        ; call rax
 
     "\x4C\x89\xE7"                                                    ; mov rdi, r12
     "\x48\xB8"[bb/builtin-func-addr/byte-buffer-get-buf]           ; mov rax, bb_get_buf
     "\xFF\xD0"                                                        ; call rax
     ; return rax
+
+    "\x4C\x01\xF8" ; add rax, r15
 
     "\x48\x83\xC4\x08"                                                ; add rsp, 8
     "\x5B"                                                            ; pop rbx
@@ -1163,14 +1167,9 @@
     "\x49\x89\xF5"                 ; mov r13, rsi  - output byte buffer
     "\x49\xC7\xC6\x40\x00\x00\x00" ; mov r14, 0x40 - init output number to 0100 0000
 
-    ;; Create byte buffer for our tail expansion
-    "\x48\xB8" [bb/builtin-func-addr/byte-buffer-new]              ; mov rax, bb_new
-    "\xFF\xD0"                                                        ; call rax
-    "\x48\x89\x45\xD0"                                               ; mov qword[rbp-48], rax
-
     ;; Create our tail macroexpansion
     "\x4C\x89\xE7"                                                    ; mov rdi, r12
-    "\x48\x8B\x75\xD0"                                                ; mov rsi, qword[rbp-48]
+    "\x4C\x89\xEE"                                                    ; mov rsi, r13
     "\xBA\x02\x00\x00\x00"                                            ; mov rdx, 2 - greedy
     "\xB9\x00\x00\x00\x00"                                            ; mov rcx, 0
     "\x48\xB8" [bb/builtin-func-addr/structural-macro-expand-tail] ; mov rax, expand_tail
@@ -1262,6 +1261,12 @@
      "\xE9" [label-rel-ref element-loop 4 LE]] ; jmp element-loop
     [label element-loop-break]
 
+    ;; Grab our data len so we know what to return later
+    "\x4C\x89\xEF"                                                   ; mov rdi, r13
+    "\x48\xB8"[bb/builtin-func-addr/byte-buffer-get-data-length]     ; mov rax, bb_get_data_len
+    "\xFF\xD0"                                                       ; call rax
+    "\x48\x89\x45\xD0"                                               ; mov qword[rbp-48], rax
+
     ;; Write our output number to output byte buffer as 1-byte barray
     "\x4C\x89\xEF" ; mov rdi, r13
     "\x48\xC7\xC6"[imm 32 1]                                      ; mov rsi, 1
@@ -1273,16 +1278,12 @@
     "\x48\xB8" [bb/builtin-func-addr/byte-buffer-push-int8]   ; mov rax, bb_push_byte
     "\xFF\xD0"                                                   ; call rax
 
-
-    ;; Free our tail expansion
-    "\x48\x8B\x7D\xD0"                                                ; mov rdi, qword[rbp-48]
-    "\x48\xB8" [bb/builtin-func-addr/byte-buffer-free]             ; mov rax, bb_free
-    "\xFF\xD0"                                                        ; call rax
-
     "\x4C\x89\xEF"                                                    ; mov rdi, r13
     "\x48\xB8"[bb/builtin-func-addr/byte-buffer-get-buf]           ; mov rax, bb_get_buf
     "\xFF\xD0"                                                        ; call rax
     ; return rax
+
+    "\x48\x03\x45\xD0" ; add rax, qword[rbp-48]
 
     "\x48\x83\xC4\x08"                                                ; add rsp, 8
     "\x5B"      ; pop rbx
@@ -1310,19 +1311,20 @@
     [REX W B]"\x89\xFC"   ; mov r12, rdi - input structure*
     [REX W B]"\x89\xF5"   ; mov r13, rsi - output byte buffer*
 
-    ;; Create byte buffer for our tail expansion
-    "\x48\xB8" [bb/builtin-func-addr/byte-buffer-new]              ; mov rax, bb_new
-    "\xFF\xD0"                                                        ; call rax
-    "\x48\x89\x45\xD0"                                                ; mov qword[rbp-48], rax
-
     ;; Create our tail macroexpansion
     "\x4C\x89\xE7"                                                    ; mov rdi, r12
-    "\x48\x8B\x75\xD0"                                                ; mov rsi, qword[rbp-48]
+    "\x4C\x89\xEE"                                                    ; mov rsi, r13
     "\xBA\x02\x00\x00\x00"                                            ; mov rdx, 2 - greedy
     "\xB9\x00\x00\x00\x00"                                            ; mov rcx, 0
     "\x48\xB8" [bb/builtin-func-addr/structural-macro-expand-tail] ; mov rax, expand_tail
     "\xFF\xD0"                                                        ; call rax
     "\x49\x89\xC4"                                                    ; mov r12, rax
+
+    ;; Grab our data len so we know what to return later
+    "\x4C\x89\xEF"                                                   ; mov rdi, r13
+    "\x48\xB8"[bb/builtin-func-addr/byte-buffer-get-data-length]     ; mov rax, bb_get_data_len
+    "\xFF\xD0"                                                       ; call rax
+    "\x48\x89\x45\xD0"                                               ; mov qword[rbp-48], rax
 
     ;; Write a placeholder output length
     [REX W R]"\x89\xEF"                                           ; mov rdi, r13
@@ -1544,29 +1546,27 @@
      [REX W R]"\x89\xEF"                                           ; mov rdi, r13
      [REX W]"\xB8"[bb/builtin-func-addr/byte-buffer-get-buf]    ; mov rax, bb_get_buf
      "\xFF\xD0"                                                    ; call rax
+     "\x48\x03\x45\xD0" ; add rax, qword[rbp-48]
      [REX R]"\x08\x70"[imm 8 8]]                                     ; or byte[rax+8], r14b
 
     ;; Update our placeholder length to current data length of byte buffer-8
     [REX W R]"\x89\xEF"                                                ; mov rdi, r13
     [REX W]"\xB8"[bb/builtin-func-addr/byte-buffer-get-data-length] ; mov rax, len
     "\xFF\xD0"                                                         ; call rax
+    "\x48\x2B\x45\xD0" ; sub rax, qword[rbp-48]
     [REX W]"\x83\xE8"[imm 8 8] ; sub rax, 8
 
     [REX W R]"\x89\xEF"                                                ; mov rdi, r13
-    [REX W]"\xC7\xC6"[imm 32 0]                                         ; mov rsi, 0
+    "\x48\x8B\x75\xD0"; mov rsi, qword[rbp-48]
     [REX W]"\x89\xC2"                                                  ; mov rdx, rax
     [REX W]"\xB8"[bb/builtin-func-addr/byte-buffer-write-int64]     ; mov rax, write
     "\xFF\xD0"                                                         ; call rax
 
-    ;; Free our tail expansion
-    "\x48\x8B\x7D\xD0"                                                ; mov rdi, qword[rbp-48]
-    "\x48\xB8" [bb/builtin-func-addr/byte-buffer-free]             ; mov rax, bb_free
-    "\xFF\xD0"                                                        ; call rax
-
     "\x4C\x89\xEF"                                                    ; mov rdi, r13
     "\x48\xB8"[bb/builtin-func-addr/byte-buffer-get-buf]           ; mov rax, bb_get_buf
     "\xFF\xD0"                                                        ; call rax
-    ; return rax
+
+    "\x48\x03\x45\xD0" ; add rax, qword[rbp-48]
 
     "\x48\x83\xC4\x08"                                                ; add rsp, 8
      "\x5B"         ; pop rbx
@@ -2089,6 +2089,7 @@
     [REX W B]"\x8B"[RM rdi r13] ; mov rdi, r13
     [REX W]"\xB8"[bb/builtin-func-addr/byte-buffer-get-data-length]       ; mov rax, bb-get-data-length
     "\xFF"[RM 2 rax]                                                         ; call rax
+    "\x48\x29\xD8" ; sub rax, rbx
     [REX W]"\x83"[RM 5 rax][imm 8 8]                                         ; sub rax, 8
     [REX W]"\xC1"[RM 5 rax][imm 8 3]                                         ; shr rax, 3 - / 8
     [REX W]"\xF7"[RM 2 rax]                                                  ; not rax
@@ -2143,14 +2144,15 @@
    [REX W B]"\x83"[RM 0 r15][imm 8 8]        ; add r15, 8 - move past len
    [REX W B]"\x83"[RM 0 r12][imm 8 16]       ; add r12, 16 - move past len, first element
 
+   [REX W][bb/bsumLE "\xB8" [bregnum rax]][bb/builtin-func-addr/byte-buffer-new]  ; mox rax, bb-new
+   "\xFF"[RM 2 rax]                                                                     ; call rax
+   [REX W]"\x8B"[RM rbx rax]                                                            ; mov rbx, rax
+
    [label param-loop]
    [label-scope
     [REX W B]"\x83"[RM 7 r14][imm 8 0]                                                   ; cmp r14, 0
     "\x0F\x8E"[label-rel-ref param-loop-break 4 LE]                                      ; jle param-loop-break
 
-    [REX W][bb/bsumLE "\xB8" [bregnum rax]][bb/builtin-func-addr/byte-buffer-new]  ; mox rax, bb-new
-    "\xFF"[RM 2 rax]                                                                     ; call rax
-    [REX W]"\x8B"[RM rbx rax]                                                            ; mov rbx, rax
 
     [REX W B]"\x8B"[RM rdi [m64 r12 0 1 0]]                                              ; mov rdi, qword[r12]
     [REX W]"\x8B"[RM rsi rbx]                                                            ; mov rsi, rbx
@@ -2161,14 +2163,6 @@
     [REX W B]"\x8B"[RM rsi [m64 r15 0 1 0]]                                              ; mov rsi, qword[r15]
     [REX W][bb/bsumLE "\xB8" [bregnum rax]][parrays-intersect-p barray-raw-addr 8 LE] ; mov rax, parrays-intersect-p
     "\xFF"[RM 2 rax]                                                                     ; call rax
-
-    "\x50"                                                            ; push rax
-    "\x50"                                                            ; push rax
-    [REX W]"\x8B"[RM rdi rbx]                                                            ; mov rdi, rbx
-    [REX W][bb/bsumLE "\xB8" [bregnum rax]][bb/builtin-func-addr/byte-buffer-free] ; mox rax, bb-free
-    "\xFF"[RM 2 rax]                                                                     ; call rax
-    "\x58"                                                            ; pop rax
-    "\x58"                                                            ; pop rax
 
     [REX W]"\x83"[RM 7 rax][imm 8 1]                                                     ; cmp rax, 1
     "\x0F\x85"[label-rel-ref nope 4 LE]                                                  ; jne nope
@@ -2186,6 +2180,16 @@
    [label nope]
    [REX W]"\xC7"[RM 0 rax][imm 32 0]                                                     ; mov rax, 0
    [label epilogue]
+
+
+   "\x50"                                                            ; push rax
+   "\x50"                                                            ; push rax
+   [REX W]"\x8B"[RM rdi rbx]                                                            ; mov rdi, rbx
+   [REX W][bb/bsumLE "\xB8" [bregnum rax]][bb/builtin-func-addr/byte-buffer-free] ; mox rax, bb-free
+   "\xFF"[RM 2 rax]                                                                     ; call rax
+   "\x58"                                                            ; pop rax
+   "\x58"                                                            ; pop rax
+
    "\x5B"                                                                                ; pop rbx
    [REX B]"\x5F"                                                                         ; pop r15
    [REX B]"\x5E"                                                                         ; pop r14
@@ -2910,7 +2914,4 @@
     [call-abs rax]
 
     [pop r12]
-    [ret]]]]
- 
- 
- ]
+    [ret]]]]]
