@@ -555,3 +555,7 @@ Interestingly, that means that even with this design there are certain situation
     * Maybe we have a build time branch where we switch between:
         * Clean syscalls for linux
         * A single, build-time glue layer for all other platforms that depend on having libc
+* In our high level language, when we define a function, we should be able to have a block of compile-time code that has information to all compile-time information about that function such as parameters passed.
+    * You could define a different implementation (e.g vectorized when possible) of your function at compile-time depending on your params
+    * You could make the function "return" at compile-time in some cases, skipping runtime execution altogether.
+    * This gives you the ability to optimize stuff like crazy without too much compile-time magic and complex aliasing rules. (Are they an alias? Do it the slow way. Else vectorize.)

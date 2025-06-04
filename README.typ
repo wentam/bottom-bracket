@@ -56,6 +56,32 @@
 
     #v(0.5cm)
 
+    Example:
+
+    ```
+     [bb/with
+      [[data my-macro-expansion [a b c]] ; Some data we'll reference
+
+       ;; Macro - written in machine language - that expands to [a b c] by returning
+       ;; a pointer to that structure.
+       [macro my-macro
+        [x86_64-linux
+         [bb/barray-cat
+          "\x48\xB8"[my-macro-expansion addr 8 LE]  ; mov rax, data
+          "\xC3"]]]]
+
+      ;; Using our macro
+      [foo bar [my-macro]]]
+    ```
+
+    Expands to
+
+    ```
+      [foo bar [a b c]]
+    ```
+
+    #v(0.5cm)
+
     #warning-box([
       *Beware: it's not stable yet*
     ], [
@@ -141,11 +167,6 @@ That's it! That's the whole thing!
 
 Emphasis on *default* because users of bottom-bracket have control over this through reader and printer
 macros.
-
-```lisp
-(hello)
-
-```
 
 == The in-memory data structure
 
