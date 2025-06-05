@@ -124,7 +124,7 @@ When we create abstractions, one common approach is to begin with a top-level in
 to have, and then work down towards the layer below working out how to make it happen. This is
 top-down abstraction, and it's the default mode of operation for software development today.
 
-There's another way, though, one pioneered by languages like lisp. Rather than starting from an
+There's another way, though, one pioneered by languages like Lisp and Forth. Rather than starting from an
 ideal interface, we start with what exists now, pick a direction we'd like to go, and start working
 our way up towards a particular problem we'd like to solve. The abstraction that we create is
 simply the abstraction that logically forms when attempting to move in that direction. This is the
