@@ -559,3 +559,4 @@ Interestingly, that means that even with this design there are certain situation
     * You could define a different implementation (e.g vectorized when possible) of your function at compile-time depending on your params
     * You could make the function "return" at compile-time in some cases, skipping runtime execution altogether.
     * This gives you the ability to optimize stuff like crazy without too much compile-time magic and complex aliasing rules. (Are they an alias? Do it the slow way. Else vectorize.)
+* On our way towards C, we could make a stop at a "homoiconic C with macros" level, still using BB structures. It would be a useful language.

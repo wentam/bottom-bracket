@@ -205,7 +205,7 @@ printer macros.
 Examples:
 - [foo bar] - parray of two barrays (foo and bar)
 - ["foo" "bar"] - Exact same data structure using byte strings
-- "\xFF\x00\d042\n" - Byte string using escape codes - represents barray of what's described.
+- "\\xFF\\x00\\d042\\n" - Byte string using escape codes - represents barray of what's described.
 - [] - empty parray
 - [foo [bar baz]] - parray containing nested parray
 
@@ -261,6 +261,8 @@ implementation, but usually the answer is just '`$ make`'.
 
 Also try the example at the top of this README. Put it into a file and `$ cat my-file.bbr | build/bbr`
 
+Also see the programs/ subdirectory in this repository for more examples.
+
 = Structure of this repository
 
 - impl     - implementations of bottom-bracket.
@@ -270,3 +272,4 @@ Also try the example at the top of this README. Put it into a file and `$ cat my
 
 // TODO reader and printer macros
 // TODO make clear macros can use macros, though you can write your macros with your language
+// TODO talk about how you can implement AOT, JIT, interpreted languages
