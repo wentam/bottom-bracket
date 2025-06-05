@@ -167,6 +167,9 @@ Upon execution, bottom bracket performs only 3 steps. Read -> expand macros -> p
 
 Bottom bracket does nothing more. All behavior of the user's language is determined by macros.
 
+If you're implementing an ahead-of-time compiled language like C, the output of the 'print' step
+would likely be an ELF .o file.
+
 = Language details
 
 == The in-memory data structure
