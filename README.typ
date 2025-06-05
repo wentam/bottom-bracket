@@ -6,6 +6,8 @@
           height: auto
           )
 #show heading: set block(below: 16pt)
+#show heading.where(level: 1): set block(above: 40pt)
+#show heading.where(level: 2): set block(above: 20pt)
 #set heading(numbering: "1.")
 
 #let warning-box(title, body) = block[
