@@ -212,7 +212,7 @@ Examples:
 = Bottom-bracket is a minimal core
 
 Implementations of bottom-bracket itself are intended to be minimal. The version written in x86_64
-assembly currently sets around 5,500 lines total.
+assembly currently sits around 5,500 lines total.
 
 Generally speaking, if it can be done inside the BB language and not as a builtin, it should be.
 The builtin macros simply serve as a bootstrapping tool.
