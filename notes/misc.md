@@ -560,3 +560,82 @@ Interestingly, that means that even with this design there are certain situation
     * You could make the function "return" at compile-time in some cases, skipping runtime execution altogether.
     * This gives you the ability to optimize stuff like crazy without too much compile-time magic and complex aliasing rules. (Are they an alias? Do it the slow way. Else vectorize.)
 * On our way towards C, we could make a stop at a "homoiconic C with macros" level, still using BB structures. It would be a useful language.
+* Reader redesign: instead of giving reader macros names of a dispatch char, we should just call all of them one at a time walking down the reader macro stack. They can choose to consume the char or not. They can peek as much as needed.
+    * If nobody consumes the char, error
+    * This allows for arbitrarily complex reader macro dispatch - no more questions about multi-char dispatch or regex or whatever. Each reader macro is effectively the fully flexible king of it's own dispatch.
+    * Reader macro stack should stay small enough that this isn't a perf problem at all.
+    * Extremely flexible.
+* How to expose reader macros to users in the bottom bracket language:
+    * You can define a reader macro with `[bb/with [[reader-macro my-macro my-code]] some-form]`. This pushes the reader macro for the duration of some-form, and pops it after.
+    * Reader macros only effect future calls to 'read'. Note that we are completely done with our initial 'read' and in the macroexpand phase, so these 'read' calls must be explicit.
+        * Simply putting the new code directly in the bb/with form without reading again will *not* apply the new reader macro syntax.
+        * CL also only applies to future calls to read, but see note on CL at bottom of this section to see why we end up with slightly different semantics.
+    * `bb/include` reads, so including a file will have your reader macros apply:
+    ```bottombracket
+        [bb/with [bb/include "nasm-lang.bbr"]
+          [bb/include "my-nasm-code.asm"]]
+    ```
+    * We should define a macro like `[bb/read-barray "code with new syntax as barray"]` so you can get your reader macros inline.
+        * byte strings are not ergonomic for code even though it's semantically what we want, so we should introduce a new syntax designed to make text editors happy.
+        * @'my-code' and @"my-code" could by byte strings that communicate to the text editor to keep going with code highlighting/structural editing
+        * @c'my-c-code' and @nasm'' could even 'inject' that language's structure and syntax highlighting. Treesitter in neovim supports this!
+            * This language prefix wouldn't have any semantic meaning in the bottom bracket language. This is just to explicitly inform your text editor what this byte string represents so you can edit accordingly.
+            * Treesitter injection example:
+            ```c
+            if (5 == 5) { printf("sup", foo); }
+            ```
+            * Treesitter injection already works with bottombracket because we made a treesitter grammar for it :)
+        * Rust-style delimiter-length tagging may be helpful for nesting these strings.
+        * Probably call these "code strings"
+        * This results in the following inline usage if your language is in another file:
+        ```bottombracket
+        [bb/with [bb/include "nasm-lang.bbr"]
+          [bb/read-barray @nasm'
+            section .text
+
+            foo:
+              mov rax, -1
+              ret
+           ']]
+        ```
+        * Ohh, OR: what if we made the @foo'' syntax implicitly do read-barray?
+            * You could even set up a dispatch mechanism - if you sing the right incantation in 'with', @nasm'assembly' now actually pushes the relevant macros and reader macros and thus only locally effect that syntax:
+            ```bottombracket
+            [bb/with
+             [[dispatch nasm [[macro nasm-lang code]
+                              [reader-macro nasm-lang code]]]]
+
+             @nasm'nasm code']
+
+            ```
+
+            * Could also call it 'lang-define' and not dispatch or something like that.
+            * 'dispatch' entries could also implicitly provide a `[with-nasm]` macro that does the same, just without the reader macros.
+                * useful for things like `[with-asm/x86_64]`!
+                * Actually might be needed as an implementation detail anyway. @nasm'some-code' might need to expand into a `[with-nasm foo]` form.
+
+        * This could be seen as a bit of an abstraction leakage needing to explicitly say read-barray. There are solutions though:
+            * nasm-lang.bbr could provide a thin wrapper macro - `[with-nasm-lang @nasm'nasm code']`. The wrapper would push/pop reader macros (and probably all macros it uses) such that outside of that wrapper you're without nasm.
+        * This design avoids a weird property of common lisp: top-level forms are interleaved in CL - read->macroexpand->eval per top-level form before moving to the next - while all other forms are explicitly/serially staged.
+            * The fact that top-level forms are interleaved in staging and all other forms are not is actually a semantic inconsistency and something I'd like to avoid.
+              Hence why we only do one 'read' of one form in bottom bracket.
+            * In common lisp, this means you can *only* use reader macros in later *top-level* forms, which is actually a bit of a weird and arbitrary property.
+                * For example, this means that in CL you can't define a reader macro to use in your current function. Only future top-level functions.
+* How to expose printer macros to users in the bottom bracket language:
+    * Printer macros really only ever apply to the top level. Any subform printer macros defined would be a no-op.
+        * Thus, printer macros in inherently global.
+        * Any complex behavior like subforms that specify with-printer-macros that is only define if that subform happens to get printer would be surprising behavior.
+            * It would be weird if elf-relocatable always printed in it's own special way without byte strings. I simply want to control the printer at the top level.
+            * If we did want to do this though, it would work as follows
+                * There would be a sentinel value the printer understands placed in the structure that pushes the relevant printer macro during printing
+                * When feeding input into a macro call, we strip these sentinel values and just forward on the subforms, because at this point we are not printing them
+                * If the top-level has the sentinel, then the printer uses it.
+    * We probably want a macro like `[bb/print-with [printer-macros] form]` that has a side effect of printing `form` with `[printer-macros]`, then just expands into nothing.
+        * This effectively just replaces the printer with our own.
+        * This means we can print stuff in our special way without digging into global state
+            * Modifying global state is a hard/weird problem to solve in bottom bracket's nested design.
+                * How do I free my new printer macro?
+                * How do I make it semantically make sense to just randomly have a macro somewhere that does this?
+                    * Bottom bracket does not gaurantee ordering and isn't "procedural" in terms of structural expansion. We even plan to parallelize.
+        * This solution means you *can* do weird stuff like print multiple times if you really wanted to.
+* Once we have a clean spec, we should build a really good test suite to test bottom bracket implementations in detail against the spec.

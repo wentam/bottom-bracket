@@ -1,3 +1,4 @@
+* implement bb/print-with
 * add size/length for data entries in bb/with
   * might only make sense for barrays
 * Replace -1 as non-expand sigil: should be 0/NULL ptr now
@@ -62,3 +63,11 @@
   * Should be able to say [data [noexpand exec threadlocal] foo]
 * implement binary format bbrb
 * read() should support producing both absolute and relative pointers, much like structural_macro_expand
+* A macro that expands into nothing at the top level has weird and broken behvaior.
+* barray-cat should accept an element like (align 16) to pad the output to the nearest N bytes.
+* Reader redesign: instead of giving reader macros names of a dispatch char, we should just call all of them one at a time walking down the reader macro stack. They can choose to consume the char or not. They can peek as much as needed.
+    * If nobody consumes the char, error
+    * This allows for arbitrarily complex reader macro dispatch - no more questions about multi-char dispatch or regex or whatever. Each reader macro is effectively the fully flexible king of it's own dispatch.
+* Allow for peeking n chars ahead in buffered_fd_reader
+  * sanity cap might be needed, but should be large
+  * Make sure we can peek a bunch at once, not just per-byte

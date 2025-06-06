@@ -1,0 +1,10 @@
+[bb/with [bb/include "x86_64-asm.bbr"]
+ [bb/with
+  [[data elf-magic "\x7FELF"]
+   [macro elf-header
+    [x86_64-linux
+     [asm/x86_64
+      [mov rax -1]
+      [ret]]]]]
+
+  [[elf-header]]]]

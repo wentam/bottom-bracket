@@ -198,6 +198,9 @@ but can still handle the case of zero-length parrays.
 Emphasis on *default* because users of bottom-bracket have control over this through reader and
 printer macros.
 
+Note: reader and printer macros aren't properly exposed to the user bottom bracket yet. This is still
+WIP, though the design for how this will work is generally set.
+
 - Square brackets [] deliminate parrays.
 - All other characters besides whitespace placed next to eachother represent barrays
 - Double-quoted strings - byte strings - represent barrays and can use escape codes for bytes.
