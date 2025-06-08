@@ -587,6 +587,8 @@ Interestingly, that means that even with this design there are certain situation
             * Treesitter injection already works with bottombracket because we made a treesitter grammar for it :)
         * Rust-style delimiter-length tagging may be helpful for nesting these strings.
         * Probably call these "code strings"
+        * If we use { and } or other bracket/pair symbol, we can allow for arbitrary nesting without messing up the parser - @foo{ my code { } foo } - as long as the brackets stay nested the parser remains happy.
+            * non-paired { and } are rare cases in any language.
         * This results in the following inline usage if your language is in another file:
         ```bottombracket
         [bb/with [bb/include "nasm-lang.bbr"]

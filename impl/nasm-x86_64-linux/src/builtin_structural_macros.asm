@@ -53,6 +53,7 @@ extern kv_stack_top_value
 extern kv_stack_value_by_id
 
 extern macro_stack_structural
+extern macro_stack_printer
 
 extern assert_stack_aligned
 
@@ -98,6 +99,7 @@ arch_expansion: db 6,0,0,0,0,0,0,0,"x86_64"
 platform_macro_name: db 11,0,0,0,0,0,0,0,"bb/platform"
 arch_macro_name: db 7,0,0,0,0,0,0,0,"bb/arch"
 include_macro_name: db 10,0,0,0,0,0,0,0,"bb/include"
+print_with_macro_name: db 13,0,0,0,0,0,0,0,"bb/print-with"
 
 parray_element: db 3,0,0,0,0,0,0,0,"foo"
 parray_element_2: db 4,0,0,0,0,0,0,0,"foo2"
@@ -182,8 +184,16 @@ with_macros_impl_spec_platform_not_barray_error_len:  equ $ - with_macros_impl_s
 with_macros_impl_spec_machine_code_not_barray_error: db "ERROR: Third element of macro definition in bb/with is not a barray. Should be a barray of machine code for the given platform.",10
 with_macros_impl_spec_machine_code_not_barray_error_len:  equ $ - with_macros_impl_spec_machine_code_not_barray_error
 
-with_macros_unsupported_platform_error: db "ERROR: Attempt to expand a macro that doesn't have an implementation for a platform we support. Supported platforms: x86_64-linux."
+with_macros_unsupported_platform_error: db "ERROR: Attempt to expand a macro that doesn't have an implementation for a platform we support. Supported platforms: x86_64-linux.",10
 with_macros_unsupported_platform_error_len: equ $ - with_macros_unsupported_platform_error
+
+
+print_with_bad_input_error: db "ERROR: Bad input to bb/print-with.",10
+print_with_bad_input_error_len: equ $ - print_with_bad_input_error
+
+print_with_no_impl_error: db "ERROR: Unable to find implementation for platform we support in bb/print-with. We support: x86_64-linux.",10
+print_with_no_impl_error_len: equ $ - print_with_no_impl_error
+
 
 with_macros_supported_platform_barray: db 12,0,0,0,0,0,0,0,"x86_64-linux"
 
@@ -279,6 +289,16 @@ push_builtin_structural_macros:
   mov qword[rsp+8], include
   mov rdi, qword[macro_stack_structural]    ; macro stack
   mov rsi, include_macro_name ; macro name
+  mov rdx, rsp                              ; code
+  call kv_stack_push
+  add rsp, 16
+
+  ;; Push print_with macro
+  sub rsp, 16
+  mov qword[rsp], 8
+  mov qword[rsp+8], print_with
+  mov rdi, qword[macro_stack_structural]    ; macro stack
+  mov rsi, print_with_macro_name ; macro name
   mov rdx, rsp                              ; code
   call kv_stack_push
   add rsp, 16
@@ -2662,6 +2682,8 @@ withm:
   mov r13, rsi ; r13 = output byte buffer
 
   ;; Return -1 for no expansion if we have < 3 elements in our input structure
+  ;; TODO This is wrong. Defining stuff using side-effect macros should still produce their
+  ;; side-effects!
   cmp qword[r12], -4
   mov rax, -1
   jg .epilogue
@@ -2881,3 +2903,233 @@ include:
   pop rbp
   ret
 
+_print_with_push_macro:
+  push rbp
+  mov rbp, rsp
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+  sub rsp, 8
+
+  mov r12, rdi ; printer macro spec - [barray [x86_64-linux code] [rv32 code]]
+  mov r13, rsi ; macro id byte buffer
+
+  ;; Error if input not parray of at least 2 elements
+  cmp qword[r12], -3
+  jle .good_len
+
+  mov rdi, print_with_bad_input_error
+  mov rsi, print_with_bad_input_error_len
+  call error_exit
+
+  .good_len:
+  ;; Error if first element of parray is not a barray (macro name)
+  mov rdi, qword[r12+8]
+  cmp qword[rdi], 0
+  jge .good_first_el
+
+  mov rdi, print_with_bad_input_error
+  mov rsi, print_with_bad_input_error_len
+  call error_exit
+
+  .good_first_el:
+
+  ;; Store our name to use for the macro name
+  mov rdi, qword[r12+8]
+  mov qword[rbp-48], rdi
+
+  ;; Iterate over implementations (tail of our input)
+  mov r14, qword[r12]
+  not r14
+  dec r14
+  add r12, 16 ; move past len, first element
+
+  .impl_loop:
+    cmp r14, 0
+    jle .impl_loop_break
+
+    mov r15, qword[r12] ; r15 = implementation parray like [x86_64-linux code]
+
+    ;; Error if implementation not a parray of length 2
+    cmp qword[r15], -3
+    je .good_impl_len
+    mov rdi, print_with_bad_input_error
+    mov rsi, print_with_bad_input_error_len
+    call error_exit
+    .good_impl_len:
+
+    ;; Error if code not a barray
+    mov rdi, qword[r15+16]
+    cmp qword[rdi], 0
+    jge .code_is_barray
+    mov rdi, print_with_bad_input_error
+    mov rsi, print_with_bad_input_error_len
+    call error_exit
+    .code_is_barray:
+
+    ;; Continue if we don't support this platform
+    mov rdi, qword[r15+8]
+    mov rsi, platform_expansion
+    call barray_equalp
+    cmp rax, 1
+    jne .impl_loop_continue
+
+    ;; Push the implementation
+    mov rsi, qword[r15+16] ; rsi = code barray
+    mov rdi, qword[rsi]
+    call malloc
+    mov rbx, rax ; rbx = code allocation
+
+    mov rdi, qword[r15+16] ; rdi = code barray
+    mov rsi, rbx
+    call barray_deposit_bytes
+
+    sub rsp, 16
+    mov qword[rsp], 8
+    mov qword[rsp+8], rbx
+    mov rdi, qword[macro_stack_printer] ; macro stack
+    mov rsi, qword[rbp-48]              ; macro name barray
+    mov rdx, rsp
+    call kv_stack_push
+    add rsp, 16
+
+    ;; Store the macro id
+    mov rdi, r13
+    mov rsi, rax
+    call byte_buffer_push_int64
+
+    ;; All good
+    jmp .good
+
+    .impl_loop_continue
+    add r12, 8
+    dec r14
+    jmp .impl_loop
+  .impl_loop_break:
+
+  .bad:
+  ;; Error if we get here, we failed to find an implementation for this platform
+  mov rdi, print_with_no_impl_error
+  mov rsi, print_with_no_impl_error_len
+  call error_exit
+  jmp .epilogue
+  .good:
+  .epilogue:
+  add rsp, 8
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  pop rbp
+  ret
+
+print_with:
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+
+  mov r12, rdi ; input structure
+  mov r13, rsi ; byte buffer
+
+  ;; Macroexpand tail of our input
+  ;mov rdi, r12
+  ;mov rsi, r13
+  mov rdx, 2 ; greedy
+  mov rcx, 0 ; absolute pointers
+  call structural_macro_expand_tail
+  mov r12, rax ; r12 = macroexpanded tail
+
+  ;; Error if our input structure tail does not have at least 2 element
+  cmp qword[r12], -2
+  jle .good_len
+
+  mov rdi, print_with_bad_input_error
+  mov rsi, print_with_bad_input_error_len
+  call error_exit
+
+  .good_len:
+
+  ;; Create byte buffer to track macro ids
+  call byte_buffer_new
+  mov rbx, rax
+
+  ;; Iterate over user-specified printer macros
+  mov r15, qword[r12+8]
+  mov r14, qword[r15]
+  not r14
+  add r15, 8 ; move past len
+
+  .push_loop:
+  cmp r14, 0
+  jle .push_loop_break
+
+  ;; Push macro
+  ;; rdi = printer macro spec - [barray [x86_64-linux code] [rv32 code]]
+  mov rdi, qword[r15] ; rdi = printer macro spec
+  mov rsi, rbx ; macro id byte buffer
+  call _print_with_push_macro
+
+  add r15, 8
+  dec r14
+  jmp .push_loop
+  .push_loop_break:
+
+  ;; If our input structure tail has a 2nd element, print it.
+  cmp qword[r12], -3
+  jg .no_print
+
+  mov rdi, qword[r12+16]
+  mov rsi, 2
+  call print
+
+  .no_print:
+
+  ;; Pop our user-specifed printer macros
+  mov rdi, rbx
+  call byte_buffer_get_data_length
+  mov r15, rax
+  shr r15, 3 ;; / 8
+
+  mov rdi, rbx
+  call byte_buffer_get_buf
+  mov r14, rax
+
+  .pop_loop:
+  cmp r15, 0
+  jle .pop_loop_break
+
+  ;; Free the macro's allocation
+  mov rdi, qword[macro_stack_printer]
+  mov rsi, qword[r14] ; rdi = id
+  call kv_stack_value_by_id
+
+  mov rdi, qword[rax+8]
+  call free
+
+  ;; Pop the macro
+  mov rdi, qword[macro_stack_printer]
+  mov rsi, qword[r14] ; rdi = id
+  call kv_stack_pop_by_id
+
+  add r14, 8
+  dec r15
+  jmp .pop_loop
+  .pop_loop_break:
+
+  ;; Free id byte buffer
+  mov rdi, rbx
+  call byte_buffer_free
+
+  ;; Expand into nothing. We don't want the main printer to print us, because we already printed.
+  mov rax, -1
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  ret

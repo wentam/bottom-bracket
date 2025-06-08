@@ -93,7 +93,7 @@
       Eventually the hope is to build a stable specification for everyone to implement.
 
       Such that you're not flying completely blind, here are some anticipated breaking changes:
-      - Parallelized macroexpansion where possible
+      - Parallelized macroexpansion where possible (with serial escape hatch)
       - Macro I/O details (inputs, return value etc).
       - Changes to parameters and interfaces of builtin functions
       - Changes to which builtin functions are exposed

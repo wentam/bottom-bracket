@@ -50,7 +50,9 @@ barray_new:
 ;;; barray_deposit_bytes(barray*, to*)
 ;;;
 ;;;   Writes this barray's bytes (just the raw bytes, not the length) to the
-;;    memory at to*.
+;;;    memory at to*.
+;;;
+;;; TODO: use rep movsb
 barray_deposit_bytes:
   sub rsp, 8
 

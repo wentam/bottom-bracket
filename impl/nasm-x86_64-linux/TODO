@@ -71,3 +71,6 @@
 * Allow for peeking n chars ahead in buffered_fd_reader
   * sanity cap might be needed, but should be large
   * Make sure we can peek a bunch at once, not just per-byte
+* withm doesn't quite handle the `[bb/with [stuff]]` case correctly. See TODO in function.
+* use a hashmap index for names in kv_stack
+* kv_stack could probably be simplified to just store a pointer as it's value instead of a barray. That's all we use it for anyway.
