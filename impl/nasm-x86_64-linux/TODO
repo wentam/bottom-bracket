@@ -1,4 +1,6 @@
-* implement bb/print-with
+* clean up x86_64 assembler
+  * finish docs
+* use a hashmap index for names in kv_stack
 * add size/length for data entries in bb/with
   * might only make sense for barrays
 * Replace -1 as non-expand sigil: should be 0/NULL ptr now
@@ -56,6 +58,7 @@
   * You can pass multiple unrelated functions the same byte buffer if they just append.
   * Set our allocator's spill threshold to 0 and use strace -c to observe how many allocations are happening. Try to minimize this.
 * Rename byte buffer to "arena". It's basically an arena allocator and clarifies our intended access/usage patterns. Also shorter.
+  * maybe instead of arena-push-int8 we say arena-push-i8
 * We might be able to use arenas/byte buffers and caller-owned memory pretty much everywhere we currently use malloc. More faster.
 * clean up all the commonts and unused strings in src/bbr.asm
 * Set up safe_call macro instead of our current stack alignment audit strategy
@@ -63,7 +66,6 @@
   * Should be able to say [data [noexpand exec threadlocal] foo]
 * implement binary format bbrb
 * read() should support producing both absolute and relative pointers, much like structural_macro_expand
-* A macro that expands into nothing at the top level has weird and broken behvaior.
 * barray-cat should accept an element like (align 16) to pad the output to the nearest N bytes.
 * Reader redesign: instead of giving reader macros names of a dispatch char, we should just call all of them one at a time walking down the reader macro stack. They can choose to consume the char or not. They can peek as much as needed.
     * If nobody consumes the char, error
@@ -72,5 +74,4 @@
   * sanity cap might be needed, but should be large
   * Make sure we can peek a bunch at once, not just per-byte
 * withm doesn't quite handle the `[bb/with [stuff]]` case correctly. See TODO in function.
-* use a hashmap index for names in kv_stack
 * kv_stack could probably be simplified to just store a pointer as it's value instead of a barray. That's all we use it for anyway.

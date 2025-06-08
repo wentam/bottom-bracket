@@ -3084,7 +3084,7 @@ print_with:
   jg .no_print
 
   mov rdi, qword[r12+16]
-  mov rsi, 2
+  mov rsi, 1
   call print
 
   .no_print:

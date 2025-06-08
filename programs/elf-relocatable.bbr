@@ -1,10 +1,330 @@
+;; TODO once we have a portable abstraction like an IR, we should rewrite this portably instead
+;; of using x86_64 assembly
+
 [bb/with [bb/include "x86_64-asm.bbr"]
- [bb/with
-  [[data elf-magic "\x7FELF"]
-   [macro elf-header
+
+ ;; We use a printer macro that just prints the raw bytes so we can write our raw ELF to disk.
+ [bb/print-with
+  [[barray
     [x86_64-linux
      [asm/x86_64
-      [mov rax -1]
+      [push r12]
+      [push r13]
+      [push r14]
+
+      [mov r12 rdi] ; barray*
+      [mov r13 rsi] ; fd
+      [mov r14 [m64 r12 0 1 0]] ; r14 = barray len
+      [add r12 8] ; move past len
+
+      [label write-loop]
+      [label-scope
+       [mov rdx r14] ; len
+       [mov rsi r12] ; str
+       [mov rdi r13] ; fd
+       [mov rax 1] ; sys_write
+       [syscall]
+
+       [sub r14 rax] ; update remaining string len
+       [add r12 rax] ; update pointer to remaining string
+       [cmp r14 0]
+       [jg-rel write-loop]]
+
+      [pop r14]
+      [pop r13]
+      [pop r12]
       [ret]]]]]
 
-  [[elf-header]]]]
+  [bb/with
+   [[data elf-magic "\x7FELF"]
+    [data elf-header-macro-bad-input "\nERROR: Bad input to elf-header/* macro.\n"]
+    [data funcall-abs-bad-input      "\nERROR: Bad input to funcall-abs macro.\n"]
+    [data barray-32 "32"]
+    [data barray-64 "64"]
+    [data barray-LSB "LSB"]
+    [data barray-MSB "MSB"]
+
+    ;; Prints error barray (rdi) and exits
+    [data error-exit-fn
+     [asm/x86_64
+      ;; Print input barray (rdi)
+      [mov rdx [m64 rdi 0 1 0]]
+      [add rdi 8]   ; move past len
+      [mov rsi rdi] ; str
+      [mov rdi 2]   ; fd (stderr)
+      [mov rax 1]   ; sys_write
+      [syscall]
+
+      ;; Exit 1
+      [mov rdi 1] ; exit code
+      [mov rax 60] ; sys_exit
+      [syscall]
+
+      [ret]]]
+
+
+    ;; TODO hmm what if we...
+    ;;[funcall-abs [raw-imm [bb/builtin-func-addr/structural-macro-expand-tail]] r12 r13 2 0]
+    ;;[mov r12 rax]
+
+    ;; NOTE: this stuff will need to be thread-local once we add parallel macroexpansion
+
+    [data funcall-abs-args [[mov rdi a]
+                            [mov rsi a]
+                            [mov rdx a]
+                            [mov rcx a]
+                            [mov r8 a]
+                            [mov r9 a]]]
+
+    [data funcall-mov-abs [mov-abs rax a]]
+    [data funcall-call-abs [call-abs rax]]
+
+    [data barray-label-scope "label-scope"]
+
+    ;; [funcall-abs <function-addr-operand> <arg1> <arg2> <arg3> <arg4> <arg5> <arg6>]
+    ;;
+    ;; Expands into a label scope parray so you can use it inside assembler - label scope
+    ;; serves as a splicing mechanism, basically.
+    [macro funcall-abs
+     [x86_64-linux
+      [asm/x86_64
+       [push rbp]
+       [mov rbp rsp]
+       [push r12] [push r13] [push r14] [push r15] [push rbx]
+       [sub rsp 24]
+
+       [mov r12 rdi] [mov r13 rsi] ; input structure, buffer
+
+       [mov rbx -1] ; parray size counter
+
+       ;; Macroexpand tail of input
+       [mov rdi r12] [mov rsi r13] [mov rdx 2] [mov rcx 0] ; greedy, abs
+       [mov rax [raw-imm [bb/builtin-func-addr/structural-macro-expand-tail]]]
+       [call-abs rax]
+       [mov r12 rax]
+
+       ;; Error if tail not at least 1 element long
+       [cmp [m64 r12 0 1 0] -2]
+       [jle-rel good-len]
+       [mov rdi [raw-imm [funcall-abs-bad-input addr 8 LE]]]
+       [mov rax [raw-imm [error-exit-fn barray-raw-addr 8 LE]]]
+       [call-abs rax]
+       [label good-len]
+
+       ;; Get data length so we know where our data starts
+       [mov rdi r13]
+       [mov rax [raw-imm [bb/builtin-func-addr/byte-buffer-get-data-length]]]
+       [call-abs rax]
+       [mov r14 rax] ; r14 = relptr to our output
+
+       ;; Write parray placeholder length
+       [mov rdi r13]
+       [mov rsi -1]
+       [mov rax [raw-imm [bb/builtin-func-addr/byte-buffer-push-int64]]]
+       [call-abs rax]
+
+       ;; Write leading 'label-scope' barray pointer
+       [mov rdi r13]
+       [mov rsi [raw-imm [barray-label-scope addr 8 LE]]]
+       [mov rax [raw-imm [bb/builtin-func-addr/byte-buffer-push-int64]]]
+       [call-abs rax]
+       [sub rbx 1]
+
+       ;; Iterate over args and generate movs for them
+       [mov rsi 6]
+       [mov rdi [m64 r12 0 1 0]]
+       [not rdi]
+       [dec rdi] ; name is not an arg
+       [cmp rdi rsi]
+       [cmova rdi rsi] ; Clamp to 6 args
+       [mov [m64 rbp 0 1 -48] rdi] ; qword[rbp-48] = arg count
+       [mov [m64 rbp 0 1 -64] r12]
+       [add [m64 rbp 0 1 -64] 16] ; move past length, name
+
+       [mov rdi [raw-imm [funcall-abs-args addr 8 LE]]]
+       [mov [m64 rbp 0 1 -56] rdi] ; args template
+       [add [m64 rbp 0 1 -56] 8] ; move past length
+
+       [label argloop]
+       [label-scope
+        [cmp [m64 rbp 0 1 -48] 0]
+        [jle-rel argloop-break]
+
+        [mov rdx [m64 rbp 0 1 -56]] ; rdx = pointer to template entry pointer
+        [mov rdi [m64 rdx 0 1 0]]   ; rdi = template entry*
+        [mov rdx [m64 rbp 0 1 -64]]
+        [mov rsi [m64 rdx 0 1 0]]   ; rsi = arg*
+        [mov [m64 rdi 0 1 24] rsi]  ; update template entry with rag
+
+        [mov rsi rdi]
+        [mov rdi r13]
+        [mov rax [raw-imm [bb/builtin-func-addr/byte-buffer-push-int64]]]
+        [call-abs rax]
+        [sub rbx 1]
+
+        [add [m64 rbp 0 1 -56] 8]
+        [add [m64 rbp 0 1 -64] 8]
+        [dec [m64 rbp 0 1 -48]]
+        [jmp-rel argloop]]
+       [label argloop-break]
+
+       ;; Generate [mov-abs rax <function-addr-operand>]
+       [mov rdi [raw-imm [funcall-mov-abs addr 8 LE]]]
+       [mov rsi [m64 r12 0 1 8]]
+       [mov [m64 rdi 0 1 24] rsi]
+
+       [mov rdi r13]
+       [mov rsi [raw-imm [funcall-mov-abs addr 8 LE]]]
+       [mov rax [raw-imm [bb/builtin-func-addr/byte-buffer-push-int64]]]
+       [call-abs rax]
+       [sub rbx 1]
+
+       ;; Generate [call-abs rax]
+       [mov rdi r13]
+       [mov rsi [raw-imm [funcall-call-abs addr 8 LE]]]
+       [mov rax [raw-imm [bb/builtin-func-addr/byte-buffer-push-int64]]]
+       [call-abs rax]
+       [sub rbx 1]
+
+       ;; Update parray length value in output
+       [mov rdi r13]
+       [mov rsi r14]
+       [mov rdx rbx]
+       [mov rax [raw-imm [bb/builtin-func-addr/byte-buffer-write-int64]]]
+       [call-abs rax]
+
+       ;; Return pointer to our output parray in our output byte buffer
+       [mov rdi r13]
+       [mov rax [raw-imm [bb/builtin-func-addr/byte-buffer-get-buf]]]
+       [call-abs rax]
+       [add rax r14]
+
+       [add rsp 24]
+       [pop rbx] [pop r15] [pop r14] [pop r13] [pop r12]
+       [pop rbp]
+       [ret]]]]
+
+    ;; [elf-header/EI_DATA LSB|MSB]
+    [macro elf-header/e_ident/EI_DATA
+     [x86_64-linux
+      [asm/x86_64
+       [push r12] [push r13] [push r14]
+
+       [mov r12 rdi] [mov r13 rsi] ; input structure, buffer
+
+       ;; Macroexpand tail
+       [funcall-abs [raw-imm [bb/builtin-func-addr/structural-macro-expand-tail]] r12 r13 2 0]
+       [mov r12 rax]
+
+       ;; If our tail isn't exactly 1 element, error
+       [cmp [m64 r12 0 1 0] -2]
+       [je-rel good-len]
+       [funcall-abs [raw-imm [error-exit-fn barray-raw-addr 8 LE]]
+                    [raw-imm [elf-header-macro-bad-input addr 8 LE]]]
+       [label good-len]
+
+       ;; Get data length so we can form our return pointer
+       [funcall-abs [raw-imm [bb/builtin-func-addr/byte-buffer-get-data-length]] r13]
+       [mov r14 rax] ; r14 = relptr to our output
+
+       ;; Output length of 1
+       [funcall-abs [raw-imm [bb/builtin-func-addr/byte-buffer-push-int64]] r13 1]
+
+       ;; If our 1 element is a barray of 'LSB', output '1' byte
+       [funcall-abs [raw-imm [bb/builtin-func-addr/barray-equalp]]
+                    [raw-imm [barray-LSB addr 8 LE]]
+                    [m64 r12 0 1 8]]
+       [cmp rax 0]
+       [je-rel not-LSB]
+       [funcall-abs [raw-imm [bb/builtin-func-addr/byte-buffer-push-int8]] r13 1]
+       [jmp-rel good-output]
+       [label not-LSB]
+
+       ;; If our 1 element is a barray of 'BE', output '2' byte
+       [funcall-abs [raw-imm [bb/builtin-func-addr/barray-equalp]]
+                    [raw-imm [barray-MSB addr 8 LE]]
+                    [m64 r12 0 1 8]]
+       [cmp rax 0]
+       [je-rel not-MSB]
+       [funcall-abs [raw-imm [bb/builtin-func-addr/byte-buffer-push-int8]] r13 2]
+       [jmp-rel good-output]
+       [label not-MSB]
+
+       ;; Error if we get here
+       [funcall-abs [raw-imm [error-exit-fn barray-raw-addr 8 LE]]
+                    [raw-imm [elf-header-macro-bad-input addr 8 LE]]]
+
+       [label good-output]
+
+       ;; Grab our raw buffer to form our output pointer
+       [funcall-abs [raw-imm [bb/builtin-func-addr/byte-buffer-get-buf]] r13]
+       [add rax r14]
+
+       [pop r14] [pop r13] [pop r12]
+       [ret]]]]
+
+    ;; [elf-header/EI_CLASS 32|64]
+    [macro elf-header/e_ident/EI_CLASS
+     [x86_64-linux
+      [asm/x86_64
+       [push r12] [push r13] [push r14]
+
+       [mov r12 rdi] [mov r13 rsi] ; input structure, buffer
+
+       ;; Macroexpand tail
+       [funcall-abs [raw-imm [bb/builtin-func-addr/structural-macro-expand-tail]] r12 r13 2 0]
+       [mov r12 rax]
+
+       ;; If our tail isn't exactly 1 element, error
+       [cmp [m64 r12 0 1 0] -2]
+       [je-rel good-len]
+       [funcall-abs [raw-imm [error-exit-fn barray-raw-addr 8 LE]] [raw-imm [elf-header-macro-bad-input addr 8 LE]]]
+       [label good-len]
+
+       ;; Get data length so we can form our return pointer
+       [funcall-abs [raw-imm [bb/builtin-func-addr/byte-buffer-get-data-length]] r13]
+       [mov r14 rax] ; r14 = relptr to our output
+
+       ;; Output length of 1
+       [funcall-abs [raw-imm [bb/builtin-func-addr/byte-buffer-push-int64]] r13 1]
+
+       ;; If our 1 element is a barray of '32', output '1' byte
+       [funcall-abs [raw-imm [bb/builtin-func-addr/barray-equalp]]
+                    [raw-imm [barray-32 addr 8 LE]]
+                    [m64 r12 0 1 8]]
+       [cmp rax 0]
+       [je-rel not-32]
+       [funcall-abs [raw-imm [bb/builtin-func-addr/byte-buffer-push-int8]] r13 1]
+       [jmp-rel good-output]
+       [label not-32]
+
+       ;; If our 1 element is a barray of '64', output '2' byte
+       [funcall-abs [raw-imm [bb/builtin-func-addr/barray-equalp]]
+                    [raw-imm [barray-64 addr 8 LE]]
+                    [m64 r12 0 1 8]]
+       [cmp rax 0]
+       [je-rel not-64]
+       [funcall-abs [raw-imm [bb/builtin-func-addr/byte-buffer-push-int8]] r13 2]
+       [jmp-rel good-output]
+       [label not-64]
+
+       ;; Error if we get here
+       [funcall-abs [raw-imm [error-exit-fn barray-raw-addr 8 LE]]
+                    [raw-imm [elf-header-macro-bad-input addr 8 LE]]]
+
+       [label good-output]
+
+       ;; Grab our raw buffer to form our output pointer
+       [funcall-abs [raw-imm [bb/builtin-func-addr/byte-buffer-get-buf]] r13]
+       [add rax r14]
+
+       [pop r14] [pop r13] [pop r12]
+       [ret]]]]]
+
+   ;[funcall-abs [raw-imm [bb/builtin-func-addr/byte-buffer-get-buf]] r8 rsi r10 r9 rsi rsi]
+   [bb/barray-cat
+    [elf-magic]
+    [elf-header/e_ident/EI_CLASS 64]
+    [elf-header/e_ident/EI_DATA LSB]
+    ]
+   ]]]

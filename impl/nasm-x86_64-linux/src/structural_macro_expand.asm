@@ -23,12 +23,15 @@ extern write_char
 extern parray_tail_new
 
 extern free
+extern write
 
 section .bss
 
 expand_count: resb 8
 
 section .rodata
+
+dump_str: dq 17, " macros expanded",10
 
 section .text
 
@@ -62,6 +65,7 @@ structural_macro_expand:
   cmp rax, -1
   jne .not_nothing
   mov rax, 0
+  jmp .done
   .not_nothing:
 
   mov r14, rax ; expansion relative ptr
@@ -381,5 +385,12 @@ dump_expand_count:
  mov rdx, 2
  mov rcx, 0
  call write_as_base
+
+ mov rsi, qword[dump_str]
+ mov rdi, dump_str
+ add rdi, 8
+ mov rdx, 2
+ call write
+
  ret
 

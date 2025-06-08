@@ -294,6 +294,7 @@ Interestingly, that means that even with this design there are certain situation
         * Could go even further: (mov rdi (label-ref foo)) -> (splice ("\xFF\xFF" (label-rel-ref foo 4 LE)))
         * It's debatable if this is a good design for an assembler though, as in this case we're making the assumption that the instruction is ending up inside a barray-cat - and making assumptions about our expansion environment is usually a bad
           design.
+    * ....actually, label-scope is already splice. You just can't introduce global labels.
 * for better error reporting, we should maintain a "macro call stack" in memory, probably using kv_stack. Every time we call a macro, it enters the stack, removed when it returns.
     * This means we need a standard "call structural macro" interface, don't pull it out of your kv_stack. Maybe put this in structural_macro_expand's file - and call it structural_macro_call.
     * error-exit/error_exit should dump this stack on error.
@@ -641,3 +642,6 @@ Interestingly, that means that even with this design there are certain situation
                     * Bottom bracket does not gaurantee ordering and isn't "procedural" in terms of structural expansion. We even plan to parallelize.
         * This solution means you *can* do weird stuff like print multiple times if you really wanted to.
 * Once we have a clean spec, we should build a really good test suite to test bottom bracket implementations in detail against the spec.
+* What if instead of our current bb/print-with macro, you defined printer macros with regular 'bb/with', and we also provided bb/print to print a subform immediately
+    * Better code-reuse in implementation, more flexible I think
+    * Might break assumptions of code within that also call the printer?

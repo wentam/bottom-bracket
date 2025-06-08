@@ -145,7 +145,6 @@ barray:
 
   pop r12
   ret
-barray_end:
 
 ;;; barray_with_byte_strings(*data, fd)
 barray_with_byte_strings:
