@@ -62,10 +62,95 @@
 
       [ret]]]
 
+    ;; TODO ascii-to-digit-fn and parse-in-fn are already defined in the assembler in machine
+    ;; language. We should probably pull the machine language ones into their own file
+    ;; and share them so we don't need to implement them here.
 
-    ;; TODO hmm what if we...
-    ;;[funcall-abs [raw-imm [bb/builtin-func-addr/structural-macro-expand-tail]] r12 r13 2 0]
-    ;;[mov r12 rax]
+    [data ascii-to-digit-fn
+     [asm/x86_64
+      [mov rax rdi]
+
+      [cmp rax 57]
+      [jg-rel as-uppercase-letter]
+
+      [sub rax 48]
+      [ret]
+
+      [label as-uppercase-letter]
+      [cmp rax 90]
+      [jg-rel as-lowercase-letter]
+
+      [sub rax 55]
+      [ret]
+
+      [label as-lowercase-letter]
+      [sub rax 87]
+      [ret]]]
+
+    ;; parses a signed ascii integer from barray in rdi assuming it is in base rsi
+    [data parse-int-fn
+     [asm/x86_64
+      [push r12]
+      [push r13]
+      [push r14]
+      [push r15]
+      [push rbx]
+
+      [mov r12 rdi] ; input barray
+      [mov r13 rsi] ; base
+
+      [mov r15 [m64 r12 0 1 0]] ; r15 = barray length
+      [add r12 8]               ; move past length
+
+      [xor r14 r14] ; result TODO add to instruction table
+      [mov rbx 1]   ; multiplier
+
+      [label loop]
+      [label-scope
+       [cmp r15 0]
+       [je-rel loop-break]
+
+       ;; If r15 == 1 [the last char], and the char is '-', take the two's complement of
+       ;; the result and break the loop.
+
+       [cmp r15 1]
+       [jne-rel not-neg]
+       [cmp [m8 r12 r15 1 -1] [raw-imm "-"]] ; TODO add to instruction table
+       [jne-rel not-neg]
+
+       [neg r14]
+       [jmp-rel loop-break]
+
+       [label not-neg]
+
+       ;; Parse digit
+       [xor rdi rdi]
+       [mov dil [m8 r12 r15 1 -1]]
+       [mov rax [raw-imm [ascii-to-digit-fn barray-raw-addr 8 LE]]]
+       [call-abs rax]
+
+       ;; TODO error if digit >= base?
+       ;; TODO error if digit < 0?
+
+       [mul rbx]
+       [add r14 rax]
+
+       ;;; Update multiplier
+       [mov rax rbx]
+       [mul r13]
+       [mov rbx rax]
+
+       [dec r15]
+       [jmp-rel loop]]
+      [label loop-break]
+
+      [mov rax r14]
+      [pop rbx]
+      [pop r15]
+      [pop r14]
+      [pop r13]
+      [pop r12]
+      [ret]]]
 
     ;; NOTE: this stuff will need to be thread-local once we add parallel macroexpansion
 
@@ -204,6 +289,43 @@
        [pop rbp]
        [ret]]]]
 
+    ;; [elf-header/EI_VERSION base-10-ascii-num]
+    [macro elf-header/e_ident/EI_VERSION
+     [x86_64-linux
+      [asm/x86_64
+       [push r12] [push r13] [push r14]
+
+       [mov r12 rdi] [mov r13 rsi] ; input structure, buffer
+
+       ;; Macroexpand tail
+       [funcall-abs [raw-imm [bb/builtin-func-addr/structural-macro-expand-tail]] r12 r13 2 0]
+       [mov r12 rax]
+
+       ;; If our tail isn't exactly 1 element, error
+       [cmp [m64 r12 0 1 0] -2]
+       [je-rel good-len]
+       [funcall-abs [raw-imm [error-exit-fn barray-raw-addr 8 LE]]
+                    [raw-imm [elf-header-macro-bad-input addr 8 LE]]]
+       [label good-len]
+
+       ;; Get data length so we can form our return pointer
+       [funcall-abs [raw-imm [bb/builtin-func-addr/byte-buffer-get-data-length]] r13]
+       [mov r14 rax] ; r14 = relptr to our output
+
+       ;; Output length of 1
+       [funcall-abs [raw-imm [bb/builtin-func-addr/byte-buffer-push-int64]] r13 1]
+
+       ;; Parse our input as base 10 ascii, output it
+       [funcall-abs [raw-imm [parse-int-fn barray-raw-addr 8 LE]] [m64 r12 0 1 8] 10]
+       [funcall-abs [raw-imm [bb/builtin-func-addr/byte-buffer-push-int64]] r13 rax]
+
+       ;; Grab our raw buffer to form our output pointer
+       [funcall-abs [raw-imm [bb/builtin-func-addr/byte-buffer-get-buf]] r13]
+       [add rax r14]
+
+       [pop r14] [pop r13] [pop r12]
+       [ret]]]]
+
     ;; [elf-header/EI_DATA LSB|MSB]
     [macro elf-header/e_ident/EI_DATA
      [x86_64-linux
@@ -326,5 +448,6 @@
     [elf-magic]
     [elf-header/e_ident/EI_CLASS 64]
     [elf-header/e_ident/EI_DATA LSB]
+    [elf-header/e_ident/EI_VERSION 1]
     ]
    ]]]

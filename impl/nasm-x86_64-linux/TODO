@@ -7,7 +7,6 @@
 * Does the 'with' macro need to create a new byte buffer for each data entry? Why not just push the data directly to the 'data' byte buffer then free the whole buffer when we're done?
   * Oh, this might be needed b/c we're holding pointers to the data and can't realloc
 * clean up unused data entries in builtin_structural_macros
-* make an implicit barray-cat for defining macro with with-macros?
 * implement elf64-relocatable (or maybe just elf-relocatable?)
   * Remove the incomplete builtin one
 * don't always malloc executable, make sure macro stack mallocs executable except when serving as data stack
