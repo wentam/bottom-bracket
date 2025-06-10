@@ -289,7 +289,67 @@
        [pop rbp]
        [ret]]]]
 
-    ;; [elf-header/EI_VERSION base-10-ascii-num]
+    [data osabi-map [[NONE    0]
+                     [HPUX    1]
+                     [NETBSD  2]
+                     [LINUX   3]
+                     [SOLARIS 6]
+                     [AIX     7]
+                     [IRIX    8]
+                     [FREEBSD 9]
+                     [TRU64   10]
+                     [MODESTO 11]
+                     [OPENBSD 12]
+                     [OPENVMS 13]
+                     [NSK     14]
+                     [none    0]
+                     [hpux    1]
+                     [netbsd  2]
+                     [linux   3]
+                     [solaris 6]
+                     [aix     7]
+                     [irix    8]
+                     [freebsd 9]
+                     [tru64   10]
+                     [modesto 11]
+                     [openbsd 12]
+                     [openvms 13]
+                     [nsk     14]]]
+
+    ;; [elf-header/e_ident/EI_OSABI ascii-base-10-int|something-from-osabi-map]
+    [macro elf-header/e_ident/EI_OSABI
+     [x86_64-linux
+      [asm/x86_64
+       [push r12] [push r13] [push r14]
+
+       ;; Macroexpand tail
+       [funcall-abs [raw-imm [bb/builtin-func-addr/structural-macro-expand-tail]] r12 r13 2 0]
+       [mov r12 rax]
+
+       ;; If our tail isn't exactly 1 element, error
+       [cmp [m64 r12 0 1 0] -2]
+       [je-rel good-len]
+       [funcall-abs [raw-imm [error-exit-fn barray-raw-addr 8 LE]]
+                    [raw-imm [elf-header-macro-bad-input addr 8 LE]]]
+       [label good-len]
+
+       ;; Get data length so we can form our return pointer
+       [funcall-abs [raw-imm [bb/builtin-func-addr/byte-buffer-get-data-length]] r13]
+       [mov r14 rax] ; r14 = relptr to our output
+
+       ;; Output length of 1
+       [funcall-abs [raw-imm [bb/builtin-func-addr/byte-buffer-push-int64]] r13 1]
+
+       ;; TODO scan our osabi map to see if our input matches one. Output and return if it does.
+
+       [label notscan]
+       ;; TODO parse our input as an integer and output that
+
+       [label done]
+       [pop r14] [pop r13] [pop r12]
+       [ret]]]]
+
+    ;; [elf-header/e_ident/EI_VERSION base-10-ascii-num]
     [macro elf-header/e_ident/EI_VERSION
      [x86_64-linux
       [asm/x86_64
@@ -326,7 +386,7 @@
        [pop r14] [pop r13] [pop r12]
        [ret]]]]
 
-    ;; [elf-header/EI_DATA LSB|MSB]
+    ;; [elf-header/e_ident/EI_DATA LSB|MSB]
     [macro elf-header/e_ident/EI_DATA
      [x86_64-linux
       [asm/x86_64

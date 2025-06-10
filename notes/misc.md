@@ -295,6 +295,7 @@ Interestingly, that means that even with this design there are certain situation
         * It's debatable if this is a good design for an assembler though, as in this case we're making the assumption that the instruction is ending up inside a barray-cat - and making assumptions about our expansion environment is usually a bad
           design.
     * ....actually, label-scope is already splice. You just can't introduce global labels.
+        * Not perfect tho because if I have an arbitrary parray I can't `[splice [my-parray]]`, I can only `[label-scope my-stuff]`, thus only works if I have a macro generating it.
 * for better error reporting, we should maintain a "macro call stack" in memory, probably using kv_stack. Every time we call a macro, it enters the stack, removed when it returns.
     * This means we need a standard "call structural macro" interface, don't pull it out of your kv_stack. Maybe put this in structural_macro_expand's file - and call it structural_macro_call.
     * error-exit/error_exit should dump this stack on error.

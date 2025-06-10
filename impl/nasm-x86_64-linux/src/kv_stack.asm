@@ -38,6 +38,7 @@ extern byte_buffer_pop_int64
 extern byte_buffer_read_int64
 extern byte_buffer_peek_int64
 extern byte_buffer_delete_bytes
+extern byte_buffer_push_byte_n_times
 
 extern barray_equalp
 extern barray_new

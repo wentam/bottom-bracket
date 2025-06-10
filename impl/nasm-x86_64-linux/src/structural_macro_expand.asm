@@ -64,7 +64,7 @@ structural_macro_expand:
   call structural_macro_expand_relptr
   cmp rax, -1
   jne .not_nothing
-  mov rax, 0
+  mov r14, 0
   jmp .done
   .not_nothing:
 
@@ -84,13 +84,13 @@ structural_macro_expand:
   call rel_to_abs
 
   .rel:
+  .done:
 
   mov rdi, r15
   call byte_buffer_free
 
   mov rax, r14
 
-  .done:
   add rsp, 8
   pop rbx
   pop r15

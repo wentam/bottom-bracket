@@ -24,6 +24,10 @@
 
 section .text
 global _start
+
+;; TODO clean up unused externs, we use this spot as a testbed
+;; so it gets messy
+
 extern write
 extern exit
 extern write_char
@@ -69,6 +73,9 @@ extern byte_buffer_bindump_buffer
 extern byte_buffer_free
 extern _malloc
 extern _free
+
+extern hashmap_new
+extern hashmap_free
 
 section .rodata
 
@@ -139,6 +146,13 @@ _start:
   call byte_buffer_free
 
   call init_macro_stacks
+
+  ;; TODO tmp
+  mov rdi, 8
+  call hashmap_new
+
+  mov rdi, rax
+  call hashmap_free
 
   ;; Make an arena for reader and macroexpander
   ;;

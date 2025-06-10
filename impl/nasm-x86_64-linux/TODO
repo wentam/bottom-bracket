@@ -1,6 +1,9 @@
+* use a hashmap index for names in kv_stack
+* expose our internal hashmap implementation to the user
+* use our bb-internal hashmap implementation in the x86_64 assembler for instruction table lookups
+  * use [data [make-instruction-index]] where make-instruction index is a macro that expands into a barray of the hashmap (not BB structure).
 * clean up x86_64 assembler
   * finish docs
-* use a hashmap index for names in kv_stack
 * add size/length for data entries in bb/with
   * might only make sense for barrays
 * Replace -1 as non-expand sigil: should be 0/NULL ptr now
