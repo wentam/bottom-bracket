@@ -1,4 +1,4 @@
-;; Hashmap designed for okish inserts and very fast reads
+;; Hashmap designed for okish inserts and very fast reads. Keys are barrays, values are u64.
 ;;
 ;; * Hashmap values are fixed 8-byte values. If you need something bigger, use a pointer here.
 ;; * Buckets have a fixed size. If we exceed the size of a bucket, we re-hash. Thus, rehashing
@@ -23,8 +23,21 @@
 ;;   u64 value
 ;; }
 
+
+;; TODO
+;;
+;; Right now on removal, we don't have a nice way to remove keys from the keys buffer.
+;; One solution would be to track how many 'dead' keys we have in relation to 'alive' keys,
+;; and trigger an expensive cleanup every time we hit > 50% wasted space.
+;;
+;; Cleanup would need to involve repointing all relptrs, so it would be pricey. We would probably
+;; just run through all buckets and create a new keys byte buffer to replace the old.
+
 global hashmap_new
+global hashmap_get
+global hashmap_set
 global hashmap_free
+global hashmap_rehash
 
 extern malloc
 extern free
@@ -37,6 +50,10 @@ extern byte_buffer_free
 extern byte_buffer_get_buf
 extern byte_buffer_get_data_length
 extern byte_buffer_push_barray
+
+extern print
+extern write_as_base
+extern write_char
 
 ;; Macro to round a number to the nearest power of 2
 ;%macro round_pow_2 1
@@ -111,8 +128,14 @@ hashmap_new:
   call malloc
   mov r13, rax ; r13 = struct hashmap*
 
+  ;; TODO error if malloc fails
+
   ;; Bucket count
   mov qword[r13], r12
+
+  ;; Keys buffer
+  call byte_buffer_new
+  mov qword[r13+16], rax
 
   ;; Buckets allocation
   mov rax, HASHMAP_BUCKET_SIZE
@@ -122,16 +145,14 @@ hashmap_new:
   call malloc
   mov qword[r13+8], rax
 
+  ;; TODO error if malloc fails
+
   ;; Zero out buckets allocation
   mov rdi, rax ; dest
   mov rcx, r14
   shr rcx, 3 ; / 8
   xor rax, rax
   rep stosq
-
-  ;; Keys buffer
-  call byte_buffer_new
-  mov qword[r13+16], rax
 
   mov rax, r13 ; return hashmap struct pointer
   pop r14
@@ -153,11 +174,11 @@ hashmap_free:
   ;; NOTE: We do this exactly in the opposite order as hashmap_new because it's more friendly
   ;; to our allocator. Make sure we maintain this property for performance reasons.
 
-  mov rdi, qword[r12+16]
-  call byte_buffer_free
-
   mov rdi, qword[r12+8]
   call free
+
+  mov rdi, qword[r12+16]
+  call byte_buffer_free
 
   mov rdi, r12
   call free
@@ -308,27 +329,188 @@ hashmap_set:
   pop r12
   ret
 
-;; TODO
-;; (hashmap*)
-hashmap_rehash:
+;; (hashmap*, new_buckets*, new_bucket_count)
+;;
+;; Returns 1 on success, 0 if we need more buckets for this
+_hashmap_fill_new_buckets:
+  push rbp
+  mov rbp, rsp
   push r12
   push r13
   push r14
   push r15
   push rbx
+  sub rsp, 24
 
-  mov r12, rdi ; hashmap*
+  mov qword[rbp-48], rdi ; hashmap
+  mov qword[rbp-56], rsi ; new_buckets*
+  mov qword[rbp-64], rdx ; new_bucket_count
+  mov r13, qword[rdi]    ; bucket_count
 
+  mov rcx, qword[rdi+HASHMAP_BUCKETS_OFFSET]
+  mov r14, rcx ; buckets*
+
+  mov rdi, qword[rdi+HASHMAP_KEYS_OFFSET] ; keys buffer
+  call byte_buffer_get_buf                ; get base address
+  mov rbx, rax
+
+  ;; Iterate over all of our old values
+  .bucket_loop:
+    test r13, r13
+    jz .bucket_loop_break
+
+    xor rax, rax
+    mov al, byte[r14]
+    mov r15, rax ; value count
+
+    mov r12, r14
+    inc r12 ; Move past value count - r12 = values*
+
+    .value_loop:
+      test r15, r15
+      jz .value_loop_break
+
+      ; r12 = value*
+
+      ;; Hash it's key again
+      xor rsi, rsi
+      mov esi, dword[r12]
+      mov rdi, rbx        ; keys*
+      add rdi, rsi        ; our key barray
+      mov rsi, qword[rbp-64]
+      call _hashmap_bucket
+
+      ;; Get our target bucket
+      mov rsi, HASHMAP_BUCKET_SIZE
+      mul rsi ; rax (bucket index) *= bucket size
+      mov r9, qword[rbp-56]
+      add r9, rax ; r9 = bucket*
+
+      ;; If this key's bucket is full, return 0
+      mov rax, 0
+      cmp byte[r9], HASHMAP_MAX_VALUES_PER_BUCKET
+      jge .epilogue
+
+      ;; Add our key and value to correct target bucket
+      xor rax, rax
+      mov al, byte[r9] ; rax = value count
+      mov rsi, HASHMAP_VALUE_SIZE
+      mul rsi ; rax *= value size
+
+      inc byte[r9] ; Increment length (we're adding one)
+      inc r9       ; move past length
+      add r9, rax  ; move to value
+      mov r8d, dword[r12]
+      mov dword[r9], r8d
+      mov r8, qword[r12+HASHMAP_VALUE_VALUE_OFFSET]
+      mov qword[r9+HASHMAP_VALUE_VALUE_OFFSET], r8
+
+      add r12, HASHMAP_VALUE_SIZE
+      dec r15
+      jmp .value_loop
+    .value_loop_break:
+
+    add r14, HASHMAP_BUCKET_SIZE
+    dec r13
+    jmp .bucket_loop
+  .bucket_loop_break:
+
+  mov rax, 1 ; We succeeded if we got here
   .epilogue:
+  add rsp, 24
   pop rbx
   pop r15
   pop r14
   pop r13
   pop r12
+  pop rbp
   ret
 
-%define FNV_OFFSET 2166136261
-%define FNV_PRIME 16777619
+;; (hashmap*)
+;;
+;; Increases bucket count and re-inserts everything.
+hashmap_rehash:
+  push rbp
+  mov rbp, rsp
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+  sub rsp, 24
+
+  mov r12, rdi ; hashmap*
+
+  mov r13, qword[r12] ; bucket count
+  mov r14, r13
+  shl r14, 1          ; r14 = target bucket count - double starting value
+
+  .go:
+
+  ;; Make new buckets allocation of correct size for target bucket count
+  mov rax, HASHMAP_BUCKET_SIZE
+  mul r14
+  mov rdi, rax
+  mov rbx, rdi
+  call malloc
+  mov r15, rax ; r15 = target buckets allocation
+
+  ;; TODO error if malloc fails
+
+  ;; Zero out the new target buckets allocation
+  mov rdi, r15 ; dest
+  mov rcx, rbx
+  shr rcx, 3 ; / 8
+  xor rax, rax
+  rep stosq
+
+  ;; Try to fill our new buckets
+  mov rdi, r12 ; hashmap*
+  mov rsi, r15 ; new_buckets*
+  mov rdx, r14 ; new_bucket_count
+  call _hashmap_fill_new_buckets
+  cmp rax, 1
+  je .done
+
+  ;; We failed - not enuff bukkits!
+
+  ;; Free new buckets allocation
+  mov rdi, r15
+  call free
+
+  ;; Try again with moar bukkit...
+  shl r14, 1 ; * 2
+  jmp .go
+
+  .done:
+  ;; Free old buckets allocation
+  mov rdi, qword[r12+HASHMAP_BUCKETS_OFFSET]
+  call free
+
+  ;; Repoint hashmap to our new buckets allocation
+  mov qword[r12+HASHMAP_BUCKETS_OFFSET], r15
+
+  ;; Update our bucket count to the target count
+  mov qword[r12], r14
+
+  add rsp, 24
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  pop rbp
+  ret
+
+;; TODO
+;; (hashmap*, barray* key)
+;;
+;; Does nothing if the key didn't exist
+hashmap_rm:
+  ret
+
+%define FNV_OFFSET 14695981039346656037
+%define FNV_PRIME 1099511628211
 
 ;; (barray, bucket_count) -> u64
 _hashmap_bucket:
@@ -337,18 +519,18 @@ _hashmap_bucket:
   mov rax, FNV_OFFSET
   mov rcx, FNV_PRIME
 
-  mov rdx, qword[rdi] ; barray len
+  mov r8, qword[rdi] ; barray len
   add rdi, 8          ; move past len
 
   .loop:
-  test rdx, rdx
+  test r8, r8
   jz .loop_break
 
   xor al, byte[rdi]  ; ^= byte
   mul rcx            ; *= FNV_PRIME
 
   inc rdi
-  dec rdx
+  dec r8
   jmp .loop
   .loop_break:
 
