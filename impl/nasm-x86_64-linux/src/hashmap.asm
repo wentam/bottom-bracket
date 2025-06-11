@@ -24,16 +24,6 @@
 ;;   u64 value
 ;; }
 
-
-;; TODO
-;;
-;; Right now on removal, we don't have a nice way to remove keys from the keys buffer.
-;; One solution would be to track how many 'dead' keys we have in relation to 'alive' keys,
-;; and trigger an expensive cleanup every time we hit > 50% wasted space.
-;;
-;; Cleanup would need to involve repointing all relptrs, so it would be pricey. We would probably
-;; just run through all buckets and create a new keys byte buffer to replace the old.
-
 global hashmap_new
 global hashmap_get
 global hashmap_set
