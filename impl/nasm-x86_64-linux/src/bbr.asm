@@ -77,6 +77,7 @@ extern _free
 extern hashmap_new
 extern hashmap_free
 extern hashmap_rehash
+extern hashmap_rekey
 extern hashmap_get
 extern hashmap_set
 extern hashmap_rm
@@ -194,7 +195,7 @@ _start:
   call init_macro_stacks
 
   ;; TODO tmp START
-  mov rdi, 16
+  mov rdi, 8
   call hashmap_new
   mov r12, rax
 
@@ -205,22 +206,25 @@ _start:
 
   mov rdi, r12
   mov rsi, foo2_key
-  mov rdx, 1337
+  mov rdx, 1338
   call hashmap_set
 
   mov rdi, r12
   call hashmap_rehash
 
   mov rdi, r12
-  mov rsi, foo_key
+  mov rsi, foo2_key
   call hashmap_rm
 
   mov rdi, r12
-  mov rsi, foo2_key
-  call hashmap_get
-  ;mov rdi, qword[rax]
+  call hashmap_rekey
 
-  mov rdi, rax
+  mov rdi, r12
+  mov rsi, foo_key
+  call hashmap_get
+  mov rdi, qword[rax]
+
+  ;mov rdi, rax
   mov rsi, 10
   mov rdx, 2
   mov rcx, 0

@@ -9,6 +9,7 @@
 ;;
 ;; struct hashmap {
 ;;   u64 bucket_count;
+;;   u64 stale_key_bytes;
 ;;   bucket* buckets;   // malloc'd
 ;;   byte_buffer* keys; // byte buffer = dynamically growing
 ;; }
@@ -39,6 +40,7 @@ global hashmap_set
 global hashmap_rm
 global hashmap_free
 global hashmap_rehash
+global hashmap_rekey
 
 extern malloc
 extern free
@@ -81,15 +83,16 @@ extern write_char
 ;  %endif
 ;%endmacro
 
-%define HASHMAP_MAX_VALUES_PER_BUCKET 8
+%define HASHMAP_MAX_VALUES_PER_BUCKET 4
 %define HASHMAP_VALUE_SIZE (4 + 8)
 %define HASHMAP_BUCKET_SIZE (1 + (HASHMAP_VALUE_SIZE * HASHMAP_MAX_VALUES_PER_BUCKET))
 ;round_pow_2 HASHMAP_BUCKET_SIZE_MIN
 ;%define HASHMAP_BUCKET_SIZE (V)
 %define HASHMAP_STRUCT_SIZE 24
 
-%define HASHMAP_BUCKETS_OFFSET 8
-%define HASHMAP_KEYS_OFFSET 16
+%define HASHMAP_STALE_COUNT_OFFSET 8
+%define HASHMAP_BUCKETS_OFFSET 16
+%define HASHMAP_KEYS_OFFSET 24
 
 %define HASHMAP_VALUE_VALUE_OFFSET 4
 
@@ -99,6 +102,9 @@ section .rodata
 
 not_pow2_err: db "ERROR: Non-power-of-2 bucket count requested for hashmap_new. It must be a power of 2.",10
 not_pow2_err_len: equ $ - not_pow2_err
+
+alloc_err: db "ERROR: Memory allocation required for hashmap functionality has failed",10
+alloc_err_len: equ $ - alloc_err
 
 section .text
 
@@ -128,15 +134,25 @@ hashmap_new:
   mov rdi, HASHMAP_STRUCT_SIZE
   call malloc
   mov r13, rax ; r13 = struct hashmap*
+  test r13, r13
+  jnz .good_alloc_1
 
-  ;; TODO error if malloc fails
+  ;; Error: bad allocation
+  mov rdi, alloc_err
+  mov rsi, alloc_err_len
+  call error_exit
+
+  .good_alloc_1:
 
   ;; Bucket count
   mov qword[r13], r12
 
+  ;; Stale key byte count
+  mov qword[r13+HASHMAP_STALE_COUNT_OFFSET], 0
+
   ;; Keys buffer
   call byte_buffer_new
-  mov qword[r13+16], rax
+  mov qword[r13+HASHMAP_KEYS_OFFSET], rax
 
   ;; Buckets allocation
   mov rax, HASHMAP_BUCKET_SIZE
@@ -144,9 +160,17 @@ hashmap_new:
   mov rdi, rax
   mov r14, rdi
   call malloc
-  mov qword[r13+8], rax
+  mov qword[r13+HASHMAP_BUCKETS_OFFSET], rax
 
-  ;; TODO error if malloc fails
+  test rax, rax
+  jnz .good_alloc_2
+
+  ;; Error: bad allocation
+  mov rdi, alloc_err
+  mov rsi, alloc_err_len
+  call error_exit
+
+  .good_alloc_2:
 
   ;; Zero out buckets allocation
   mov rdi, rax ; dest
@@ -175,10 +199,10 @@ hashmap_free:
   ;; NOTE: We do this exactly in the opposite order as hashmap_new because it's more friendly
   ;; to our allocator. Make sure we maintain this property for performance reasons.
 
-  mov rdi, qword[r12+8]
+  mov rdi, qword[r12+HASHMAP_BUCKETS_OFFSET]
   call free
 
-  mov rdi, qword[r12+16]
+  mov rdi, qword[r12+HASHMAP_KEYS_OFFSET]
   call byte_buffer_free
 
   mov rdi, r12
@@ -312,6 +336,10 @@ hashmap_rm:
     mov rdi, qword[rbp-56]
     dec byte[rdi]
 
+    ;; Track our key's bytes as stale so we can choose when to regenerate keys
+    mov rdi, qword[r13]
+    add qword[r12+HASHMAP_STALE_COUNT_OFFSET], rdi
+
     ;; Start shifting instead of searching.
     mov qword[rbp-48], 1 ; Enable shift mode
 
@@ -335,6 +363,17 @@ hashmap_rm:
     jmp .search_loop
   .search_loop_break:
 
+  ;; If our stale key bytes are roughly >= 50% of our total key bytes, regenerate the keys buffer
+  mov rdi, qword[r12+HASHMAP_KEYS_OFFSET]
+  call byte_buffer_get_data_length
+  shr rax, 1 ; / 2 - ish
+  cmp qword[r12+HASHMAP_STALE_COUNT_OFFSET], rax
+  jl .no_cleanup
+
+  mov rdi, r12
+  call hashmap_rekey
+
+  .no_cleanup:
   add rsp, 24
   pop rbx
   pop r15
@@ -418,6 +457,93 @@ hashmap_set:
   pop r14
   pop r13
   pop r12
+  ret
+
+;; (hashmap*)
+hashmap_rekey:
+  push rbp
+  mov rbp, rsp
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+  sub rsp, 24
+
+  mov qword[rbp-48], rdi ; hashmap*
+
+  ;; Iterate over buckets
+  mov r14, qword[rdi+HASHMAP_BUCKETS_OFFSET] ; buckets*
+  mov r15, qword[rdi] ; bucket count
+
+  mov rdi, qword[rdi+HASHMAP_KEYS_OFFSET]
+  call byte_buffer_get_buf
+  mov qword[rbp-56], rax
+
+  ;; Make a new keys allocation that will replace our current one when we're done
+  call byte_buffer_new
+  mov r13, rax ; r13 = new keys allocation
+
+  .bucket_loop:
+    test r15, r15
+    jz .bucket_loop_break
+
+    xor rbx, rbx
+    mov bl, byte[r14] ; rbx = value count
+    mov r12, r14
+    inc r12 ; move past value count
+
+    .value_loop:
+      test rbx, rbx
+      jz .value_loop_break
+
+      ; r12 = value*
+
+      ;; Get our current data length to use as our new relptr
+      mov rdi, r13
+      call byte_buffer_get_data_length
+      mov qword[rbp-64], rax
+
+      ;; Copy the key for this entry to our new keys barray
+      mov rdi, r13 ; new keys buffer
+      xor rsi, rsi
+      mov esi, dword[r12]    ; relptr
+      add rsi, qword[rbp-56] ; absptr
+      call byte_buffer_push_barray
+
+      ;; Assign a new relptr
+      mov rdi, qword[rbp-64]
+      mov dword[r12], edi
+
+      add r12, HASHMAP_VALUE_SIZE
+      dec rbx
+      jmp .value_loop
+    .value_loop_break:
+
+    add r14, HASHMAP_BUCKET_SIZE
+    dec r15
+    jmp .bucket_loop
+  .bucket_loop_break:
+
+  ;; Free old keys allocation
+  mov rsi, qword[rbp-48]
+  mov rdi, qword[rsi+HASHMAP_KEYS_OFFSET]
+  call byte_buffer_free
+
+  ;; Repoint hashmap to our new keys allocation
+  mov rsi, qword[rbp-48]
+  mov qword[rsi+HASHMAP_KEYS_OFFSET], r13
+
+  ;; Reset stale byte counter
+  mov qword[rsi+HASHMAP_STALE_COUNT_OFFSET], 0
+
+  add rsp, 24
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  pop rbp
   ret
 
 ;; (hashmap*, new_buckets*, new_bucket_count)
@@ -546,7 +672,15 @@ hashmap_rehash:
   call malloc
   mov r15, rax ; r15 = target buckets allocation
 
-  ;; TODO error if malloc fails
+  test rax, rax
+  jnz .good_alloc_1
+
+  ;; Error: bad allocation
+  mov rdi, alloc_err
+  mov rsi, alloc_err_len
+  call error_exit
+
+  .good_alloc_1:
 
   ;; Zero out the new target buckets allocation
   mov rdi, r15 ; dest
