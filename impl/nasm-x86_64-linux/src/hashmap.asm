@@ -36,6 +36,7 @@
 global hashmap_new
 global hashmap_get
 global hashmap_set
+global hashmap_rm
 global hashmap_free
 global hashmap_rehash
 
@@ -251,6 +252,96 @@ hashmap_get:
   pop r14
   pop r13
   pop r12
+  ret
+
+;; (hashmap*, barray* key)
+;;
+;; Does nothing if the key didn't exist
+hashmap_rm:
+  push rbp
+  mov rbp, rsp
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+  sub rsp, 24
+
+  mov r12, rdi ; hashmap*
+  mov r13, rsi ; barray* key
+
+  ;; Find the bucket
+  mov rdi, r13
+  mov rsi, qword[r12]
+  call _hashmap_bucket
+  mov rsi, HASHMAP_BUCKET_SIZE
+  mul rsi
+  mov r15, qword[r12+HASHMAP_BUCKETS_OFFSET] ; rl5 = buckets*
+  add r15, rax          ; r15 = bucket*
+
+  ;; Grab keys buffer for our search
+  mov rdi, qword[r12+HASHMAP_KEYS_OFFSET]
+  call byte_buffer_get_buf
+  mov rbx, rax
+
+  ;; Preserve bucket*
+  mov qword[rbp-56], r15
+
+  ;; Iterate over the bucket, searching for our key
+  mov qword[rbp-48], 0 ; not shift mode
+  mov r14b, byte[r15] ; r14b = value count
+  inc r15             ; move past length
+  .search_loop:
+    test r14b, r14b
+    jz .search_loop_break
+
+    ; r15 = value*
+
+    cmp qword[rbp-48], 1
+    je .shiftmode
+
+    xor rdi, rdi
+    mov edi, dword[r15] ; rdi = key buffer rel ptr
+    add rdi, rbx        ; rdi = pointer to key barray
+    mov rsi, r13
+    call barray_equalp
+    cmp rax, 1
+    jne .continue
+
+    ;; We found the value struct to remove. Decrement the value count.
+    mov rdi, qword[rbp-56]
+    dec byte[rdi]
+
+    ;; Start shifting instead of searching.
+    mov qword[rbp-48], 1 ; Enable shift mode
+
+    .shiftmode:
+
+    ;; If the is the last one, do nothing.
+    cmp r14b, 1
+    je .continue
+
+    ;; Shift the next value on top of us
+    mov rdi, r15
+    mov rsi, r15
+    add rsi, HASHMAP_VALUE_SIZE
+    mov rcx, HASHMAP_VALUE_SIZE
+    rep movsb
+
+    .continue:
+
+    add r15, HASHMAP_VALUE_SIZE
+    dec r14b
+    jmp .search_loop
+  .search_loop_break:
+
+  add rsp, 24
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  pop rbp
   ret
 
 ;; (hashmap*, barray* key, u64 value)
@@ -500,13 +591,6 @@ hashmap_rehash:
   pop r13
   pop r12
   pop rbp
-  ret
-
-;; TODO
-;; (hashmap*, barray* key)
-;;
-;; Does nothing if the key didn't exist
-hashmap_rm:
   ret
 
 %define FNV_OFFSET 14695981039346656037

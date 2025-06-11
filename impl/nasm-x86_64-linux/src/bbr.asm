@@ -79,6 +79,7 @@ extern hashmap_free
 extern hashmap_rehash
 extern hashmap_get
 extern hashmap_set
+extern hashmap_rm
 
 section .rodata
 
@@ -123,6 +124,7 @@ test_macro_code_2: db 11,0,0,0,0,0,0,0,"aaaaaaaaaaa"
 test_macro_name_3: db 4,0,0,0,0,0,0,0,"fooo"
 
 foo_key: dq 3,"foo"
+foo2_key: dq 4,"foo2"
 
 section .text
 
@@ -202,14 +204,23 @@ _start:
   call hashmap_set
 
   mov rdi, r12
+  mov rsi, foo2_key
+  mov rdx, 1337
+  call hashmap_set
+
+  mov rdi, r12
   call hashmap_rehash
 
   mov rdi, r12
   mov rsi, foo_key
-  call hashmap_get
-  mov rdi, qword[rax]
+  call hashmap_rm
 
- ; mov rdi, rax
+  mov rdi, r12
+  mov rsi, foo2_key
+  call hashmap_get
+  ;mov rdi, qword[rax]
+
+  mov rdi, rax
   mov rsi, 10
   mov rdx, 2
   mov rcx, 0

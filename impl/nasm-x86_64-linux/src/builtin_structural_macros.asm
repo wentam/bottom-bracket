@@ -3003,7 +3003,7 @@ _print_with_push_macro:
     ;; All good
     jmp .good
 
-    .impl_loop_continue
+    .impl_loop_continue:
     add r12, 8
     dec r14
     jmp .impl_loop
