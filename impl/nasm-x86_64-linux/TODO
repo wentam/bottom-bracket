@@ -2,6 +2,10 @@
   * should allow you to say 0 for sane default mebbe?
   * make the default size SMALL. Our goal is to make sure everything stays in L1
     after program size scales. Even if it's slower now, keeping stuff small is mega-important for L1 in the future.
+* kv_stack should probably have fixed-sized values instead of value barrays.
+  * Specify size of values in kv_stack_new
+  * Saves 8 bytes per frame.
+* hashmap should probably accept fixed value size as an arg instead of fixed 8-byte
 * use a hashmap index for names in kv_stack
 * expose our internal hashmap implementation to the user
 * use our bb-internal hashmap implementation in the x86_64 assembler for instruction table lookups
