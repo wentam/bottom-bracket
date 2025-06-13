@@ -2,7 +2,8 @@
 ;;;   * optionally executable TODO make this actually optional and don't always allocate executable
 ;;;   * useful if you need a key-value store
 ;;;   * useful if you need a stack
-;;;   * definitely useful when you want something with both properties. This is the;;;     case with bb's macro system.
+;;;   * definitely useful when you want something with both properties. This is the
+;;;     case with BB's macro system.
 
 ;;; TODO it might be beneficial to have a hashmap index for fast by-name lookups
 ;;; TODO it might be beneficial to have a hashmap index for fast by-id lookups
@@ -51,22 +52,25 @@ section .rodata
 
 section .text
 
-;;; TODO it might be cleaner to have frames fixed in width, like:
-;;; struct frame {
-;;;   size_t id
-;;;   barray* key
-;;;   barray* value
-;;; }
+;;; TODO instead of shifting stuff out of the dbuffer on every removal, we could possibly
+;;; leave it alone until waste bytes >= 25%. Just update pbuffer.
 ;;;
-;;; The actual barrays could be stored in a big byte buffer to handle the allocation.
+;;; Once 25% threshold has past, run a batch compaction.
 ;;;
-;;; This would allow us to quick access frames by index.
+;;;  Do this if removals end up showing up in profiling.
 
 ;;; struct frame {
 ;;;   size_t  id
 ;;;   barray  key   // flat in struct
 ;;;   barray  value // flat in struct
 ;;; }
+
+;;; TODO we should probably make the pbuffer store 4-byte and not 8-byte pointers.
+;;; This is "active data" in memory and we want to make absolutely sure it fits in L1
+;;; at all times.
+
+;;; TODO we might want to make the value a fixed size upon creation or maybe even a fixed
+;;; 8 bytes. Right now we only ever use them as pointers AFAIK.
 
 ;;; struct kv_stack {
 ;;;   byte_buffer* pbuffer;         // array of relpointers to frames in dbuffer

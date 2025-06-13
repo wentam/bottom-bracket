@@ -1,3 +1,7 @@
+* byte buffer/arena should accept initial backing buffer size as arg
+  * should allow you to say 0 for sane default mebbe?
+  * make the default size SMALL. Our goal is to make sure everything stays in L1
+    after program size scales. Even if it's slower now, keeping stuff small is mega-important for L1 in the future.
 * use a hashmap index for names in kv_stack
 * expose our internal hashmap implementation to the user
 * use our bb-internal hashmap implementation in the x86_64 assembler for instruction table lookups

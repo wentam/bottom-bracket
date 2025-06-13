@@ -53,8 +53,8 @@
 
     This is done with compilation of code to machine language in mind, but it's open-ended.
 
-    Using BB without any libraries, you start at machine language with macros. Programming
-    languages are just macro libraries.
+    Using BB without any libraries, you start at machine language with (fully programmable) macros.
+    Programming languages are just macro libraries.
 
     #v(0.5cm)
 

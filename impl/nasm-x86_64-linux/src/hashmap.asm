@@ -6,6 +6,9 @@
 ;; * Inserts will be fast if you don't need to rehash, so if you know your bounds you might
 ;;   want to set a larger starting bucket count.
 ;;
+;; By using a dedicated keys buffer and managing fragmentation ourselves, we do away
+;; with allocator metadata overhead. This makes it easier to fit all of our actively-accessed keys
+;; into L1.
 ;;
 ;; struct hashmap {
 ;;   u64 bucket_count;
@@ -353,10 +356,10 @@ hashmap_rm:
     jmp .search_loop
   .search_loop_break:
 
-  ;; If our stale key bytes are roughly >= 50% of our total key bytes, regenerate the keys buffer
+  ;; If our stale key bytes are roughly >= 25% of our total key bytes, regenerate the keys buffer
   mov rdi, qword[r12+HASHMAP_KEYS_OFFSET]
   call byte_buffer_get_data_length
-  shr rax, 1 ; / 2 - ish
+  shr rax, 2 ; / 4
   cmp qword[r12+HASHMAP_STALE_COUNT_OFFSET], rax
   jl .no_cleanup
 
