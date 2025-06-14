@@ -70,7 +70,8 @@ section .text
 ;;; at all times.
 
 ;;; TODO we might want to make the value a fixed size upon creation or maybe even a fixed
-;;; 8 bytes. Right now we only ever use them as pointers AFAIK.
+;;; 8 bytes. Right now we only ever use them as pointers AFAIK. This would save the 8-byte
+;;; barray length per frame. Thus, more likely our active data fits into L1.
 
 ;;; struct kv_stack {
 ;;;   byte_buffer* pbuffer;         // array of relpointers to frames in dbuffer
