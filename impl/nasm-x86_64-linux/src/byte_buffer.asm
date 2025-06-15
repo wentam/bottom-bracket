@@ -247,69 +247,55 @@ byte_buffer_write_int64:
   pop r12
   ret
 
-;; TODO optimize the other push_int** like below
+
+;;; byte_buffer_push_int16(*byte_buffer, int16)
+;;;   Pushes an int16 to the byte buffer
+;;;
+;;;   Invalidates any pointers pointing to within the byte buffer.
+byte_buffer_push_int16:
+  push rsi
+  mov rsi, 2
+  call byte_buffer_extend
+  pop rsi
+  mov word[rax], si
+  ret
+
+
+;;; byte_buffer_push_int32(*byte_buffer, int32)
+;;;   Pushes an int32 to the byte buffer
+;;;
+;;;   Invalidates any pointers pointing to within the byte buffer.
+byte_buffer_push_int32:
+  push rsi
+  mov rsi, 4
+  call byte_buffer_extend
+  pop rsi
+  mov dword[rax], esi
+  ret
 
 ;;; byte_buffer_push_int64(*byte_buffer, int64)
 ;;;   Pushes a byte to the byte buffer
 ;;;
 ;;;   Invalidates any pointers pointing to within the byte buffer.
 byte_buffer_push_int64:
-  push r12
-  push r13
-  sub rsp, 8
-
-  mov r12, rsi ; int64
-  mov r13, rdi ; Byte buffer
-
-  %ifdef ASSERT_STACK_ALIGNMENT
-  call assert_stack_aligned
-  %endif
-
-  .retry:
-  ;; Work out pointer to the first unwritten byte in buffer
-  mov rsi, qword[r13+BYTE_BUFFER_BUF_OFFSET]
-  add rsi, qword[r13+BYTE_BUFFER_DATA_LENGTH_OFFSET]
-
-  ;; Check if we need to expand the buffer
-
-  mov rax, qword[r13+BYTE_BUFFER_BUF_OFFSET]        ; rax = ptr to byte buffer
-  add rax, qword[r13+BYTE_BUFFER_BUF_LENGTH_OFFSET] ; rax += buf length
-  mov rcx, rsi
-  add rcx, 8
-  cmp rax, rcx                                      ; cmp buf end to write end
-  jge .good_buf_size
-
-  ;; Expand the buffer
-
-  mov rdi, qword[r13+BYTE_BUFFER_BUF_OFFSET]         ; buffer
-  mov rsi, qword[r13+BYTE_BUFFER_BUF_LENGTH_OFFSET]  ; new size = current size
-  shl rsi, 1                                         ; * 2
-  mov qword [r13+BYTE_BUFFER_BUF_LENGTH_OFFSET], rsi ; write new size
-  call realloc
-  cmp rax, 0
-  jne .good_realloc
-
-  ;; Error and exit if realloc failed
-  mov rdi, realloc_failed_error_str
-  mov rsi, realloc_failed_error_str_len
-  call error_exit
-
-  .good_realloc:
-
-  mov qword[r13+BYTE_BUFFER_BUF_OFFSET], rax ; update buf ptr to realloc result
-  jmp .retry
-
-  .good_buf_size:
-  ;; Write the new byte, increment written length
-  mov rax, qword[r13+BYTE_BUFFER_BUF_OFFSET]         ; backing buf
-  add rax, qword[r13+BYTE_BUFFER_DATA_LENGTH_OFFSET] ; + existing data
-  mov qword[rax], r12                                ; write
-  add qword[r13+BYTE_BUFFER_DATA_LENGTH_OFFSET], 8   ; increment data length
-
-  add rsp, 8
-  pop r13
-  pop r12
+  push rsi
+  mov rsi, 8
+  call byte_buffer_extend
+  pop rsi
+  mov qword[rax], rsi
   ret
+
+;;; byte_buffer_push_byte(*byte_buffer, byte)
+;;;   Pushes a byte to the byte buffer
+;;;
+;;;   Invalidates any pointers pointing to within the byte buffer.
+;byte_buffer_push_byte:
+;  push rsi
+;  mov rsi, 1
+;  call byte_buffer_extend
+;  pop rsi
+;  mov byte[rax], sil
+;  ret
 
 ;;; byte_buffer_push_byte(*byte_buffer, byte)
 ;;;   Pushes a byte to the byte buffer
@@ -398,11 +384,12 @@ byte_buffer_push_byte_n_times:
   ret
 
 
-;;; byte_buffer_extend(*byte_buffer, count)
+;;; byte_buffer_extend(*byte_buffer, count) -> pointer to new region
 ;;;   Increases data length by count (expanding backing buffer if needed)
 ;;;
 ;;;   Invalidates any pointers pointing to within the buffer.
-;;; TODO make this the only realloc path in byte buffer?
+;;;
+;;;   Returns an absolute pointer to the backing buffer at the start of your new region.
 byte_buffer_extend:
   push r12
   push r13
@@ -411,46 +398,46 @@ byte_buffer_extend:
   mov r12, rdi ; byte buffer
   mov r13, rsi ; count
 
-  ;; Work out pointer to the first unwritten byte in buffer + count
-  mov r14, qword[r12+BYTE_BUFFER_BUF_OFFSET]
-  add r14, qword[r12+BYTE_BUFFER_DATA_LENGTH_OFFSET]
-  add r14, r13
+  mov r14, qword[r12+BYTE_BUFFER_DATA_LENGTH_OFFSET] ; Starting data length
+  mov rax, qword[r12+BYTE_BUFFER_BUF_LENGTH_OFFSET]  ; Current backing buffer length
 
   ;; Check if we need to expand
-  mov rax, qword[r12+BYTE_BUFFER_BUF_OFFSET]        ; rax = ptr to byte buffer
-  add rax, qword[r12+BYTE_BUFFER_BUF_LENGTH_OFFSET] ; rax += buf length
-  cmp rax, r14                                      ; cmp buf end to write ptr
+  mov rdi, r14                                       ; rdi = current data length
+  add rdi, r13                                       ; rdi = target data length
+  cmp rax, rdi                                       ; cmp buf end to write ptr
   jg .after_expand
 
-  ;; Expand the buffer
-  mov rdi, qword[r12+BYTE_BUFFER_BUF_OFFSET]         ; buffer
-  mov rsi, qword[r12+BYTE_BUFFER_BUF_LENGTH_OFFSET]  ; new size = current size
-  mov rcx, qword[r12+BYTE_BUFFER_DATA_LENGTH_OFFSET] ; minimum size
-  add rcx, r13
+  .expand:
+    ;; Expand the buffer
+    mov rdi, qword[r12+BYTE_BUFFER_BUF_OFFSET]         ; buffer
+    mov rsi, qword[r12+BYTE_BUFFER_BUF_LENGTH_OFFSET]  ; new size = current size
+    mov rcx, qword[r12+BYTE_BUFFER_DATA_LENGTH_OFFSET]
+    add rcx, r13                                       ; rcx = target size
 
-  .compute_size:
-   shl rsi, 1   ; * 2
-   cmp rsi, rcx
-   jle .compute_size
+    .compute_size:
+     shl rsi, 1   ; * 2
+     cmp rsi, rcx
+     jle .compute_size
 
-  mov qword [r12+BYTE_BUFFER_BUF_LENGTH_OFFSET], rsi ; write new size
-  call realloc
+    mov qword[r12+BYTE_BUFFER_BUF_LENGTH_OFFSET], rsi ; write new size
+    call realloc
+    mov qword[r12+BYTE_BUFFER_BUF_OFFSET], rax ; update buf ptr to realloc result
 
-  cmp rax, 0
-  jne .good_realloc
+    cmp rax, 0
+    jne .after_expand
 
-  ;; Error and exit if realloc failed
-  mov rdi, realloc_failed_error_str
-  mov rsi, realloc_failed_error_str_len
-  call error_exit
-
-  .good_realloc:
-
-  mov qword[r12+BYTE_BUFFER_BUF_OFFSET], rax ; update buf ptr to realloc result
+    ;; Error and exit if realloc failed
+    mov rdi, realloc_failed_error_str
+    mov rsi, realloc_failed_error_str_len
+    call error_exit
 
   .after_expand:
 
   add qword[r12+BYTE_BUFFER_DATA_LENGTH_OFFSET], r13 ; Add to data length
+
+  ;; Return pointer to the start of this region
+  mov rax, qword[r12+BYTE_BUFFER_BUF_OFFSET]
+  add rax, r14
 
   pop r14
   pop r13
@@ -501,119 +488,6 @@ byte_buffer_read_int64:
   ;; Obtain int64 at index
   mov rax, qword[rcx+rsi]
   ret
-
-
-
-;;; byte_buffer_push_int16(*byte_buffer, int16)
-;;;   Pushes an int16 to the byte buffer
-;;;
-;;;   Invalidates any pointers pointing to within the byte buffer.
-byte_buffer_push_int16:
-  push r12
-  push r13
-  push r14
-
-  mov r14, rdi ; byte buffer
-  mov r13, rsi ; int16 to write
-
-  %ifdef ASSERT_STACK_ALIGNMENT
-  call assert_stack_aligned
-  %endif
-
-  ;; Write 2 zeros to make space in the buffer
-  ;; TODO use extend or push_byte_n_times?
-  mov r12, 2
-  .write_int16_space:
-    mov rdi, r14
-    mov rsi, 0
-    call byte_buffer_push_byte
-    dec r12
-    cmp r12, 0
-    jne .write_int16_space
-
-  ;; Replace the zeros with our int16
-  mov rax, qword[r14+BYTE_BUFFER_BUF_OFFSET]         ; backing buf
-  add rax, qword[r14+BYTE_BUFFER_DATA_LENGTH_OFFSET] ; + existing data
-  mov word[rax-2], r13w                              ; Write our int16
-
-  pop r14
-  pop r13
-  pop r12
-  ret
-
-;;; byte_buffer_push_int32(*byte_buffer, int32)
-;;;   Pushes an int32 to the byte buffer
-;;;
-;;;   Invalidates any pointers pointing to within the byte buffer.
-byte_buffer_push_int32:
-  push r12
-  push r13
-  push r14
-
-  mov r14, rdi ; byte buffer
-  mov r13, rsi ; int32 to write
-
-  %ifdef ASSERT_STACK_ALIGNMENT
-  call assert_stack_aligned
-  %endif
-
-  ;; Write 4 zeros to make space in the buffer
-  ;; TODO use extend or push_byte_n_times?
-  mov r12, 4
-  .write_int32_space:
-    mov rdi, r14
-    mov rsi, 0
-    call byte_buffer_push_byte
-    dec r12
-    cmp r12, 0
-    jne .write_int32_space
-
-  ;; Replace the zeros with our int32
-  mov rax, qword[r14+BYTE_BUFFER_BUF_OFFSET]         ; backing buf
-  add rax, qword[r14+BYTE_BUFFER_DATA_LENGTH_OFFSET] ; + existing data
-  mov dword[rax-4], r13d                              ; Write our int32
-
-  pop r14
-  pop r13
-  pop r12
-  ret
-
-;;; byte_buffer_push_int64(*byte_buffer, int64)
-;;;   Pushes an int64 to the byte buffer
-;;;
-;;;   Invalidates any pointers pointing to within the byte buffer.
-;byte_buffer_push_int64:
-;  push r12
-;  push r13
-;  push r14
-;
-;  mov r14, rdi ; byte buffer
-;  mov r13, rsi ; int64 to write
-;
-;  %ifdef ASSERT_STACK_ALIGNMENT
-;  call assert_stack_aligned
-;  %endif
-;
-;  ;; Write 8 zeros to make space in the buffer
-;  ;; TODO use extend or push_byte_n_times?
-;  mov r12, 8
-;  .write_int64_space:
-;    mov rdi, r14
-;    mov rsi, 0
-;    call byte_buffer_push_byte
-;    dec r12
-;    cmp r12, 0
-;    jne .write_int64_space
-;
-;  ;; Replace the zeros with our int64
-;  mov rax, qword[r14+BYTE_BUFFER_BUF_OFFSET]         ; backing buf
-;  add rax, qword[r14+BYTE_BUFFER_DATA_LENGTH_OFFSET] ; + existing data
-;  mov qword[rax-8], r13                              ; Write our int64
-;
-;  pop r14
-;  pop r13
-;  pop r12
-;  ret
 
 ;;; byte_buffer_push_barray(*byte_buffer, *barray)
 ;;;   Pushes a barray to the byte buffer.

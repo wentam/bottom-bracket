@@ -24,7 +24,7 @@
 ;;;
 ;;; struct key_index_value {
 ;;;   u16 count
-;;;   u32 frame_indices[count]; // In stack order. Later elements mask earlier elements.
+;;;   u32 frame_relptrs[count]; // In stack order. Later elements mask earlier elements.
 ;;; }
 ;;;
 ;;; struct frame {
@@ -34,18 +34,18 @@
 ;;; }
 ;;;
 ;;; struct key_index_entry {
-;;;   u32 key_relptr; // Pointer to key struct in key_index_data.
+;;;   u32 key_relptr;   // Pointer to key struct in key_index_data.
 ;;;   u32 value_relptr; // Pointer to key_index_value struct in key_index_data;
 ;;; }
 ;;;
-;;; struct key_bucket {
+;;; struct key_index_bucket {
 ;;;   u8 entry_count;
 ;;;   key_index_entry entries[MAX_BUCKET_SIZE] // fixed size, rehash upon overflow
 ;;; }
 ;;;
 ;;; struct kv_stack {
 ;;;   byte_buffer* frames;         // Compact and re-index everything when waste is high.
-;;;   key_bucket*  key_buckets;    // malloc'd
+;;;   key_index_bucket*  key_index_buckets;    // malloc'd
 ;;;   byte_buffer* key_index_data; // key_relptr and value_relptr values point into this buffer. Compacted when waste is high.
 ;;;
 ;;;   u64 stale_frame_bytes;       // Bytes in frames that are dead/stale so we know when to compact.
@@ -62,8 +62,14 @@
 extern error_exit
 extern malloc
 extern free
+
 extern byte_buffer_new
 extern byte_buffer_free
+extern byte_buffer_get_data_length
+extern byte_buffer_extend
+extern byte_buffer_get_buf
+extern byte_buffer_push_int32
+extern byte_buffer_push_barray_bytes
 
 section .rodata
 
@@ -76,7 +82,7 @@ section .text
 
 struc kv_stack
   .frames:                 resq 1 ; byte_buffer* - compact and re-index me when waste is high
-  .key_buckets:            resq 1 ; key_bucket*  - malloc'd array of key_bucket
+  .key_index_buckets:      resq 1 ; key_index_bucket*  - malloc'd array of key_index_bucket
   .key_index_data:         resq 1 ; byte_buffer* - key/val relptrs use this. Compact when needed.
 
   .stale_frame_bytes:      resq 1 ; Stale byte count in frames so we know when to compact
@@ -90,12 +96,18 @@ struc frame
   .value:      resq 1
 endstruc
 
+;; Variable-sized
+struc key_index_value
+  .count: resw 1
+  .frame_relptrs:
+endstruc
+
 struc key_index_entry
   .key_relptr:   resd 1
   .value_relptr: resd 1
 endstruc
 
-struc key_bucket
+struc key_index_bucket
   .entry_count: resb 1
   .entries:     resb (key_index_entry_size*MAX_BUCKET_SIZE)
 endstruc
@@ -136,12 +148,19 @@ kv_stack_2_new:
   call byte_buffer_new
   mov qword[r13+kv_stack.frames], rax
 
-  ;; Create key_buckets allocation
-  mov rax, key_bucket_size
+  ;; Create key_index_buckets allocation
+  mov rax, key_index_bucket_size
   mul r12
   mov rdi, rax
+  mov r14, rax
   call malloc
-  mov qword[r13+kv_stack.key_buckets], rax
+  mov qword[r13+kv_stack.key_index_buckets], rax
+
+  ;; Zero out key_index_buckets allocation
+  mov rdi, rax
+  mov rcx, r14
+  xor rax, rax
+  rep stosb
 
   ;; Create key_index_data byte buffer
   call byte_buffer_new
@@ -162,15 +181,15 @@ kv_stack_2_free:
   ;; NOTE: we free in reverse order to kv_stack_new to be more friendly to our allocator
 
   ;; Free key_index_data byte buffer
-  mov rdi, qword[r13+kv_stack.key_index_data]
+  mov rdi, qword[r12+kv_stack.key_index_data]
   call byte_buffer_free
 
-  ;; Free key_buckets allocation
-  mov rdi, qword[r13+kv_stack.key_buckets]
+  ;; Free key_index_buckets allocation
+  mov rdi, qword[r12+kv_stack.key_index_buckets]
   call free
 
   ;; Free frames byte buffer
-  mov rdi, qword[r13+kv_stack.frames]
+  mov rdi, qword[r12+kv_stack.frames]
   call byte_buffer_free
 
   ;; Free top-level struct
@@ -180,45 +199,301 @@ kv_stack_2_free:
   pop r12
   ret
 
-;; TODO kv_stack_2_push
-;; TODO kv_stack_2_pop
-;; TODO kv_stack_2_rm_by_id
-;; TODO kv_stack_2_pop_by_key
-;; TODO kv_stack_2_top -> frame*
-;; TODO kv_stack_2_top_with_key -> frame*
-;; TODO kv_stack_2_value_by_key
-;; TODO kv_stack_2_value_by_id
-;; TODO kv_stack_2_top_value
+;; TODO
+;; (kv_stack*, barray* key, u64 value)
+kv_stack_2_push:
+  push rbp
+  mov rbp, rsp
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+  sub rsp, 40
 
-;; TODO _kv_stack_compact_key_index_data
-;; TODO _kv_stack_compact_frames
+  mov r12, rdi ; kv_stack*
+  mov r13, rsi ; barray* key
+  mov r14, rdx ; u64 value
+
+  .start:
+
+  ;; Obtain the bucket* that this key should reside in
+  mov rdi, r12                                        ; kv_stack*
+  mov rsi, qword[r12+kv_stack.key_index_bucket_count] ; bucket_count
+  mov rdx, r13                                        ; barray* key
+  call _kv_stack_key_index_bucket
+  mov r15, rax                                        ; r15 = bucket*
+
+  ;; Work out at what relptr address our new frame will end up living so we can store it in index
+  mov rdi, qword[r12+kv_stack.frames]
+  call byte_buffer_get_data_length
+  mov rbx, rax ; frame relptr
+
+  ;; Zero out our key relptr slot
+  mov qword[rbp-80], 0
+
+  ;; If the key already exists in our key index, add our frame relptr to it's value.
+  ;;
+  ;; This means creating an entirely new key_index_value struct as a copy of the old one +
+  ;; our new frame relptr, appending it to the key_index_data buffer, and marking the size of the
+  ;; old one as stale in the buffer.
+  ;;
+  ;; We can't grow this struct in-place as there may be stuff after it.
+  ;;
+  ;; When it's at the tail we technically could, but this is not a code hotpath and thus
+  ;; not really a concern to optimize right now.
+  mov rdi, r12 ; kv_stack*
+  mov rsi, r15 ; bucket*
+  call _kv_stack_scan_bucket_for_key ;; TODO implement, is currently stub
+  mov qword[rbp-48], rax ; key_index_entry*
+  test rax, rax
+  jz .no_existing_key
+
+  .existing_key:
+
+    ;; Get our existing key_index_value*
+    mov rdi, qword[r12+kv_stack.key_index_data]
+    call byte_buffer_get_buf
+
+    mov rdi, qword[rbp-48] ; key_index_entry*
+
+    mov ecx, dword[rdi+key_index_entry.key_relptr] ; key_relptr
+    mov dword[rbp-80], ecx                         ; for .make_frame
+
+    mov esi, dword[rdi+key_index_entry.value_relptr] ; value_relptr
+    mov qword[rbp-72], rsi
+    add qword[rbp-72], rax ; key_index_value*
+
+    ;; Calculate size of existing key_index_value
+    mov qword[rbp-64], 2 ; count
+    mov rdi, qword[rbp-72] ; original key_index_value*
+    xor rax, rax
+    mov ax, word[rdi+key_index_value.count]
+    shl rax, 2 ; *4
+    add qword[rbp-64], rax ; qword[rbp-64] = size of original key_index_value
+
+    ;; Obtain relptr to our new key_index_value
+    mov rdi, qword[r12+kv_stack.key_index_data]
+    call byte_buffer_get_data_length
+    mov qword[rbp-56], rax ; relptr to our new key_index_value
+
+    ;; Make space for our new key_index_value
+    mov rdi, qword[r12+kv_stack.key_index_data]
+    mov rsi, qword[rbp-64] ; size of original key_index_value
+    call byte_buffer_extend
+    ; rax = abs pointer to write our new key_index_value
+
+    ;; Copy our original to the new location
+    ;; rsi -> rdi #rcx
+    mov rsi, qword[rbp-72]
+    mov rdi, rax
+    mov rcx, qword[rbp-64]
+    rep movsb
+
+    ;; Increment count
+    inc word[rax+key_index_value.count]
+
+    ;; Push our new frame relptr
+    mov rdi, qword[r12+kv_stack.key_index_data]
+    mov rsi, rbx
+    call byte_buffer_push_int32
+
+    ;; Update our key_index_entry's value relptr to point to our new one
+    mov rdi, qword[rbp-48] ; key_index_entry*
+    mov rsi, qword[rbp-56] ; relptr
+    mov dword[rdi+key_index_entry.value_relptr], esi
+
+    ;; Add our old key_index_value's size to our stale byte counter
+    mov rsi, qword[rbp-64]
+    add qword[r12+kv_stack.stale_key_index_bytes], rsi
+
+    jmp .make_frame
+
+  .no_existing_key:
+    ;; The key doesn't exist in our key index. Add it.
+
+    ;; If the bucket* (r15) is full, rehash and restart
+    cmp byte[r15+key_index_bucket.entry_count], MAX_BUCKET_SIZE
+    jl .room_in_bucket
+
+    mov rdi, r12
+    call _kv_stack_rehash_key_index
+    jmp .start
+
+    .room_in_bucket:
+
+    ;; Grab a relptr to where our key_index_value and key will live in kv_stack.key_index_data
+    mov rdi, qword[r12+kv_stack.key_index_data]
+    call byte_buffer_get_data_length
+    mov qword[rbp-48], rax ; relptr to our stuff in key_index_data
+
+    ;; Add our key_index_value and key to kv_stack.key_index_data
+    mov rdi, qword[r12+kv_stack.key_index_data]
+    mov rsi, 8
+    call byte_buffer_extend
+    mov  word[rax]  , 1          ; key_index_value.count
+    mov dword[rax+2], ebx        ; frame relptr
+    mov rdx, qword[r13]
+    mov  word[rax+6], dx ; key.length
+
+    mov rdi, qword[r12+kv_stack.key_index_data]
+    mov rsi, r13 ; key.bytes
+    call byte_buffer_push_barray_bytes
+
+    ;; Write our new key_index_entry to the bucket pointing to key and key_index_value we added
+    xor rcx, rcx
+    mov cl, byte[r15+key_index_bucket.entry_count] ; rax = entry count
+    mov rax, key_index_entry_size
+    mul rcx      ; rax = relptr in key_index_bucket.entries
+    add rax, 1   ; rax = relptr in key_index_bucket to entry
+    add rax, r15 ; rax = key_index_entry*
+
+    mov rdi, qword[rbp-48] ; relptr to our stuff
+    mov rsi, rdi
+    add rsi, 6
+    mov dword[rax+key_index_entry.key_relptr], esi
+    mov dword[rbp-80], esi ; For .make_frame
+    mov dword[rax+key_index_entry.value_relptr], edi
+
+    inc byte[r15+key_index_bucket.entry_count] ; Increment bucket entry count
+
+  .make_frame:
+  ;; Come up with a unique id
+  mov rdi, r12
+  call kv_stack_2_top ; TODO implement, is curently stub
+  xor rdi, rdi
+  mov edi, dword[rax+frame.id]
+  inc edi
+  mov qword[rbp-48], rdi ; new id
+
+  ;; Insert a new frame, referencing our key in our key_index_data with a relptr
+  mov rdi, qword[r12+kv_stack.frames]
+  mov rsi, frame_size
+  call byte_buffer_extend
+  mov rdi, qword[rbp-48]
+  mov esi, dword[rbp-80]
+  mov dword[rax+frame.id], edi
+  mov dword[rax+frame.key_relptr], esi
+  mov qword[rax+frame.value], r14
+
+  ;; If we have ~>25% stale key_index_data bytes, compact key_index_data
+  mov rdi, qword[r12+kv_stack.key_index_data]
+  call byte_buffer_get_data_length
+  shr rax, 2 ; / 4
+  mov rdi, qword[r12+kv_stack.stale_key_index_bytes]
+  cmp rdi, rax
+  jl .no_compact_key_index_data
+  mov rdi, r12
+  call _kv_stack_compact_key_index_data ; TODO implement, is currently stub
+  .no_compact_key_index_data:
+
+  ;; If we have ~>25% stale frame bytes, compact frames
+  mov rdi, qword[r12+kv_stack.frames]
+  call byte_buffer_get_data_length
+  shr rax, 2 ; / 4
+  mov rdi, qword[r12+kv_stack.stale_frame_bytes]
+  cmp rdi, rax
+  jl .no_compact_frames
+  mov rdi, r12
+  call _kv_stack_compact_frames ; TODO implement, is currently stub
+  .no_compact_frames:
+
+  add rsp, 40
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  pop rbp
+  ret
+
+;; TODO
+kv_stack_2_pop:
+  ret
+
+;; TODO
+kv_stack_2_rm_by_id:
+  ret
+
+;; TODO
+kv_stack_2_pop_by_key:
+  ret
+
+;; TODO
+;; (kv_stack*) -> frame*
+kv_stack_2_top:
+  ret
+
+;; TODO
+;; -> frame*
+kv_stack_2_top_with_key:
+  ret
+
+;; TODO
+kv_stack_2_value_by_key:
+  ret
+
+;; TODO
+kv_stack_2_value_by_id:
+  ret
+
+;; TODO
+kv_stack_2_top_value:
+  ret
+
+;; TODO
+;; (kv_stack*)
+_kv_stack_rehash_key_index:
+  ret
+
+;; TODO
+;; (kv_stack*, bucket*) -> key_index_entry*
+;;
+;; Returns NULL/0 if it doesn't exist
+_kv_stack_scan_bucket_for_key:
+  ret
+
+;; TODO
+;; (kv_stack*)
+_kv_stack_compact_key_index_data:
+  ret
+
+;; TODO
+;; (kv_stack*)
+_kv_stack_compact_frames:
+  ret
 
 %define FNV_OFFSET 14695981039346656037
 %define FNV_PRIME 1099511628211
 
-;; (barray, bucket_count) -> u64
-_kv_stack_key_bucket:
+;; (kv_stack*, barray, bucket_count) -> bucket*
+_kv_stack_key_index_bucket:
   dec rsi ; we need bucket_count-1 for fake-modulo masking
 
   mov rax, FNV_OFFSET
   mov rcx, FNV_PRIME
 
-  mov r8, qword[rdi]  ; barray len
-  add rdi, 8          ; move past len
+  mov r8, qword[rdx]  ; barray len
+  add rdx, 8          ; move past len
 
   .loop:
     test r8, r8
     jz .loop_break
 
-    xor al, byte[rdi]  ; ^= byte
+    xor al, byte[rdx]  ; ^= byte
     mul rcx            ; *= FNV_PRIME
 
-    inc rdi
+    inc rdx
     dec r8
     jmp .loop
   .loop_break:
 
-  and rax, rsi       ; %= bucket_count
+  and rax, rsi       ; %= bucket_count - rax = bucket index
+
+  mov r9, key_index_bucket_size
+  mul r9             ; rax = relptr to this bucket in buckets
+  add rax, rdi
+  add rax, kv_stack.key_index_buckets
   ret
 
 ;; TODO compact key index data when >= 25% waste

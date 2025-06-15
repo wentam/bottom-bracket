@@ -616,7 +616,10 @@ kv_stack_peek_by_key:
   call assert_stack_aligned
   %endif
 
-  mov r14, qword[r12+KV_STACK_PBUFFER_OFFSET] ; pbuffer
+  ;; Get pbuffer buf
+  mov rdi, qword[r12+KV_STACK_PBUFFER_OFFSET]
+  call byte_buffer_get_buf
+  mov r14, rax
 
   ;; Get dbuffer buf
   mov rdi, qword[r12+KV_STACK_DBUFFER_OFFSET]
@@ -624,7 +627,7 @@ kv_stack_peek_by_key:
   mov rbx, rax
 
   ;; Get pbuffer data length
-  mov rdi, r14
+  mov rdi, qword[r12+KV_STACK_PBUFFER_OFFSET]
   call byte_buffer_get_data_length
   mov r12, rax
 
@@ -637,14 +640,22 @@ kv_stack_peek_by_key:
   sub r12, 8
 
   mov rdi, r14
-  mov rsi, r12
-  call byte_buffer_read_int64
-  mov r15, rax
+  add rdi, r12
+  mov r15, qword[rdi]
   add r15, rbx
 
   mov rdi, r15
   add rdi, 8 ; move past id
   mov rsi, r13
+
+  mov rcx, qword[rsi]
+  cmp qword[rdi], rcx
+  jne .find_name_loop
+
+  mov cl, byte[rsi+8]
+  cmp byte[rdi+8], cl
+  jne .find_name_loop
+
   call barray_equalp
   cmp rax, 1
   je .find_name_loop_match

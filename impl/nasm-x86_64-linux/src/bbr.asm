@@ -195,43 +195,43 @@ _start:
   call init_macro_stacks
 
   ;; TODO tmp START
-  mov rdi, 8
-  call hashmap_new
-  mov r12, rax
+  ;mov rdi, 8
+  ;call hashmap_new
+  ;mov r12, rax
 
-  mov rdi, r12
-  mov rsi, foo_key
-  mov rdx, 1337
-  call hashmap_set
+  ;mov rdi, r12
+  ;mov rsi, foo_key
+  ;mov rdx, 1337
+  ;call hashmap_set
 
-  mov rdi, r12
-  mov rsi, foo2_key
-  mov rdx, 1338
-  call hashmap_set
+  ;mov rdi, r12
+  ;mov rsi, foo2_key
+  ;mov rdx, 1338
+  ;call hashmap_set
 
-  mov rdi, r12
-  call hashmap_rehash
+  ;mov rdi, r12
+  ;call hashmap_rehash
 
-  mov rdi, r12
-  mov rsi, foo2_key
-  call hashmap_rm
+  ;mov rdi, r12
+  ;mov rsi, foo2_key
+  ;call hashmap_rm
 
-  mov rdi, r12
-  call hashmap_rekey
+  ;mov rdi, r12
+  ;call hashmap_rekey
 
-  mov rdi, r12
-  mov rsi, foo_key
-  call hashmap_get
-  mov rdi, qword[rax]
+  ;mov rdi, r12
+  ;mov rsi, foo_key
+  ;call hashmap_get
+  ;mov rdi, qword[rax]
 
-  ;mov rdi, rax
-  mov rsi, 10
-  mov rdx, 2
-  mov rcx, 0
-  call write_as_base
+  ;;mov rdi, rax
+  ;mov rsi, 10
+  ;mov rdx, 2
+  ;mov rcx, 0
+  ;call write_as_base
 
-  mov rdi, r12
-  call hashmap_free
+  ;mov rdi, r12
+  ;call hashmap_free
   ;; TODO tmp END
 
   ;; Make an arena for reader and macroexpander

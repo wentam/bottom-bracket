@@ -32,7 +32,7 @@ build/%.o: src/%.asm
 
 build/bbr: ${OBJS}
 	ld -o $@ $^ -z noexecstack
-	if [ $(STRIP) ]; then strip $@; fi
+	if [ "$(STRIP)" == "1" ]; then strip $@; fi
 
 .PHONY: clean
 clean:

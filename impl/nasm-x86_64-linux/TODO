@@ -85,3 +85,8 @@
   * Make sure we can peek a bunch at once, not just per-byte
 * withm doesn't quite handle the `[bb/with [stuff]]` case correctly. See TODO in function.
 * kv_stack could probably be simplified to just store a pointer as it's value instead of a barray. That's all we use it for anyway.
+* expose byte_buffer_extend as public interface
+  * It's basically the best "give me bytes" route
+  * ...actually, it might be smart to use it to replace ALL of the push_x functions. It's easy to mov byte[rax], 5 or w/e.
+* maybe add byte_buffer_get that returns an abs pointer from relptr
+  * maybe use it instead of read_* functions.
