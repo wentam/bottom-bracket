@@ -1,7 +1,0 @@
-docs/typ-build/README.typ.html filter=lfs diff=lfs merge=lfs -text
-docs/typ-build/README-light.typ.svg filter=lfs diff=lfs merge=lfs -text
-docs/typ-build/README-dark.typ.pdf filter=lfs diff=lfs merge=lfs -text
-docs/typ-build/README-dark.typ.svg filter=lfs diff=lfs merge=lfs -text
-docs/typ-build/README-embed-dark.typ.pdf filter=lfs diff=lfs merge=lfs -text
-docs/typ-build/README-embed-light.typ.pdf filter=lfs diff=lfs merge=lfs -text
-docs/typ-build/README-light.typ.pdf filter=lfs diff=lfs merge=lfs -text
