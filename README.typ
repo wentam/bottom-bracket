@@ -262,7 +262,6 @@ The ultimate goal would be to implement C inside the language.
 
 = Getting started
 
-
 == Build an implementation of BB
 
 This are in the impl/ subdirectory of this repository. Exact build process depends on the
