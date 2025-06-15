@@ -19,23 +19,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Iosevka NF font
-        run: |
-          # Create fonts directory
-          mkdir -p ~/.local/share/fonts
-
-          # Download Iosevka NF font (adjust version as needed)
-          wget -O iosevka-nf.zip "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/Iosevka.zip"
-
-          # Extract and install fonts
-          unzip iosevka-nf.zip -d ~/.local/share/fonts/
-
-          # Update font cache
-          fc-cache -fv
-
-          # Verify font installation
-          fc-list | grep -i iosevka || echo "Iosevka font not found in cache"
-
       - name: Install Typst
         run: |
           curl -fsSL https://github.com/typst/typst/releases/latest/download/typst-x86_64-unknown-linux-musl.tar.xz | tar -xJ
