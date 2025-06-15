@@ -51,12 +51,12 @@ section .text
 ;;; Offsets for the elements in above struct. Defining them here allows us
 ;;; to easily modify the struct definition later if needed.
 %define BUFFERED_READER_FD_OFFSET 0
-%define BUFFERED_READER_READ_PTR_OFFSET 8
-%define BUFFERED_READER_END_PTR_OFFSET 16
-%define BUFFERED_READER_BUF_OFFSET 24
+%define BUFFERED_READER_READ_PTR_OFFSET 16
+%define BUFFERED_READER_END_PTR_OFFSET 24
+%define BUFFERED_READER_BUF_OFFSET 32
 
-%define READ_BUFFER_SIZE 65536 ; For simplicity read buffers are constant size
-%define BUFFERED_READER_SIZE (READ_BUFFER_SIZE + 24)
+%define READ_BUFFER_SIZE 65536
+%define BUFFERED_READER_SIZE (READ_BUFFER_SIZE + BUFFERED_READER_BUF_OFFSET)
 
 %define NEWLINE 10
 %define TAB 9
@@ -111,47 +111,55 @@ buffered_fd_reader_free:
 ;;; buffered_fd_reader_read_byte(*buffered_fd_reader)
 ;;;   Reads a byte.
 buffered_fd_reader_read_byte:
-  push r12
-  mov r12, rdi                                   ; Struct pointer
-
   ;; Decide if we need to refill the buffer
-  mov rdi, qword [r12+BUFFERED_READER_READ_PTR_OFFSET]
-  cmp rdi, qword [r12+BUFFERED_READER_END_PTR_OFFSET]
-  jne .do_read ; read pointer != end of data -> skip refill
+  ;;
+  ;; NOTE: CPU seems to do better if we use two movs instead of use the end ptr directly in the
+  ;; compare, probably because it's easier for it to realize it can load in parallel.
+  mov rcx, qword[rdi+BUFFERED_READER_READ_PTR_OFFSET]
+  mov rax, qword[rdi+BUFFERED_READER_END_PTR_OFFSET]
+  cmp rcx, rax
+  je .do_fill ; read pointer != end of data -> skip refill
 
+  .do_read:
+  movzx rax, byte[rcx]                                 ; Read at read pointer
+  inc rcx
+  mov qword[rdi+BUFFERED_READER_READ_PTR_OFFSET], rcx  ; Increment read pointer
+  ret
+
+  .do_fill:
+  mov r9, rdi                                   ; Struct pointer
+
+  sub rsp, 8
   ;; Refill buffer from fd
-  mov rsi, r12                        ; Struct pointer
+  mov rsi, r9                        ; Struct pointer
   add rsi, BUFFERED_READER_BUF_OFFSET ; Move to start of the buffer
-  mov rdi, qword [r12+BUFFERED_READER_FD_OFFSET]                      ; FD to read from
+  mov rdi, qword[r9+BUFFERED_READER_FD_OFFSET]                      ; FD to read from
   mov rdx, READ_BUFFER_SIZE           ; Length to read
   mov rax, sys_read                   ; syscall number
   syscall
+  mov rdx, rax
+  add rsp, 8
 
   ;; If sys_read returns zero, take EOF codepath
-  cmp rax, 0
-  je .epilogue
+  mov rax, BUFFERED_READER_EOF
+  cmp rdx, 0
+  je .eof
 
   ;; Set read pointer to front of buffer
-  mov qword [r12+BUFFERED_READER_READ_PTR_OFFSET], rsi
+  mov qword[r9+BUFFERED_READER_READ_PTR_OFFSET], rsi
 
   ;; Set end pointer to end of valid data based upon sys_read return value
   mov rdi, rsi
-  add rdi, rax
-  mov qword [r12+BUFFERED_READER_END_PTR_OFFSET], rdi
+  add rdi, rdx
+  mov qword[r9+BUFFERED_READER_END_PTR_OFFSET], rdi
 
-  mov rdi, qword [r12+BUFFERED_READER_READ_PTR_OFFSET] ; Obtain read pointer
-  .do_read:
-  ;mov rdi, qword [r12+BUFFERED_READER_READ_PTR_OFFSET] ; Obtain read pointer
-  movzx  rax, byte [rdi]                                  ; Read at read pointer
-  inc rdi
-  mov qword[r12+BUFFERED_READER_READ_PTR_OFFSET], rdi  ; increment read pointer
+  mov rcx, qword[r9+BUFFERED_READER_READ_PTR_OFFSET] ; Obtain read pointer
+  mov rdi, r9
 
-  pop r12
-  ret
+  jmp .do_read
 
-  .epilogue:
+  .eof:
   mov rax, BUFFERED_READER_EOF
-  pop r12
   ret
 
 ;;; buffered_fd_reader_peek_byte(*buffered_fd_reader)
