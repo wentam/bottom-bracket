@@ -49,8 +49,8 @@ docs/typ-build/%.typ.html: %.typ
 	echo "  <a href=\"$(GITHUB_PAGES_URL)/typ-build/$<.html\" target=\"_blank\" rel=\"noopener noreferrer\">" >> $@
 	echo '    <picture>' >> $@
 	file="$<"; \
-	echo "      <source media=\"(prefers-color-scheme: dark)\" srcset=\"/typ-build/$${file%.*}-dark.typ.svg\">" >> $@; \
-	echo "      <source media=\"(prefers-color-scheme: light)\" srcset=\"/typ-build/$${file%.*}-light.typ.svg\">" >> $@; \
+	echo "      <source media=\"(prefers-color-scheme: dark)\" srcset=\"$(GITHUB_PAGES_URL)/typ-build/$${file%.*}-dark.typ.svg\">" >> $@; \
+	echo "      <source media=\"(prefers-color-scheme: light)\" srcset=\"$(GITHUB_PAGES_URL)/typ-build/$${file%.*}-light.typ.svg\">" >> $@; \
 	echo '      <img alt="Fallback image description" src="default-image.png">' >> $@
 	echo '    </picture>' >> $@
 	echo '  </a>' >> $@
