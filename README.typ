@@ -122,28 +122,41 @@
 
 = Introduction
 
-When we create abstractions, one common approach is to begin with a top-level interface we'd like
-to have, and then work down towards the layer below working out how to make it happen. This is
+When constructing abstractions, a common approach is to begin with a top-level interface we'd like
+to have, then work down towards the layer below working out how to make it happen. This is
 top-down abstraction, and it's the default mode of operation for software development today.
 
-There's another way, though, one pioneered by languages like Lisp and Forth. Rather than starting from an
-ideal interface, we start with what exists now, pick a direction we'd like to go, and start working
+There's another way, though - one pioneered by languages like Lisp and Forth. Rather than starting from an
+ideal interface, we begin with what exists now, pick a direction we'd like to go, and start working
 our way up towards a particular problem we'd like to solve. The abstraction that we create is
-simply the abstraction that logically forms when attempting to move in that direction. This is the
+simply the one that logically forms when attempting to move in that direction. This is the
 bottom-up approach.
 
 Many areas of science were formed using top-down abstraction by necessity. We made high-level
 observations about the world (salt goes away in water!) and created abstractions for those
 observations. As we came to understand the underlying mechanisms, the high-level
 layer was already established - so we 'make it work' to make our abstractions logically map
-together as well as we can. It's never perfect though. This approach lends itself to abstractions
-that don't logically map to eachother very cleanly.
+together as well as we can. This approach lends itself to abstractions that don't logically map to
+eachother very cleanly.
+
+The extant system manifests a progressive, recursive degradation of representational integrity via
+multidimensional semantic leakage cascades, which induce ontological permeability across
+hierarchical abstraction strata. This systemic semantic entropy propagates through interstitial
+layers, culminating in a compounded ontological dissonance that destabilizes composability vectors
+and subverts the hermeneutic closure of conceptual encapsulations. Compounding this, the
+retro-encabulator’s asynchronous differential girdle coupling exhibits phase detractors that
+further exacerbate abstractionic efflux, intensifying cross-layer interpretive disambiguities and
+precipitating epistemic dissonance within the meta-representational schema. Such abstractionic
+efflux exacerbates cross-layer interpretive disambiguities, precipitating epistemic dissonance
+within the meta-representational schema.
+
+Sorry about that. Anyway.
 
 By contrast, mathematics has largely evolved in a more bottom-up fashion. Each abstraction is built
-upon the previous, and what resulted is a ruthlessly logical and clean system.
+upon the previous, resulting in a ruthlessly logical and clean system.
 
-These examples illustrate how bottom-up abstraction lends itself to a clean, well-mapped,
-less leaky design.
+These examples illustrate how bottom-up abstraction tends to yield a design that is less
+susceptible to semantic inconsistency across layers (less "abstraction leakage").
 
 Of course,
 #link("https://www.joelonsoftware.com/2002/11/11/the-law-of-leaky-abstractions/",
