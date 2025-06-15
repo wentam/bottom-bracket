@@ -167,9 +167,6 @@ Bottom-bracket embraces the bottom-up philosophy. It is built for bottom-up abst
 to minimize abstraction leakage. In contrast to most lisps, it does not start at a high-level of
 abstraction, but starts right at the machine-language level.
 
-// TODO talk about how BB also makes it so that you can always build towards the target problem
-// from any abstraction in a goo-like way.
-
 = Bottom-bracket's lifecycle
 
 Upon execution, bottom bracket performs only 3 steps. Read -> expand macros -> print.
@@ -181,7 +178,12 @@ Upon execution, bottom bracket performs only 3 steps. Read -> expand macros -> p
 Bottom bracket does nothing more. All behavior of the user's language is determined by macros.
 
 If you're implementing an ahead-of-time compiled language like C, the output of the 'print' step
-would likely be an ELF .o file.
+would likely be an ELF .o file. It's entirely up to the programmer, though - your macros can
+expand into anything.
+
+You can of course use your macros when defining other macros. Thus, whatever high-level
+language you define can be used when defining macros rather than machine language. This
+allows you to walk up the stack little-by-little.
 
 = Language details
 
