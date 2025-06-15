@@ -140,20 +140,18 @@ together as well as we can. This approach lends itself to abstractions that don'
 eachother very cleanly.
 
 The extant system manifests a progressive, recursive degradation of representational integrity via
-multidimensional semantic leakage cascades, which induce ontological permeability across
-hierarchical abstraction strata. This systemic semantic entropy propagates through interstitial
-layers, culminating in a compounded ontological dissonance that destabilizes composability vectors
+multidimensional semantic leakage cascades, #text(0.9em)[which induce ontological permeability across
+hierarchical abstraction strata. This systemic semantic entropy propagates through] #text(0.78em)[interstitial
+layers, culminating in a compounded] #text(0.7em)[ontological dissonance that destabilizes composability vectors
 and subverts the hermeneutic closure of conceptual encapsulations. Compounding this, the
-retro-encabulator’s asynchronous differential girdle coupling exhibits phase detractors that
-further exacerbate abstractionic efflux, intensifying cross-layer interpretive disambiguities and
-precipitating epistemic dissonance within the meta-representational schema. Such abstractionic
-efflux exacerbates cross-layer interpretive disambiguities, precipitating epistemic dissonance
-within the meta-representational schema.
+retro-encabulator’s asynchronous differential girdle  coupling exhibits phase detractors that
+further exacerbate abstractionic efflux,] #text(0.58em)[intensifying cross-layer interpretive disambiguities and
+precipitating epistemic dissonance within the meta-representational schema.]
 
 Sorry about that. Anyway.
 
-By contrast, mathematics has largely evolved in a more bottom-up fashion. Each abstraction is built
-upon the previous, resulting in a ruthlessly logical and clean system.
+In contrast to some fields, mathematics has largely evolved in a more bottom-up fashion. Each
+abstraction is built upon the previous, resulting in a ruthlessly logical and clean system.
 
 These examples illustrate how bottom-up abstraction tends to yield a design that is less
 susceptible to semantic inconsistency across layers (less "abstraction leakage").
