@@ -40,10 +40,10 @@ malloc_failed_error_str_len: equ $ - malloc_failed_error_str
 section .text
 
 ;;; struct buffered_fd_reader {
-;;;   int64_t fd;     // File descriptor to read data from
-;;;   char* read_ptr; // Pointer to the next byte to read
-;;;   char* end_ptr;  // Pointer to the end of valid data + 1
-;;;                   // (first invalid byte) in the buffer
+;;;   int64_t fd;   // File descriptor to read data from
+;;;   u32 read_ptr; // rel pointer to the next byte to read
+;;;   u32 end_ptr;  // rel pointer to the end of valid data + 1
+;;;                 // (first invalid byte) in the buffer
 ;;;
 ;;;   char buf[READ_BUFFER_SIZE] // Buffer (flat in struct, not pointer)
 ;;; }
@@ -51,9 +51,9 @@ section .text
 ;;; Offsets for the elements in above struct. Defining them here allows us
 ;;; to easily modify the struct definition later if needed.
 %define BUFFERED_READER_FD_OFFSET 0
-%define BUFFERED_READER_READ_PTR_OFFSET 16
-%define BUFFERED_READER_END_PTR_OFFSET 24
-%define BUFFERED_READER_BUF_OFFSET 32
+%define BUFFERED_READER_READ_PTR_OFFSET 8
+%define BUFFERED_READER_END_PTR_OFFSET 12
+%define BUFFERED_READER_BUF_OFFSET 16
 
 %define READ_BUFFER_SIZE 65536
 %define BUFFERED_READER_SIZE (READ_BUFFER_SIZE + BUFFERED_READER_BUF_OFFSET)
@@ -89,9 +89,9 @@ buffered_fd_reader_new:
   .good_malloc:
 
   ;; Initialize the members
-  mov qword [rax+BUFFERED_READER_FD_OFFSET], r12
-  mov qword [rax+BUFFERED_READER_READ_PTR_OFFSET], 0
-  mov qword [rax+BUFFERED_READER_END_PTR_OFFSET], 0
+  mov qword[rax+BUFFERED_READER_FD_OFFSET], r12
+  mov dword[rax+BUFFERED_READER_READ_PTR_OFFSET], 0
+  mov dword[rax+BUFFERED_READER_END_PTR_OFFSET], 0
 
   pop r12
   ret
@@ -115,15 +115,16 @@ buffered_fd_reader_read_byte:
   ;;
   ;; NOTE: CPU seems to do better if we use two movs instead of use the end ptr directly in the
   ;; compare, probably because it's easier for it to realize it can load in parallel.
-  mov rcx, qword[rdi+BUFFERED_READER_READ_PTR_OFFSET]
-  mov rax, qword[rdi+BUFFERED_READER_END_PTR_OFFSET]
-  cmp rcx, rax
-  je .do_fill ; read pointer != end of data -> skip refill
+
+  mov ecx, dword[rdi+BUFFERED_READER_READ_PTR_OFFSET]
+  mov eax, dword[rdi+BUFFERED_READER_END_PTR_OFFSET]
+  cmp ecx, eax                                        ; Compare offsets
+  je .do_fill ; read pointer == end of data -> refill
 
   .do_read:
-  movzx rax, byte[rcx]                                 ; Read at read pointer
-  inc rcx
-  mov qword[rdi+BUFFERED_READER_READ_PTR_OFFSET], rcx  ; Increment read pointer
+  movzx rax, byte[rcx+rdi+BUFFERED_READER_BUF_OFFSET] ; Read at read pointer
+  inc ecx
+  mov dword[rdi+BUFFERED_READER_READ_PTR_OFFSET], ecx ; Increment read pointer
   ret
 
   .do_fill:
@@ -146,14 +147,13 @@ buffered_fd_reader_read_byte:
   je .eof
 
   ;; Set read pointer to front of buffer
-  mov qword[r9+BUFFERED_READER_READ_PTR_OFFSET], rsi
+  mov dword[r9+BUFFERED_READER_READ_PTR_OFFSET], 0
 
   ;; Set end pointer to end of valid data based upon sys_read return value
-  mov rdi, rsi
-  add rdi, rdx
-  mov qword[r9+BUFFERED_READER_END_PTR_OFFSET], rdi
+  mov dword[r9+BUFFERED_READER_END_PTR_OFFSET], edx
 
-  mov rcx, qword[r9+BUFFERED_READER_READ_PTR_OFFSET] ; Obtain read pointer
+  xor rcx, rcx
+  mov ecx, dword[r9+BUFFERED_READER_READ_PTR_OFFSET] ; Obtain read pointer
   mov rdi, r9
 
   jmp .do_read
@@ -165,25 +165,56 @@ buffered_fd_reader_read_byte:
 ;;; buffered_fd_reader_peek_byte(*buffered_fd_reader)
 ;;;   Returns the next byte without consuming it.
 buffered_fd_reader_peek_byte:
-  push r12
-  mov r12, rdi ; Preserve struct pointer
+  ;; Everything here copy/pasted from read_byte, just with the read pointer increment removed.
+  ;; Wrapping read_byte is really slow due to function call overhead.
 
-  %ifdef ASSERT_STACK_ALIGNMENT
-  call assert_stack_aligned
-  %endif
+  ;; Decide if we need to refill the buffer
+  ;;
+  ;; NOTE: CPU seems to do better if we use two movs instead of use the end ptr directly in the
+  ;; compare, probably because it's easier for it to realize it can load in parallel.
 
-  call buffered_fd_reader_read_byte
+  mov ecx, dword[rdi+BUFFERED_READER_READ_PTR_OFFSET]
+  mov eax, dword[rdi+BUFFERED_READER_END_PTR_OFFSET]
+  cmp ecx, eax                                        ; Compare offsets
+  je .do_fill ; read pointer == end of data -> refill
 
-  ;; EOF is handled specially by read_byte and doesn't add anything to the
-  ;; buffer or move the pointer. Hence skip decrement if it's EOF.
-  cmp rax, BUFFERED_READER_EOF
-  je .nodec
+  .do_read:
+  movzx rax, byte[rcx+rdi+BUFFERED_READER_BUF_OFFSET] ; Read at read pointer
+  ret
 
-  dec qword[r12+BUFFERED_READER_READ_PTR_OFFSET]
+  .do_fill:
+  mov r9, rdi                                   ; Struct pointer
 
-  .nodec:
+  sub rsp, 8
+  ;; Refill buffer from fd
+  mov rsi, r9                        ; Struct pointer
+  add rsi, BUFFERED_READER_BUF_OFFSET ; Move to start of the buffer
+  mov rdi, qword[r9+BUFFERED_READER_FD_OFFSET]                      ; FD to read from
+  mov rdx, READ_BUFFER_SIZE           ; Length to read
+  mov rax, sys_read                   ; syscall number
+  syscall
+  mov rdx, rax
+  add rsp, 8
 
-  pop r12
+  ;; If sys_read returns zero, take EOF codepath
+  mov rax, BUFFERED_READER_EOF
+  cmp rdx, 0
+  je .eof
+
+  ;; Set read pointer to front of buffer
+  mov dword[r9+BUFFERED_READER_READ_PTR_OFFSET], 0
+
+  ;; Set end pointer to end of valid data based upon sys_read return value
+  mov dword[r9+BUFFERED_READER_END_PTR_OFFSET], edx
+
+  xor rcx, rcx
+  mov ecx, dword[r9+BUFFERED_READER_READ_PTR_OFFSET] ; Obtain read pointer
+  mov rdi, r9
+
+  jmp .do_read
+
+  .eof:
+  mov rax, BUFFERED_READER_EOF
   ret
 
 ;;; buffered_fd_reader_consume_leading_whitespace(*buffered_fd_reader)
