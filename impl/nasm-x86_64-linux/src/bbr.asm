@@ -74,13 +74,11 @@ extern byte_buffer_free
 extern _malloc
 extern _free
 
-extern hashmap_new
-extern hashmap_free
-extern hashmap_rehash
-extern hashmap_rekey
-extern hashmap_get
-extern hashmap_set
-extern hashmap_rm
+extern kv_stack_2_new
+extern kv_stack_2_free
+extern kv_stack_2_push
+extern kv_stack_2_top
+extern _kv_stack_key_index_bucket
 
 section .rodata
 
@@ -195,43 +193,18 @@ _start:
   call init_macro_stacks
 
   ;; TODO tmp START
-  ;mov rdi, 8
-  ;call hashmap_new
-  ;mov r12, rax
+  mov rdi, 2
+  call kv_stack_2_new
+  mov r12, rax
 
-  ;mov rdi, r12
-  ;mov rsi, foo_key
-  ;mov rdx, 1337
-  ;call hashmap_set
+  mov rdi, r12
+  mov rsi, foo_key
+  mov rdx, 5
+  call kv_stack_2_push
 
-  ;mov rdi, r12
-  ;mov rsi, foo2_key
-  ;mov rdx, 1338
-  ;call hashmap_set
+  mov rdi, r12
+  call kv_stack_2_free
 
-  ;mov rdi, r12
-  ;call hashmap_rehash
-
-  ;mov rdi, r12
-  ;mov rsi, foo2_key
-  ;call hashmap_rm
-
-  ;mov rdi, r12
-  ;call hashmap_rekey
-
-  ;mov rdi, r12
-  ;mov rsi, foo_key
-  ;call hashmap_get
-  ;mov rdi, qword[rax]
-
-  ;;mov rdi, rax
-  ;mov rsi, 10
-  ;mov rdx, 2
-  ;mov rcx, 0
-  ;call write_as_base
-
-  ;mov rdi, r12
-  ;call hashmap_free
   ;; TODO tmp END
 
   ;; Make an arena for reader and macroexpander

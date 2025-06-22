@@ -62,6 +62,12 @@
 ;;;   If removing the top frame, just shrink the frames buffer by the frame size.
 ;;;   This reduces compation drastically and makes accessing the top frame simpler.
 
+global kv_stack_2_new
+global kv_stack_2_free
+global kv_stack_2_push
+global kv_stack_2_top
+global _kv_stack_key_index_bucket
+
 extern error_exit
 extern malloc
 extern free
@@ -250,6 +256,7 @@ kv_stack_2_push:
   ;; not really a concern to optimize right now.
   mov rdi, r12 ; kv_stack*
   mov rsi, r15 ; bucket*
+  mov rdx, r13
   call _kv_stack_scan_bucket_for_key
   mov qword[rbp-48], rax ; key_index_entry*
   test rax, rax
@@ -366,11 +373,8 @@ kv_stack_2_push:
   .make_frame:
   ;; Come up with a unique id
   mov rdi, r12
-  call kv_stack_2_top
-  xor rdi, rdi
-  mov edi, dword[rax+frame.id]
-  inc edi
-  mov qword[rbp-48], rdi ; new id
+  call _kv_stack_mkid
+  mov qword[rbp-48], rax ; new id
 
   ;; Insert a new frame, referencing our key in our key_index_data with a relptr
   mov rdi, qword[r12+kv_stack.frames]
@@ -476,6 +480,33 @@ kv_stack_2_value_by_id:
 kv_stack_2_top_value:
   ret
 
+;; (kv_stack*)
+_kv_stack_mkid:
+  push r12
+
+  mov r12, rdi
+
+  ;; If there are no frames, return 1
+  mov rdi, qword[r12+kv_stack.frames]
+  call byte_buffer_get_data_length
+  mov rdi, rax
+  mov rax, 1
+  cmp rdi, 0
+  je .epilogue
+
+  ;; Otherwise, our new id is the highest frame +1
+  mov rdi, r12
+  call kv_stack_2_top
+  xor rdi, rdi
+  mov edi, dword[rax+frame.id]
+  inc edi
+
+  mov rax, rdi
+
+  .epilogue:
+  pop r12
+  ret
+
 ;; TODO
 ;; (kv_stack*)
 _kv_stack_rehash_key_index:
@@ -564,11 +595,13 @@ _kv_stack_scan_bucket_for_key:
 
     ; r13 = key_index_entry*
     ;; Get key*
-    mov rdi, r12
-    add edi, dword[r13+key_index_entry.key_relptr]
+    mov rsi, r12
+    xor r8, r8
+    mov r8d, dword[r13+key_index_entry.key_relptr]
+    add rsi, r8
 
     ;; Compare key* to barray*
-    mov rsi, r14
+    mov rdi, r14
     call _kv_stack_compare_barray_to_key
     mov rcx, rax
 
@@ -605,24 +638,25 @@ _kv_stack_compact_frames:
 %define FNV_OFFSET 14695981039346656037
 %define FNV_PRIME 1099511628211
 
-;; (kv_stack*, barray, bucket_count) -> bucket*
+;; (kv_stack*, bucket_count, barray* key) -> bucket*
 _kv_stack_key_index_bucket:
   dec rsi ; we need bucket_count-1 for fake-modulo masking
+  mov r10, rdx
 
   mov rax, FNV_OFFSET
   mov rcx, FNV_PRIME
 
-  mov r8, qword[rdx]  ; barray len
-  add rdx, 8          ; move past len
+  mov r8, qword[r10]  ; barray len
+  add r10, 8          ; move past len
 
   .loop:
     test r8, r8
     jz .loop_break
 
-    xor al, byte[rdx]  ; ^= byte
+    xor al, byte[r10]  ; ^= byte
     mul rcx            ; *= FNV_PRIME
 
-    inc rdx
+    inc r10
     dec r8
     jmp .loop
   .loop_break:
@@ -631,8 +665,7 @@ _kv_stack_key_index_bucket:
 
   mov r9, key_index_bucket_size
   mul r9             ; rax = relptr to this bucket in buckets
-  add rax, rdi
-  add rax, kv_stack.key_index_buckets
+  add rax, qword[rdi+kv_stack.key_index_buckets]
   ret
 
 ;; TODO compact key index data when >= 25% waste
