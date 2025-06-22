@@ -1,11 +1,12 @@
-;;; Bump allocator
+;;; Allocator using refcounted bump-allocator chunks
 ;;;
-;;; The memory allocation patterns inside bb align perfectly for the fastest
+;;; The memory allocation patterns inside BB align perfectly for the fastest
 ;;; type of allocator: a bump allocator. This is that.
 ;;;
-;;; This attribute really helps mitigate the fact that recursive macroexpansion
-;;; lends itself to a lot of tiny memory allocations. It's a lot of tiny allocations,
-;;; but the access pattern also means we can use a simple, really fast allocator.
+;;; You don't need to use the allocator in a perfectly hierarchical manner, because chunks
+;;; are refcounted and thus will eventually be freed anyway. It's just more efficient
+;;; to do so, as you'll get better memory locality, faster allocations, and less wasted
+;;; memory.
 
 ;;; struct chunk {
 ;;;   u64 refcount; // Number of allocations in the chunk. We free at zero.

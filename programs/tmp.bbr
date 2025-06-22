@@ -1,0 +1,31 @@
+[bb/with [bb/include "x86_64-asm.bbr"]
+ [bb/with
+  [
+   ;; 'data' is a feature provided by the bb/with macro. The structure here will
+   ;; be stored in memory for the duration of bb/with, and bb/with is going to
+   ;; push a macro we can use to access this memory.
+   [data stuff "aoeu"]
+
+   ;; You can ask bb/with not to expand your stuff. "quote" doesn't actually
+   ;; make sense at this level of abstraction a bit counter-intuitively.
+   [noexpand-data other-stuff [bb/platform]]
+
+   ;; We expand into "aoeu". We used 'data' just because it's easier.
+   [macro foo
+    [x86_64-linux
+     [asm/x86_64
+      [mov rax [raw-imm [stuff addr 8 LE]]]
+      [ret]]]]
+
+   ;; We expand into what the macro recieves as the second element in it's parray
+   ;; [thing [a b c]] -> [a b c]
+   [macro thing
+    [x86_64-linux
+     [asm/x86_64
+      ;; Our input is in rdi. It's the macro call parray, so like [thing [a b c]]
+      ;; We have an arena in rsi we can use to store things.
+
+      [mov rax [m64 rdi 0 1 16]] ; mov rax, qword[rdi+16]
+      [ret]]]]]
+
+  [something something [foo] [thing [a b [c d]]]]]]

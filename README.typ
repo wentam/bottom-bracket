@@ -288,3 +288,8 @@ Also see the programs/ subdirectory in this repository for more examples.
 // TODO reader and printer macros
 // TODO make clear macros can use macros, though you can write your macros with your language
 // TODO talk about how you can implement AOT, JIT, interpreted languages
+
+// FAQ:
+// * So it's a macro assembler? (no)
+// * So it's a text generator? (no)
+// * These are not like C template/substitution macros.

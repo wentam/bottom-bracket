@@ -446,11 +446,115 @@ kv_stack_2_top_value:
 _kv_stack_rehash_key_index:
   ret
 
-;; TODO
-;; (kv_stack*, bucket*) -> key_index_entry*
+;; TODO: this shares some code with barray_equalp in barray.asm. We should probably factor
+;; out a 'memcmp'.
+;; (barray* a, key* b) -> 1 if match, 0 if not
+_kv_stack_compare_barray_to_key:
+  mov r8, qword[rdi] ; length of barray
+  xor r9, r9
+  mov r9w, word[rsi] ; length of key
+
+  ;; Default return of 0
+  mov rax, 0
+
+  ;; Compare lengths
+  cmp r8, r9
+  jne .epilogue
+
+  ;; Move past lengths
+  add rdi, 8
+  add rsi, 2
+
+  ;; Compare bulk in qword chunks
+  mov rcx, r8
+  shr rcx, 3 ; rcx = number of 8 byte blocks
+  and r8, 7  ; remaining 0-7 bytes
+
+  .qword_loop:
+    test rcx, rcx
+    jz .qword_loop_break
+    mov rdx, qword[rsi]
+    cmp rdx, qword[rdi]
+    jne .epilogue
+    add rsi, 8
+    add rdi, 8
+    dec rcx
+    jmp .qword_loop
+  .qword_loop_break:
+
+  ;; Compare tail bytes byte-by-byte (unrolled loop)
+  %rep 7
+    test r8, r8
+    jz .byte_loop_break
+    mov cl, byte[rdi]
+    cmp byte[rsi], cl
+    jne .epilogue
+    inc rdi
+    inc rsi
+    dec r8
+  %endrep
+
+  .byte_loop_break:
+
+  ;; If we ran out the loop - then we found no differences. result is 1.
+  mov rax, 1
+
+  .epilogue:
+  ret
+
+;; (kv_stack*, key_index_bucket*, barray* key) -> key_index_entry*
 ;;
 ;; Returns NULL/0 if it doesn't exist
 _kv_stack_scan_bucket_for_key:
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+
+  mov r12, qword[rdi+kv_stack.key_index_data] ; key_index_data byte_buffer*
+  mov r13, rsi ; key_index_bucket*
+  mov r14, rdx ; barray* key
+  xor r15, r15
+  mov r15b, byte[r13+key_index_bucket.entry_count]
+  add r13, 1 ; move past entry_count
+
+  mov rdi, r12
+  call byte_buffer_get_buf
+  mov r12, rax ; key_index_data*
+
+  .scan_loop:
+    test r15, r15
+    jz .scan_loop_break
+
+    ; r13 = key_index_entry*
+    ;; Get key*
+    mov rdi, r12
+    add edi, dword[r13+key_index_entry.key_relptr]
+
+    ;; Compare key* to barray*
+    mov rsi, r14
+    call _kv_stack_compare_barray_to_key
+    mov rcx, rax
+
+    ;; If match, return r13
+    mov rax, r13
+    cmp rcx, 1
+    je .epilogue
+
+    add r13, key_index_entry_size
+    dec r15
+    jmp .scan_loop
+  .scan_loop_break:
+
+  mov rax, 0 ; not found if we get here
+
+  .epilogue:
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
   ret
 
 ;; TODO
