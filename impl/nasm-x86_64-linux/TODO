@@ -90,3 +90,6 @@
   * ...actually, it might be smart to use it to replace ALL of the push_x functions. It's easy to mov byte[rax], 5 or w/e.
 * maybe add byte_buffer_get that returns an abs pointer from relptr
   * maybe use it instead of read_* functions.
+* accessing common stuff from byte buffer like data length and the raw buffer might benefit from being accessed from the struct directly
+  * this reduces implementer flexibility, but reduces function call overhead
+  * basically, consider the byte buffer struct a public interface

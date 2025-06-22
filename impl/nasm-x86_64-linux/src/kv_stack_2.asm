@@ -58,6 +58,9 @@
 ;;; Notes:
 ;;; * To look up by id we just scan. In current code it winds up being the top frame 100% of the
 ;;; time, and we just use ID for durability.
+;;; * Rule: The top frame cannot be a 'dead' frame, this would break stuff.
+;;;   If removing the top frame, just shrink the frames buffer by the frame size.
+;;;   This reduces compation drastically and makes accessing the top frame simpler.
 
 extern error_exit
 extern malloc
@@ -75,6 +78,10 @@ section .rodata
 
 not_pow2_err: db "ERROR: Non-power-of-2 bucket count requested for kv_stack. It must be a power of 2.",10
 not_pow2_err_len: equ $ - not_pow2_err
+
+
+no_top_err: db "ERROR: kv_stack_top called but there is no top frame (stack is empty).",10
+no_top_err_len: equ $ - no_top_err
 
 section .text
 
@@ -199,7 +206,6 @@ kv_stack_2_free:
   pop r12
   ret
 
-;; TODO
 ;; (kv_stack*, barray* key, u64 value)
 kv_stack_2_push:
   push rbp
@@ -244,7 +250,7 @@ kv_stack_2_push:
   ;; not really a concern to optimize right now.
   mov rdi, r12 ; kv_stack*
   mov rsi, r15 ; bucket*
-  call _kv_stack_scan_bucket_for_key ;; TODO implement, is currently stub
+  call _kv_stack_scan_bucket_for_key
   mov qword[rbp-48], rax ; key_index_entry*
   test rax, rax
   jz .no_existing_key
@@ -360,7 +366,7 @@ kv_stack_2_push:
   .make_frame:
   ;; Come up with a unique id
   mov rdi, r12
-  call kv_stack_2_top ; TODO implement, is curently stub
+  call kv_stack_2_top
   xor rdi, rdi
   mov edi, dword[rax+frame.id]
   inc edi
@@ -419,9 +425,38 @@ kv_stack_2_rm_by_id:
 kv_stack_2_pop_by_key:
   ret
 
-;; TODO
 ;; (kv_stack*) -> frame*
 kv_stack_2_top:
+  push r12
+  push r13
+  push r14
+
+  ;; We can assume the top frame stored is not dead. See notes at the top of this file as to why.
+
+  mov r12, qword[rdi+kv_stack.frames] ; frames byte_buffer*
+
+  mov rdi, r12
+  call byte_buffer_get_data_length
+  mov r13, rax
+  sub r13, frame_size ; rax = relptr to top frame
+
+  ;; Error if there is no top frame (r13 < 0)
+  cmp r13, 0
+  jge .top_frame_exists
+
+  mov rdi, no_top_err
+  mov rsi, no_top_err_len
+  call error_exit
+
+  .top_frame_exists:
+
+  mov rdi, r12
+  call byte_buffer_get_buf
+  add rax, r13 ; rax = frame*
+
+  pop r14
+  pop r13
+  pop r12
   ret
 
 ;; TODO
