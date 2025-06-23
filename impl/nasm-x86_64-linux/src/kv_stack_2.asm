@@ -66,6 +66,7 @@ global kv_stack_2_new
 global kv_stack_2_free
 global kv_stack_2_push
 global kv_stack_2_top
+global kv_stack_2_bindump_buffers
 global _kv_stack_key_index_bucket
 
 extern error_exit
@@ -79,15 +80,27 @@ extern byte_buffer_extend
 extern byte_buffer_get_buf
 extern byte_buffer_push_int32
 extern byte_buffer_push_barray_bytes
+extern byte_buffer_bindump_buffer
+extern write
+
+extern bindump
 
 section .rodata
 
 not_pow2_err: db "ERROR: Non-power-of-2 bucket count requested for kv_stack. It must be a power of 2.",10
 not_pow2_err_len: equ $ - not_pow2_err
 
-
 no_top_err: db "ERROR: kv_stack_top called but there is no top frame (stack is empty).",10
 no_top_err_len: equ $ - no_top_err
+
+frames_str: db 10,"----------",10,"Frames",10,"----------",10
+frames_str_len: equ $ - frames_str
+
+buckets_str: db 10,"----------",10,"Buckets",10,"----------",10
+buckets_str_len: equ $ - buckets_str
+
+kid_str: db 10,"----------",10,"Key index data",10,"----------",10
+kid_str_len: equ $ - kid_str
 
 section .text
 
@@ -478,6 +491,58 @@ kv_stack_2_value_by_id:
 
 ;; TODO
 kv_stack_2_top_value:
+  ret
+
+;; (kv_stack*)
+kv_stack_2_bindump_buffers:
+  push r12
+  push r13
+  push r14
+
+  mov r12, rdi ; kv_stack*
+
+  ;; Frames
+
+  mov rdi, frames_str
+  mov rsi, frames_str_len
+  mov rdx, 2
+  call write
+
+  mov rdi, qword[r12+kv_stack.frames]
+  mov rsi, 2
+  mov rdx, 16
+  call byte_buffer_bindump_buffer
+
+  ;; Buckets
+
+  mov rdi, buckets_str
+  mov rsi, buckets_str_len
+  mov rdx, 2
+  call write
+
+  mov rax, qword[r12+kv_stack.key_index_bucket_count]
+  mov rcx, key_index_bucket_size
+  mul rcx
+  mov rsi, rax
+  mov rdi, qword[r12+kv_stack.key_index_buckets]
+  mov rdx, 2
+  mov rcx, 16
+  call bindump
+
+  ;; Key index data
+  mov rdi, kid_str
+  mov rsi, kid_str_len
+  mov rdx, 2
+  call write
+
+  mov rdi, qword[r12+kv_stack.key_index_data]
+  mov rsi, 2
+  mov rdx, 16
+  call byte_buffer_bindump_buffer
+
+  pop r14
+  pop r13
+  pop r12
   ret
 
 ;; (kv_stack*)

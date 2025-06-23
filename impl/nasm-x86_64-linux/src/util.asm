@@ -508,9 +508,11 @@ write_as_base_bb:
 
     ;; Convert to ASCII
     push rax     ; Preserve
+    push r9
     mov rdi, rdx ; Set our number as first arg to function call
     call digit_to_ascii
     mov rdx, rax ; Assign return value as our number
+    pop r9
     pop rax      ; Restore
 
     push rdx
@@ -535,19 +537,22 @@ write_as_base_bb:
   .done_padding:
 
   .write_to_bb_loop:
-  cmp r9, 0
-  je .write_to_bb_loop_break
+    cmp r9, 0
+    jle .write_to_bb_loop_break
 
-  add rsp, 8
-  pop rcx
+    add rsp, 8
+    pop rcx
 
-  mov rdi, r13
-  mov rsi, rcx
-  call byte_buffer_push_byte
+    push r9
+    sub rsp, 8
+    mov rdi, r13
+    mov rsi, rcx
+    call byte_buffer_push_byte
+    add rsp, 8
+    pop r9
 
-  dec r9
-  jmp .write_to_bb_loop
-
+    dec r9
+    jmp .write_to_bb_loop
   .write_to_bb_loop_break:
 
   mov rsp, r12; Restore stack ptr
