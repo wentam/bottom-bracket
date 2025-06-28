@@ -71,6 +71,7 @@ global kv_stack_2_top
 global kv_stack_2_bindump_buffers
 global _kv_stack_key_index_bucket
 global _kv_stack_compact_key_index_data
+global _kv_stack_rehash_key_index
 
 extern error_exit
 extern malloc
@@ -586,6 +587,98 @@ _kv_stack_mkid:
 ;; TODO
 ;; (kv_stack*)
 _kv_stack_rehash_key_index:
+  push rbp
+  mov rbp, rsp
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+  sub rsp, 24
+
+  mov r12, rdi ; kv_stack*
+
+  mov rdi, qword[r12+kv_stack.key_index_data]
+  call byte_buffer_get_buf
+  mov qword[rbp-64], rax ; key_index_data* raw buf
+
+  mov rcx, qword[r12+kv_stack.key_index_bucket_count]
+  shl rcx, 1 ; *= 2
+  mov qword[rbp-48], rcx ; new bucket count
+
+  .go:
+
+  mov r15, qword[r12+kv_stack.key_index_buckets] ; old buckets*
+
+  ;; Create new buckets allocation that fits twice the number of buckets as the old one
+  mov rax, key_index_bucket_size
+  mul qword[rbp-48]
+  mov rdi, rax
+  mov rbx, rax
+  call malloc
+  mov qword[rbp-56], rax ; new buckets*
+
+  ;; Zero out new buckets allocation
+  mov rdi, qword[rbp-56]
+  mov rcx, rbx
+  xor rax, rax
+  rep stosb
+
+  ;; TODO iterate over all bucket entries, inserting them into the new buckets allocation as
+  ;; appropriate
+  mov rbx, qword[r12+kv_stack.key_index_bucket_count]
+  .bucket_loop:
+    test rbx, rbx
+    jz .bucket_loop_break
+
+    ; r15 = key_index_bucket*
+    xor r13, r13
+    mov r13b, byte[r15+key_index_bucket.entry_count] ; bucket entry count
+    mov r14, r15
+    add r14, key_index_bucket.entries ; move to entries
+
+    .entry_loop:
+      test r13b, r13b
+      jz .entry_loop_break
+
+      ; r14 = key_index_entry*
+
+      ;; TODO create barray of key
+      ;; TODO get bucket this key should reside in using barray (new buckets)
+      ;; TODO work out pointer to target bucket in new buckets
+      ;; TODO if target bucket is full, free our new allocation, double our bucket count again,
+      ;; and restart at .go
+      ;; TODO copy our entry to target bucket in new buckets
+
+      add r14, key_index_entry_size
+      dec r13b
+      jmp .entry_loop
+    .entry_loop_break:
+
+    add r15, key_index_bucket_size
+    dec rbx
+    jmp .bucket_loop
+  .bucket_loop_break:
+
+  ;; Free old buckets allocation
+  mov rdi, qword[r12+kv_stack.key_index_buckets]
+  call free
+
+  ;; Repoint kv_stack* to new buckets allocation
+  mov rcx, qword[rbp-56]
+  mov qword[r12+kv_stack.key_index_buckets], rcx
+
+  ;; Update key_index_bucket_count in kv_stack*
+  mov rcx, qword[rbp-48]
+  mov qword[r12+kv_stack.key_index_bucket_count], rcx
+
+  add rsp, 24
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  pop rbp
   ret
 
 ;; TODO: this shares some code with barray_equalp in barray.asm. We should probably factor
@@ -701,9 +794,53 @@ _kv_stack_scan_bucket_for_key:
   pop r12
   ret
 
-;; (kv_stack*)
+
+;; (kv_stack*, key_index_value*, key_relptr)
 ;;
-;; NOTE: this is not a thread-safe operation currently
+;; Updates all of the frames listed in key_index_value* such that they point
+;; to the key at key_relptr
+_update_frame_keys:
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+
+  mov r12, rdi ; kv_stack*
+  mov r13, rsi ; key_index_value*
+  mov r14, rdx ; key_relptr
+
+  mov rdi, qword[r12+kv_stack.frames]
+  call byte_buffer_get_buf
+  mov rbx, rax ; rbx = frames* raw buf
+
+  xor r15, r15
+  mov r15w, word[r13+key_index_value.count]
+  add r13, key_index_value.frame_relptrs ; move to frame relptrs*
+
+  .frame_loop:
+    test r15w, r15w
+    jz .frame_loop_break
+
+    ; r13 = frame relptr*
+    xor rdi, rdi
+    mov edi, dword[r13]
+    add rdi, rbx ; rdi = frame*
+    mov dword[rdi+frame.key_relptr], r14d
+
+    add r13, 4 ; next relptr
+    dec r15w
+    jmp .frame_loop
+  .frame_loop_break:
+
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  ret
+
+;; (kv_stack*)
 _kv_stack_compact_key_index_data:
   push rbp
   mov rbp, rsp
@@ -712,7 +849,7 @@ _kv_stack_compact_key_index_data:
   push r14
   push r15
   push rbx
-  sub rsp, 24
+  sub rsp, 40
 
   mov r12, rdi ; kv_stack*
 
@@ -759,6 +896,7 @@ _kv_stack_compact_key_index_data:
 
       xor rsi, rsi
       mov esi, dword[r13+key_index_entry.value_relptr]
+      mov dword[rbp-72], esi
       mov dword[r13+key_index_entry.value_relptr], eax ; Update relptr to our new spot
       add rsi, r14 ; rsi = key_index_value*
 
@@ -784,6 +922,18 @@ _kv_stack_compact_key_index_data:
       mov rdi, r15
       call byte_buffer_push_bytes
 
+      ;; Iterate over the frames listed in the key_index_value we just wrote, updating
+      ;; them to point to our new key location
+      mov rdi, r12 ; kv_stack*
+
+      xor rsi, rsi
+      mov esi, dword[rbp-72]
+      add rsi, r14
+
+      xor rdx, rdx
+      mov edx, dword[r13+key_index_entry.key_relptr]
+      call _update_frame_keys
+
       add r13, key_index_entry_size
       dec bl
       jmp .entry_loop
@@ -804,7 +954,7 @@ _kv_stack_compact_key_index_data:
   ;; Reset key_index_data stale byte counter to 0
   mov qword[r12+kv_stack.stale_key_index_bytes], 0
 
-  add rsp, 24
+  add rsp, 40
   pop rbx
   pop r15
   pop r14
@@ -850,9 +1000,3 @@ _kv_stack_key_index_bucket:
   mul r9             ; rax = relptr to this bucket in buckets
   add rax, qword[rdi+kv_stack.key_index_buckets]
   ret
-
-;; TODO compact key index data when >= 25% waste
-;;   * NOTE: key relptrs exist in regular frames too, so make sure we repoint both the frames and
-;;     the index relptrs upon compaction.
-;; TODO compact frames whin >= 25% waste
-

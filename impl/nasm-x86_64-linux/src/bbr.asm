@@ -81,6 +81,7 @@ extern kv_stack_2_top
 extern kv_stack_2_bindump_buffers
 extern _kv_stack_key_index_bucket
 extern _kv_stack_compact_key_index_data
+extern _kv_stack_rehash_key_index
 
 section .rodata
 
@@ -195,31 +196,34 @@ _start:
   call init_macro_stacks
 
   ;; TODO tmp START
-  ;mov rdi, 2
-  ;call kv_stack_2_new
-  ;mov r12, rax
+  mov rdi, 2
+  call kv_stack_2_new
+  mov r12, rax
+
+  mov rdi, r12
+  mov rsi, foo_key
+  mov rdx, 5
+  call kv_stack_2_push
+
+  mov rdi, r12
+  mov rsi, foo_key
+  mov rdx, 5
+  call kv_stack_2_push
+
+  mov rdi, r12
+  call kv_stack_2_bindump_buffers
+
+  mov rdi, r12
+  call _kv_stack_compact_key_index_data
 
   ;mov rdi, r12
-  ;mov rsi, foo_key
-  ;mov rdx, 5
-  ;call kv_stack_2_push
+  ;call _kv_stack_rehash_key_index
 
-  ;mov rdi, r12
-  ;mov rsi, foo_key
-  ;mov rdx, 5
-  ;call kv_stack_2_push
+  mov rdi, r12
+  call kv_stack_2_bindump_buffers
 
-  ;mov rdi, r12
-  ;call kv_stack_2_bindump_buffers
-
-  ;mov rdi, r12
-  ;call _kv_stack_compact_key_index_data
-
-  ;mov rdi, r12
-  ;call kv_stack_2_bindump_buffers
-
-  ;mov rdi, r12
-  ;call kv_stack_2_free
+  mov rdi, r12
+  call kv_stack_2_free
 
   ;; TODO tmp END
 
