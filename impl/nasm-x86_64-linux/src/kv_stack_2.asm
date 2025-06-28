@@ -255,7 +255,10 @@ kv_stack_2_push:
   ;; Obtain the bucket* that this key should reside in
   mov rdi, r12                                        ; kv_stack*
   mov rsi, qword[r12+kv_stack.key_index_bucket_count] ; bucket_count
-  mov rdx, r13                                        ; barray* key
+
+  mov rdx, qword[r13] ; key length
+  mov rcx, r13
+  add rcx, 8   ; key bytes
   call _kv_stack_key_index_bucket
   mov r15, rax                                        ; r15 = bucket*
 
@@ -624,7 +627,7 @@ _kv_stack_rehash_key_index:
   xor rax, rax
   rep stosb
 
-  ;; TODO iterate over all bucket entries, inserting them into the new buckets allocation as
+  ;; Iterate over all bucket entries, inserting them into the new buckets allocation as
   ;; appropriate
   mov rbx, qword[r12+kv_stack.key_index_bucket_count]
   .bucket_loop:
@@ -641,14 +644,52 @@ _kv_stack_rehash_key_index:
       test r13b, r13b
       jz .entry_loop_break
 
-      ; r14 = key_index_entry*
+      ;; r14 = key_index_entry*
 
-      ;; TODO create barray of key
-      ;; TODO get bucket this key should reside in using barray (new buckets)
-      ;; TODO work out pointer to target bucket in new buckets
-      ;; TODO if target bucket is full, free our new allocation, double our bucket count again,
+      ;; Grab key*
+      xor rcx, rcx
+      mov ecx, dword[r14+key_index_entry.key_relptr]
+      add rcx, qword[rbp-64] ; rcx = key*
+
+      ;; Get bucket this key should reside in (in new buckets)
+      mov rdi, r12           ; kv_stack*
+      mov rsi, qword[rbp-48] ; new bucket count
+      xor rdx, rdx
+      mov dx, word[rcx]
+      add rcx, 2 ; move past len
+      call _kv_stack_key_index_bucket_index
+      ; rax = bucket index
+
+      ;; Work out pointer to target bucket in new buckets
+      mov rdi, key_index_bucket_size
+      mul rdi ; rax *= bucket size
+      add rax, qword[rbp-56]
+      mov r8, rax ; r8 = target bucket*
+
+      ;; If target bucket is full, free our new allocation, double our bucket count again,
       ;; and restart at .go
-      ;; TODO copy our entry to target bucket in new buckets
+      cmp byte[r8+key_index_bucket.entry_count], MAX_BUCKET_SIZE
+      jl .bucket_has_room
+      mov rdi, qword[rbp-56]
+      call free
+
+      shl qword[rbp-48], 1
+      jmp .go
+      .bucket_has_room:
+
+      ;; Work out pointer to target entry
+      mov rax, key_index_entry_size
+      mul byte[r8+key_index_bucket.entry_count]
+      add rax, r8
+      add rax, key_index_bucket.entries
+      mov r9, rax ; r9 = key_index_entry*
+
+      ;; Copy our entry to target bucket in new buckets
+      ; rsi -> rdi * rcx
+      mov rcx, key_index_entry_size
+      mov rsi, r14
+      mov rdi, r9
+      rep movsb
 
       add r14, key_index_entry_size
       dec r13b
@@ -971,16 +1012,17 @@ _kv_stack_compact_frames:
 %define FNV_OFFSET 14695981039346656037
 %define FNV_PRIME 1099511628211
 
-;; (kv_stack*, bucket_count, barray* key) -> bucket*
-_kv_stack_key_index_bucket:
+
+;; (kv_stack*, bucket_count, key_length, key_bytes) -> bucket index
+;;
+;; Does not clobber rdi
+_kv_stack_key_index_bucket_index:
   dec rsi ; we need bucket_count-1 for fake-modulo masking
-  mov r10, rdx
+  mov r10, rcx
+  mov r8, rdx  ; len
 
   mov rax, FNV_OFFSET
   mov rcx, FNV_PRIME
-
-  mov r8, qword[r10]  ; barray len
-  add r10, 8          ; move past len
 
   .loop:
     test r8, r8
@@ -995,6 +1037,11 @@ _kv_stack_key_index_bucket:
   .loop_break:
 
   and rax, rsi       ; %= bucket_count - rax = bucket index
+  ret
+
+;; (kv_stack*, bucket_count, key_length, key_bytes) -> bucket*
+_kv_stack_key_index_bucket:
+  call _kv_stack_key_index_bucket_index
 
   mov r9, key_index_bucket_size
   mul r9             ; rax = relptr to this bucket in buckets

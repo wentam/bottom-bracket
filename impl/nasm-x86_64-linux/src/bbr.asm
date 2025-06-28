@@ -216,8 +216,8 @@ _start:
   ;;mov rdi, r12
   ;;call _kv_stack_compact_key_index_data
 
-  ;;mov rdi, r12
-  ;;call _kv_stack_rehash_key_index
+  ;mov rdi, r12
+  ;call _kv_stack_rehash_key_index
 
   ;mov rdi, r12
   ;call kv_stack_2_bindump_buffers
