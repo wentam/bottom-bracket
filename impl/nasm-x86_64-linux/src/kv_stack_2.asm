@@ -6,6 +6,8 @@
 ;;;;
 ;;;; Used for multiple things inside bottom bracket, but principally for tracking currently
 ;;;; active macros.
+;;;;
+;;;; NOTE: not currently thread-safe
 
 ;;; * 2^16 max key length (64K)
 ;;; * Maximum of 2^16 (64K) entries with the same key (THIS WOULD BE A VERY WEIRD THING TO DO)
@@ -68,6 +70,7 @@ global kv_stack_2_push
 global kv_stack_2_top
 global kv_stack_2_bindump_buffers
 global _kv_stack_key_index_bucket
+global _kv_stack_compact_key_index_data
 
 extern error_exit
 extern malloc
@@ -79,6 +82,7 @@ extern byte_buffer_get_data_length
 extern byte_buffer_extend
 extern byte_buffer_get_buf
 extern byte_buffer_push_int32
+extern byte_buffer_push_bytes
 extern byte_buffer_push_barray_bytes
 extern byte_buffer_bindump_buffer
 extern write
@@ -125,7 +129,12 @@ endstruc
 ;; Variable-sized
 struc key_index_value
   .count: resw 1
-  .frame_relptrs:
+  .frame_relptrs: ; u32 relptr array, flat in struct
+endstruc
+
+struc key
+  .length: resw 1
+  .bytes:
 endstruc
 
 struc key_index_entry
@@ -343,7 +352,7 @@ kv_stack_2_push:
     jl .room_in_bucket
 
     mov rdi, r12
-    call _kv_stack_rehash_key_index
+    call _kv_stack_rehash_key_index ; TODO implement, is currently stub
     jmp .start
 
     .room_in_bucket:
@@ -406,8 +415,10 @@ kv_stack_2_push:
   mov rdi, qword[r12+kv_stack.stale_key_index_bytes]
   cmp rdi, rax
   jl .no_compact_key_index_data
+  cmp rdi, 1024
+  jl .no_compact_key_index_data
   mov rdi, r12
-  call _kv_stack_compact_key_index_data ; TODO implement, is currently stub
+  call _kv_stack_compact_key_index_data
   .no_compact_key_index_data:
 
   ;; If we have ~>25% stale frame bytes, compact frames
@@ -416,6 +427,8 @@ kv_stack_2_push:
   shr rax, 2 ; / 4
   mov rdi, qword[r12+kv_stack.stale_frame_bytes]
   cmp rdi, rax
+  jl .no_compact_frames
+  cmp rdi, 1024
   jl .no_compact_frames
   mov rdi, r12
   call _kv_stack_compact_frames ; TODO implement, is currently stub
@@ -502,7 +515,6 @@ kv_stack_2_bindump_buffers:
   mov r12, rdi ; kv_stack*
 
   ;; Frames
-
   mov rdi, frames_str
   mov rsi, frames_str_len
   mov rdx, 2
@@ -514,7 +526,6 @@ kv_stack_2_bindump_buffers:
   call byte_buffer_bindump_buffer
 
   ;; Buckets
-
   mov rdi, buckets_str
   mov rsi, buckets_str_len
   mov rdx, 2
@@ -690,9 +701,116 @@ _kv_stack_scan_bucket_for_key:
   pop r12
   ret
 
-;; TODO
 ;; (kv_stack*)
+;;
+;; NOTE: this is not a thread-safe operation currently
 _kv_stack_compact_key_index_data:
+  push rbp
+  mov rbp, rsp
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+  sub rsp, 24
+
+  mov r12, rdi ; kv_stack*
+
+  ;; Grab old key index data byte buffer and backing buffer
+  mov rdi, qword[r12+kv_stack.key_index_data]
+  mov qword[rbp-48], rdi ; old key_index_data byte buffer
+
+  call byte_buffer_get_buf
+  mov r14, rax ; old key_index_data backing buffer*
+
+  ;; Create byte buffer for new key index data
+  call byte_buffer_new
+  mov r15, rax
+
+  ;; Iterate over all buckets
+  mov rdi, qword[r12+kv_stack.key_index_bucket_count]
+  mov qword[rbp-56], rdi
+  mov rdi, qword[r12+kv_stack.key_index_buckets]
+  mov qword[rbp-64], rdi
+
+  .bucket_loop:
+    mov rdi, qword[rbp-56]
+    test rdi, rdi
+    jz .bucket_loop_break
+
+    ; qword[rbp-64] = key_index_bucket*
+
+    ;; Iterate over all entries in this bucket
+    mov rdi, qword[rbp-64]
+    xor rbx, rbx
+    mov bl, byte[rdi+key_index_bucket.entry_count]
+    mov r13, rdi
+    add r13, key_index_bucket.entries ; entries*
+
+    .entry_loop:
+      test bl, bl
+      jz .entry_loop_break
+
+      ; r13 = key_index_entry*
+
+      ;; Copy the value to new buffer, updating relptr in bucket
+      mov rdi, r15
+      call byte_buffer_get_data_length ; rax = new value relptr
+
+      xor rsi, rsi
+      mov esi, dword[r13+key_index_entry.value_relptr]
+      mov dword[r13+key_index_entry.value_relptr], eax ; Update relptr to our new spot
+      add rsi, r14 ; rsi = key_index_value*
+
+      xor rdx, rdx
+      mov dx, word[rsi+key_index_value.count]
+      shl rdx, 2 ; *= 4 (each frame relptr is 4 bytes)
+      add rdx, 2 ; rdx = size of key_index_value including count
+      mov rdi, r15
+      call byte_buffer_push_bytes
+
+      ;; Copy the key to new buffer, updating relptr in bucket
+      mov rdi, r15
+      call byte_buffer_get_data_length ; rax = new value relptr
+
+      xor rsi, rsi
+      mov esi, dword[r13+key_index_entry.key_relptr]
+      mov dword[r13+key_index_entry.key_relptr], eax ; Update relptr to our new spot
+      add rsi, r14 ; rsi = key*
+
+      xor rdx, rdx
+      mov dx, word[rsi+key.length]
+      add rdx, 2 ; rdx = size of key in bytes including count
+      mov rdi, r15
+      call byte_buffer_push_bytes
+
+      add r13, key_index_entry_size
+      dec bl
+      jmp .entry_loop
+    .entry_loop_break:
+
+    add qword[rbp-64], key_index_bucket_size
+    dec qword[rbp-56]
+    jmp .bucket_loop
+  .bucket_loop_break:
+
+  ;; Repoint kv_stack* to new byte buffer
+  mov qword[r12+kv_stack.key_index_data], r15
+
+  ;; Free old key index data buffer
+  mov rdi, qword[rbp-48]
+  call byte_buffer_free
+
+  ;; Reset key_index_data stale byte counter to 0
+  mov qword[r12+kv_stack.stale_key_index_bytes], 0
+
+  add rsp, 24
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  pop rbp
   ret
 
 ;; TODO

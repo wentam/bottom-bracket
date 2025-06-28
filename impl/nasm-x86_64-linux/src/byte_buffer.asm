@@ -638,42 +638,27 @@ byte_buffer_push_int_as_width_BE:
   pop r12
   ret
 
+
 ;;; byte_buffer_push_bytes(*byte_buffer, *bytes, length)
 ;;;   Pushes bytes to the byte buffer.
 ;;;
 ;;;   Invalidates any pointers pointing to within the byte buffer.
 byte_buffer_push_bytes:
-  push r12
-  push r13
-  push r14
+  push rsi ; src*
+  push rdx ; len
+  sub rsp, 8
 
-  mov r14, rdi ; byte buffer
-  mov r13, rsi ; barray to write
+  mov rsi, rdx
+  call byte_buffer_extend
 
-  %ifdef ASSERT_STACK_ALIGNMENT
-  call assert_stack_aligned
-  %endif
+  add rsp, 8
+  pop rcx ; len
+  pop rsi ; src*
 
-  ;; Write bytes
-  mov r12, rdx ; length counter
-  .write_loop:
-    cmp r12, 0
-    je .write_loop_break
-
-    mov rdi, r14
-    xor rsi, rsi
-    mov sil, byte[r13]
-    call byte_buffer_push_byte
-
-    dec r12
-    inc r13
-    jmp .write_loop
-
-  .write_loop_break:
-
-  pop r14
-  pop r13
-  pop r12
+  ;mov rsi, rsi ; src*
+  mov rdi, rax ; dest
+  ;mov rcx, rcx ; count
+  rep movsb
   ret
 
 ;;; byte_buffer_push_byte_buffer(*byte_buffer_dest, *byte_buffer_source)

@@ -527,6 +527,10 @@ Interestingly, that means that even with this design there are certain situation
         * could use a heuristic like the size of the macro in bytes, though false positives would suck
         * could even make parallelism opt-in per defined macro if the overhead is really bad.
     * probably task queue/worker model
+    * Problem: if everything shares one kv_stack, then a bb/with macro that introduces more macros would be introducing those macros into other branches in the tree being expanded in parallel.
+        * I think a good model would be to make structural_macro_expand accept a kv_stack* as an argument that determines which macros it expands (not using a global one), it passes this kv_stack* to all macros as the third argument, and bb/with
+        creates a copy of this kv_stack* with it's new macros added before calling structural_macro_expand. All other macros that need to expand children just pass through their third argument.
+            * Perhaps add a way to make a kv_stack* immutable before passing it to macros so macros don't mutate the shared one.
 * I want to maintain a pattern through all abstractions through to high-level that makes it really obvious when you're using something that's not portable to all machines
     * Such as using a 'non-portable' or 'linux-only' namespace.
 * I think the IR should always support up to 64-bit integers. Platforms with less than this need to emulate them.

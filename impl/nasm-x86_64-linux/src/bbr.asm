@@ -80,6 +80,7 @@ extern kv_stack_2_push
 extern kv_stack_2_top
 extern kv_stack_2_bindump_buffers
 extern _kv_stack_key_index_bucket
+extern _kv_stack_compact_key_index_data
 
 section .rodata
 
@@ -211,6 +212,11 @@ _start:
   ;mov rdi, r12
   ;call kv_stack_2_bindump_buffers
 
+  ;mov rdi, r12
+  ;call _kv_stack_compact_key_index_data
+
+  ;mov rdi, r12
+  ;call kv_stack_2_bindump_buffers
 
   ;mov rdi, r12
   ;call kv_stack_2_free
