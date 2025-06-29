@@ -221,6 +221,10 @@ _start:
   ;call _kv_stack_rehash_key_index
 
   ;mov rdi, r12
+  ;mov rsi, 2
+  ;call kv_stack_2_rm_by_id
+
+  ;mov rdi, r12
   ;mov rsi, 1
   ;call kv_stack_2_rm_by_id
 

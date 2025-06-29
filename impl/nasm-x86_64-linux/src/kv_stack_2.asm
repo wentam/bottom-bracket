@@ -7,7 +7,8 @@
 ;;;; Used for multiple things inside bottom bracket, but principally for tracking currently
 ;;;; active macros.
 ;;;;
-;;;; NOTE: not currently thread-safe
+;;;; NOTE: not currently thread-safe in the sense that multiple threads can't access the
+;;;; same kv_stack at the same time. Fine to use per-thread kv_stacks though.
 
 ;;; * 2^16 max key length (64K)
 ;;; * Maximum of 2^16 (64K) entries with the same key (THIS WOULD BE A VERY WEIRD THING TO DO)
@@ -429,7 +430,7 @@ kv_stack_2_push:
   mov rdi, qword[r12+kv_stack.stale_key_index_bytes]
   cmp rdi, rax
   jl .no_compact_key_index_data
-  cmp rdi, 512
+  cmp rdi, 256
   jl .no_compact_key_index_data
   mov rdi, r12
   call _kv_stack_compact_key_index_data
@@ -442,7 +443,7 @@ kv_stack_2_push:
   mov rdi, qword[r12+kv_stack.stale_frame_bytes]
   cmp rdi, rax
   jl .no_compact_frames
-  cmp rdi, 512
+  cmp rdi, 256
   jl .no_compact_frames
   mov rdi, r12
   call _kv_stack_compact_frames ; TODO implement, is currently stub
@@ -470,7 +471,7 @@ kv_stack_2_rm_by_id:
   push r14
   push r15
   push rbx
-  sub rsp, 24
+  sub rsp, 40
 
   mov r12, rdi ; kv_stack*
   mov r13, rsi ; id
@@ -537,6 +538,7 @@ kv_stack_2_rm_by_id:
   add rcx, key.bytes
   call _kv_stack_key_index_bucket
   ; rax = bucket*
+  mov qword[rbp-64], rax
 
   ;; Obtain the key_index_entry* in our index from the key referenced by our frame
   mov rdi, r12 ; kv_stack*
@@ -547,6 +549,7 @@ kv_stack_2_rm_by_id:
   add rcx, key.bytes
   call _kv_stack_scan_bucket_for_key
   ; rax = key_index_entry*
+  mov qword[rbp-72], rax ; key_index_entry*
 
   ;; Error if not found (key_index_entry* == NULL/0)
   cmp rax, 0
@@ -600,6 +603,46 @@ kv_stack_2_rm_by_id:
   mov rdi, qword[rbp-56] ; key_index_value*
   dec word[rdi+key_index_value.count]
 
+  ;; If the count is now 0, remove the key entirely from the index. This means shifting
+  ;; the key_index_entry out of the key_index_bucket. Increment stale counters as relevant
+  cmp word[rdi+key_index_value.count], 0
+  jne .keep_key
+
+  ;; Increment key_index_data stale bytes according to key size (include key length)
+  mov rdi, qword[rbp-72] ; key_index_entry*
+  xor r8, r8
+  mov r8d, dword[rdi+key_index_entry.key_relptr]
+  mov rsi, qword[rbp-48] ; key_index_data raw buffer*
+  add r8, rsi ; r8 = key*
+  xor r9, r9
+  mov r9w, word[r8+key.length]
+  add r9, 2 ; length
+  add qword[r12+kv_stack.stale_key_index_bytes], r9
+
+  ;; Increment key_index_data stale bytes according to key_index_value size, including count
+  mov rdi, qword[rbp-56] ; key_index_value*
+  xor r8, r8
+  mov r8w, word[rdi+key_index_value.count]
+  shl r8, 2 ; * 4 (sizeof u32)
+  add r8, 2 ; count itself
+  add qword[r12+kv_stack.stale_key_index_bytes], r8
+
+  ;; Perform shift
+  mov rdi, qword[rbp-72] ; key_index_entry*
+  mov rcx, qword[rbp-64] ; key_index_bucket*
+  add rcx, key_index_bucket_size ; r9 = end of bucket
+  sub rcx, rdi
+  sub rcx, key_index_entry_size ; rcx = bytes to shift
+  mov rsi, rdi
+  add rsi, key_index_entry_size
+  rep movsb ; rsi -> rdi * rcx
+
+  ;; Update entry count
+  mov rcx, qword[rbp-64] ; key_index_bucket*
+  dec byte[rcx+key_index_bucket.entry_count]
+
+  .keep_key:
+
   ;; Increment stale byte counter in key index data by 4 bytes (size of relptr we removed)
   add qword[r12+kv_stack.stale_key_index_bytes], 4
 
@@ -630,13 +673,26 @@ kv_stack_2_rm_by_id:
   mov rdi, qword[r12+kv_stack.stale_frame_bytes]
   cmp rdi, rax
   jl .no_compact_frames
-  cmp rdi, 512
+  cmp rdi, 256
   jl .no_compact_frames
   mov rdi, r12
   call _kv_stack_compact_frames ; TODO implement, is currently stub
   .no_compact_frames:
 
-  add rsp, 24
+  ;; Compact key index data if waste is ~>=25%
+  mov rdi, qword[r12+kv_stack.key_index_data]
+  call byte_buffer_get_data_length
+  shr rax, 2 ; / 4
+  mov rdi, qword[r12+kv_stack.stale_key_index_bytes]
+  cmp rdi, rax
+  jl .no_compact_key_index_data
+  cmp rdi, 256
+  jl .no_compact_key_index_data
+  mov rdi, r12
+  call _kv_stack_compact_key_index_data
+  .no_compact_key_index_data:
+
+  add rsp, 40
   pop rbx
   pop r15
   pop r14
