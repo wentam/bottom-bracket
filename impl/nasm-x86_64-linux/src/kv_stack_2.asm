@@ -69,6 +69,7 @@ global kv_stack_2_free
 global kv_stack_2_push
 global kv_stack_2_top
 global kv_stack_2_bindump_buffers
+global kv_stack_2_rm_by_id
 global _kv_stack_key_index_bucket
 global _kv_stack_compact_key_index_data
 global _kv_stack_rehash_key_index
@@ -86,6 +87,7 @@ extern byte_buffer_push_int32
 extern byte_buffer_push_bytes
 extern byte_buffer_push_barray_bytes
 extern byte_buffer_bindump_buffer
+extern byte_buffer_pop_bytes
 extern write
 
 extern bindump
@@ -97,6 +99,12 @@ not_pow2_err_len: equ $ - not_pow2_err
 
 no_top_err: db "ERROR: kv_stack_top called but there is no top frame (stack is empty).",10
 no_top_err_len: equ $ - no_top_err
+
+no_id_err: db "ERROR: Failed to find frame with requested id in kv_stack_rm_by_id.",10
+no_id_err_len: equ $ - no_id_err
+
+no_entry_err: db "ERROR: Failed to find key_index_entry for this frame's key in kv_stack_rm_by_id",10
+no_entry_err_len: equ $ - no_entry_err
 
 frames_str: db 10,"----------",10,"Frames",10,"----------",10
 frames_str_len: equ $ - frames_str
@@ -121,7 +129,7 @@ struc kv_stack
   .key_index_bucket_count: resq 1 ; Quantity of buckets in key index
 endstruc
 
-struc frame
+struc frame ; NOTE: frame size of 16 is hardcoded in some places (bitshift)
   .id:         resd 1
   .key_relptr: resd 1
   .value:      resq 1
@@ -282,7 +290,9 @@ kv_stack_2_push:
   ;; not really a concern to optimize right now.
   mov rdi, r12 ; kv_stack*
   mov rsi, r15 ; bucket*
-  mov rdx, r13
+  mov rdx, qword[r13]
+  mov rcx, r13
+  add rcx, 8
   call _kv_stack_scan_bucket_for_key
   mov qword[rbp-48], rax ; key_index_entry*
   test rax, rax
@@ -356,7 +366,7 @@ kv_stack_2_push:
     jl .room_in_bucket
 
     mov rdi, r12
-    call _kv_stack_rehash_key_index ; TODO implement, is currently stub
+    call _kv_stack_rehash_key_index
     jmp .start
 
     .room_in_bucket:
@@ -419,7 +429,7 @@ kv_stack_2_push:
   mov rdi, qword[r12+kv_stack.stale_key_index_bytes]
   cmp rdi, rax
   jl .no_compact_key_index_data
-  cmp rdi, 1024
+  cmp rdi, 512
   jl .no_compact_key_index_data
   mov rdi, r12
   call _kv_stack_compact_key_index_data
@@ -432,7 +442,7 @@ kv_stack_2_push:
   mov rdi, qword[r12+kv_stack.stale_frame_bytes]
   cmp rdi, rax
   jl .no_compact_frames
-  cmp rdi, 1024
+  cmp rdi, 512
   jl .no_compact_frames
   mov rdi, r12
   call _kv_stack_compact_frames ; TODO implement, is currently stub
@@ -451,8 +461,188 @@ kv_stack_2_push:
 kv_stack_2_pop:
   ret
 
-;; TODO
+;; (kv_stack*, id)
 kv_stack_2_rm_by_id:
+  push rbp
+  mov rbp, rsp
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+  sub rsp, 24
+
+  mov r12, rdi ; kv_stack*
+  mov r13, rsi ; id
+
+  ;; Scan frames right-to-left for a frame with this ID.
+  mov rdi, qword[r12+kv_stack.frames]
+  call byte_buffer_get_data_length
+  mov r14, rax ; frame bytes
+
+  mov rdi, qword[r12+kv_stack.frames]
+  call byte_buffer_get_buf
+  mov r15, rax
+  add r15, r14
+  sub r15, frame_size ; r15 = top frame*
+
+  shr r14, 4 ; / 16 - frame count NOTE: hardcoded frame size
+
+  .frame_scan_loop:
+    test r14, r14
+    jz .frame_scan_loop_break
+
+    ; r15 = frame*
+    cmp r13d, dword[r15+frame.id]
+    je .frame_found
+
+    sub r15, frame_size
+    dec r14
+    jmp .frame_scan_loop
+  .frame_scan_loop_break:
+
+  ;; Error if we get here - frame not found
+  mov rdi, no_id_err
+  mov rsi, no_id_err_len
+  call error_exit
+
+  .frame_found:
+  ;; r15 = frame*
+
+  ;; Work out frame relptr from frame* and buffer address
+  mov rdi, qword[r12+kv_stack.frames]
+  call byte_buffer_get_buf
+  mov r14, r15
+  sub r14, rax ; r14 = frame relptr
+
+  ;; Set the ID of the target frame to -1 to mark it as deleted. We can't shift it out
+  ;; because that would corrupt our index. We'll occassionaly perform an
+  ;; expensive compaction operation. To free up negative-ID frames.
+  mov dword[r15+frame.id], -1
+
+  ;; Obtain key* in key_index_data
+  mov rdi, qword[r12+kv_stack.key_index_data]
+  call byte_buffer_get_buf
+  mov qword[rbp-48], rax ; key_index_data raw buffer*
+  xor rbx, rbx
+  mov ebx, dword[r15+frame.key_relptr]
+  add rbx, rax ; key*
+
+  ;; Obtain the bucket in our index for the key references by our frame
+  mov rdi, r12
+  mov rsi, qword[r12+kv_stack.key_index_bucket_count]
+  xor rdx, rdx
+  mov dx, word[rbx+key.length]
+  mov rcx, rbx
+  add rcx, key.bytes
+  call _kv_stack_key_index_bucket
+  ; rax = bucket*
+
+  ;; Obtain the key_index_entry* in our index from the key referenced by our frame
+  mov rdi, r12 ; kv_stack*
+  mov rsi, rax  ; bucket*
+  xor rdx, rdx
+  mov dx, word[rbx+key.length] ; key_len
+  mov rcx, rbx ; key_bytes*
+  add rcx, key.bytes
+  call _kv_stack_scan_bucket_for_key
+  ; rax = key_index_entry*
+
+  ;; Error if not found (key_index_entry* == NULL/0)
+  cmp rax, 0
+  jne .good_entry
+
+  mov rdi, no_entry_err
+  mov rsi, no_entry_err_len
+  call error_exit
+
+  .good_entry:
+
+  ;; Obtain the key_index_value from our key_index_entry*
+  xor rdi, rdi
+  mov edi, dword[rax+key_index_entry.value_relptr]
+  add rdi, qword[rbp-48] ; rdi = value_relptr + key_index_data* = key_index_value*
+  mov qword[rbp-56], rdi ; key_index_value*
+
+  ;; Shift our frame's relptr out of the key_index_value
+  mov r8w, word[rdi+key_index_value.count]
+  mov r9, rdi
+  add r9, key_index_value.frame_relptrs
+  mov r10, 0
+  .shift_loop:
+    test r8w, r8w
+    jz .shift_loop_break
+
+    ; r9 = u32* relptr
+
+    ;; If relptr matches, shift=1 (r10)
+    cmp r14d, dword[r9]
+    mov rax, 1
+    cmove r10, rax
+
+    ;; If shift (r10) && r8w != 1, shift the element to our right onto us
+    cmp r10, 1
+    jne .noshift
+    cmp r8w, 1
+    je .noshift
+
+    mov eax, dword[r9+4]
+    mov dword[r9], eax
+
+    .noshift:
+
+    add r9, 4 ; next relptr
+    dec r8w
+    jmp .shift_loop
+  .shift_loop_break:
+
+  ;; Decrement count in the key_index_value
+  mov rdi, qword[rbp-56] ; key_index_value*
+  dec word[rdi+key_index_value.count]
+
+  ;; Increment stale byte counter in key index data by 4 bytes (size of relptr we removed)
+  add qword[r12+kv_stack.stale_key_index_bytes], 4
+
+  ;; If the frame we removed was the rightmost/topmost frame, decrement the byte buffer size
+  ;; to remove this top frame from the buffer (a frame with a negative ID can not be on top)
+  mov rdi, qword[r12+kv_stack.frames]
+  call byte_buffer_get_data_length
+  mov rdi, r14
+  add rdi, frame_size
+  cmp rdi, rax
+  jne .not_rightmost
+
+  ;; Decrement
+  mov rdi, qword[r12+kv_stack.frames]
+  mov rsi, frame_size
+  call byte_buffer_pop_bytes
+
+  jmp .was_rightmost
+  .not_rightmost:
+  ;; The frame isn't the rightmost frame, add frame size to our frame stale byte counter
+  add qword[r12+kv_stack.stale_frame_bytes], frame_size
+  .was_rightmost:
+
+  ;; Compact frames if waste is ~>= 25%
+  mov rdi, qword[r12+kv_stack.frames]
+  call byte_buffer_get_data_length
+  shr rax, 2 ; / 4
+  mov rdi, qword[r12+kv_stack.stale_frame_bytes]
+  cmp rdi, rax
+  jl .no_compact_frames
+  cmp rdi, 512
+  jl .no_compact_frames
+  mov rdi, r12
+  call _kv_stack_compact_frames ; TODO implement, is currently stub
+  .no_compact_frames:
+
+  add rsp, 24
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  pop rbp
   ret
 
 ;; TODO
@@ -587,7 +777,6 @@ _kv_stack_mkid:
   pop r12
   ret
 
-;; TODO
 ;; (kv_stack*)
 _kv_stack_rehash_key_index:
   push rbp
@@ -684,6 +873,9 @@ _kv_stack_rehash_key_index:
       add rax, key_index_bucket.entries
       mov r9, rax ; r9 = key_index_entry*
 
+      ;; Increment bucket entry count
+      inc byte[r8+key_index_bucket.entry_count]
+
       ;; Copy our entry to target bucket in new buckets
       ; rsi -> rdi * rcx
       mov rcx, key_index_entry_size
@@ -724,11 +916,12 @@ _kv_stack_rehash_key_index:
 
 ;; TODO: this shares some code with barray_equalp in barray.asm. We should probably factor
 ;; out a 'memcmp'.
-;; (barray* a, key* b) -> 1 if match, 0 if not
-_kv_stack_compare_barray_to_key:
-  mov r8, qword[rdi] ; length of barray
+;; (len, bytes*, key* b) -> 1 if match, 0 if not
+_kv_stack_compare_bytes_to_key:
+  mov r8, rdi  ; length of bytes
+  mov rdi, rsi ; bytes*
   xor r9, r9
-  mov r9w, word[rsi] ; length of key
+  mov r9w, word[rdx] ; length of key
 
   ;; Default return of 0
   mov rax, 0
@@ -737,9 +930,8 @@ _kv_stack_compare_barray_to_key:
   cmp r8, r9
   jne .epilogue
 
-  ;; Move past lengths
-  add rdi, 8
-  add rsi, 2
+  ;; Move past length of key
+  add rdx, 2
 
   ;; Compare bulk in qword chunks
   mov rcx, r8
@@ -749,10 +941,10 @@ _kv_stack_compare_barray_to_key:
   .qword_loop:
     test rcx, rcx
     jz .qword_loop_break
-    mov rdx, qword[rsi]
+    mov rdx, qword[rdx]
     cmp rdx, qword[rdi]
     jne .epilogue
-    add rsi, 8
+    add rdx, 8
     add rdi, 8
     dec rcx
     jmp .qword_loop
@@ -763,10 +955,10 @@ _kv_stack_compare_barray_to_key:
     test r8, r8
     jz .byte_loop_break
     mov cl, byte[rdi]
-    cmp byte[rsi], cl
+    cmp byte[rdx], cl
     jne .epilogue
     inc rdi
-    inc rsi
+    inc rdx
     dec r8
   %endrep
 
@@ -778,7 +970,7 @@ _kv_stack_compare_barray_to_key:
   .epilogue:
   ret
 
-;; (kv_stack*, key_index_bucket*, barray* key) -> key_index_entry*
+;; (kv_stack*, key_index_bucket*, key_len, key_bytes*) -> key_index_entry*
 ;;
 ;; Returns NULL/0 if it doesn't exist
 _kv_stack_scan_bucket_for_key:
@@ -790,7 +982,8 @@ _kv_stack_scan_bucket_for_key:
 
   mov r12, qword[rdi+kv_stack.key_index_data] ; key_index_data byte_buffer*
   mov r13, rsi ; key_index_bucket*
-  mov r14, rdx ; barray* key
+  mov r14, rdx ; key_len
+  mov rbx, rcx ; key_bytes*
   xor r15, r15
   mov r15b, byte[r13+key_index_bucket.entry_count]
   add r13, 1 ; move past entry_count
@@ -805,14 +998,15 @@ _kv_stack_scan_bucket_for_key:
 
     ; r13 = key_index_entry*
     ;; Get key*
-    mov rsi, r12
+    mov rdx, r12
     xor r8, r8
     mov r8d, dword[r13+key_index_entry.key_relptr]
-    add rsi, r8
+    add rdx, r8
 
     ;; Compare key* to barray*
     mov rdi, r14
-    call _kv_stack_compare_barray_to_key
+    mov rsi, rbx
+    call _kv_stack_compare_bytes_to_key
     mov rcx, rax
 
     ;; If match, return r13
@@ -1039,6 +1233,7 @@ _kv_stack_key_index_bucket_index:
   and rax, rsi       ; %= bucket_count - rax = bucket index
   ret
 
+;; TODO this can just pull bucket count from the kv_stack, only the index func needs bucket count
 ;; (kv_stack*, bucket_count, key_length, key_bytes) -> bucket*
 _kv_stack_key_index_bucket:
   call _kv_stack_key_index_bucket_index
