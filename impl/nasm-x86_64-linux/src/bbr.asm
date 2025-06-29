@@ -83,6 +83,7 @@ extern kv_stack_2_rm_by_id
 extern _kv_stack_key_index_bucket
 extern _kv_stack_compact_key_index_data
 extern _kv_stack_rehash_key_index
+extern _kv_stack_compact_frames
 
 section .rodata
 
@@ -221,12 +222,11 @@ _start:
   ;call _kv_stack_rehash_key_index
 
   ;mov rdi, r12
-  ;mov rsi, 2
+  ;mov rsi, 1
   ;call kv_stack_2_rm_by_id
 
   ;mov rdi, r12
-  ;mov rsi, 1
-  ;call kv_stack_2_rm_by_id
+  ;call _kv_stack_compact_frames
 
   ;mov rdi, r12
   ;call kv_stack_2_bindump_buffers

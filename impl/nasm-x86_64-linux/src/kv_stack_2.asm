@@ -74,6 +74,7 @@ global kv_stack_2_rm_by_id
 global _kv_stack_key_index_bucket
 global _kv_stack_compact_key_index_data
 global _kv_stack_rehash_key_index
+global _kv_stack_compact_frames
 
 extern error_exit
 extern malloc
@@ -446,7 +447,7 @@ kv_stack_2_push:
   cmp rdi, 256
   jl .no_compact_frames
   mov rdi, r12
-  call _kv_stack_compact_frames ; TODO implement, is currently stub
+  call _kv_stack_compact_frames
   .no_compact_frames:
 
   add rsp, 40
@@ -676,7 +677,7 @@ kv_stack_2_rm_by_id:
   cmp rdi, 256
   jl .no_compact_frames
   mov rdi, r12
-  call _kv_stack_compact_frames ; TODO implement, is currently stub
+  call _kv_stack_compact_frames
   .no_compact_frames:
 
   ;; Compact key index data if waste is ~>=25%
@@ -1254,14 +1255,178 @@ _kv_stack_compact_key_index_data:
   pop rbp
   ret
 
-;; TODO
 ;; (kv_stack*)
 _kv_stack_compact_frames:
+  push rbp
+  mov rbp, rsp
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+  sub rsp, 8
+
+  mov r12, rdi ; kv_stack*
+
+  ;; Shift frames with negative IDs out of the frames buffer, updating the key_index every time we shift a frame
+
+  mov rdi, qword[r12+kv_stack.frames]
+  call byte_buffer_get_buf
+  mov r13, rax ; write pointer
+  mov r14, rax ; read pointer
+  mov qword[rbp-48], rax ; raw frames buf*
+
+  mov rdi, qword[r12+kv_stack.frames]
+  call byte_buffer_get_data_length
+  mov r15, rax
+  add r15, r13 ; r15 = end ptr
+
+  xor rbx, rbx ; dead frame counter
+
+  .shift_loop:
+    ;; Update the write pointer to the next 'dead' frame, breaking the shift loop if we run
+    ;; off the end
+    .wloop:
+      cmp dword[r13], 0
+      jl .wloop_break
+      inc rbx
+      add r13, frame_size
+      cmp r13, r15 ; write pointer vs buffer end ptr
+      jge .shift_loop_break
+      jmp .wloop
+    .wloop_break:
+
+    ;; read pointer = write pointer
+    mov r14, r13
+
+    ;; Update the read pointer to point to the next 'alive' frame, breaking the loop if we run
+    ;; off the end
+    .rloop:
+     cmp dword[r14], 0
+     jge .rloop_break
+     add r14, frame_size
+     cmp r14, r15
+     jge .shift_loop_break
+     jmp .rloop
+    .rloop_break:
+
+    ;; Perform shift of this gap (might be multiple dead frames)
+    ; rsi -> rdi * rcx
+    mov rcx, r14
+    sub rcx, r13
+    mov rsi, r14
+    mov rdi, r13
+    rep movsb
+
+    ;; Update the index with this new frame's relptr position
+    mov rdi, r12 ; kv_stack*
+    mov rsi, r14 ; old frame abs ptr (read pointer)
+    sub rsi, qword[rbp-48] ; old relptr
+    mov rdx, r13 ; new frame abs ptr (write ptr)
+    sub rdx, qword[rbp-48] ; new relptr
+    call _kv_stack_update_frame_relptr_in_key_index
+
+    ;; Bump write pointer one frame
+    add r13, frame_size
+
+    jmp .shift_loop
+  .shift_loop_break:
+
+  ;; Remove trailing bytes from frames buffer
+  shl rbx, 4 ; * 16 NOTE: hardcoded frame size
+  mov rdi, qword[r12+kv_stack.frames]
+  mov rsi, rbx
+  call byte_buffer_pop_bytes
+
+  add rsp, 8
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  pop rbp
+  ret
+
+;; (kv_stack*, old_frame_relptr, new_frame_relptr)
+;;
+;; Assumes the frame currently resides at new_frame_relptr in order to look up the correct key.
+_kv_stack_update_frame_relptr_in_key_index:
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+
+  mov r12, rdi ; kv_stack*
+  mov r13, rsi ; old_frame_relptr
+  mov r14, rdx ; new_frame_relptr
+
+  ;; Grab key_index_data raw buf ptr
+  mov rdi, qword[r12+kv_stack.key_index_data]
+  call byte_buffer_get_buf
+  mov rbx, rax ; key_index_data raw buffer*
+
+  ;; Obtain the key*
+  mov rdi, qword[r12+kv_stack.frames]
+  call byte_buffer_get_buf
+  add rax, r14 ; rax = frame*
+  xor r15, r15
+  mov r15d, dword[rax+frame.key_relptr] ; rdi = key_relptr
+  add r15, rbx ; key*
+
+  ;; Obtain the bucket*
+  mov rdi, r12
+  mov rsi, qword[r12+kv_stack.key_index_bucket_count]
+  xor rdx, rdx
+  mov dx, word[r15+key.length]
+  mov rcx, r15
+  add rcx, key.bytes
+  call _kv_stack_key_index_bucket
+
+  ;; Scan bucket for correct key_index_entry
+  mov rdi, r12 ; kv_stack*
+  mov rsi, rax ; bucket*
+  xor rdx, rdx
+  mov dx, word[r15+key.length] ; rdx = key length
+  mov rcx, r15
+  add rcx, key.bytes ; rcx = key bytes*
+  call _kv_stack_scan_bucket_for_key
+
+  ;; Obtain key_index_value* from key_index_entry
+  xor r8, r8
+  mov r8d, dword[rax+key_index_entry.value_relptr] ; value relptr
+  add r8, rbx ; key_index_value*
+
+  ;; Iterate through key_index_value* relptrs until we find our old frame relptr. Update it
+  ;; and break when we find it.
+  xor r9, r9
+  mov r9w, word[r8+key_index_value.count] ; r9 = count
+  add r8, 2 ; move past len - r8 = frame_relptrs*
+
+  .scanloop:
+  test r9, r9
+  jz .scanloop_break
+
+  ; r8 = frame relptr*
+  cmp dword[r8], r13d
+  jne .not_match
+  mov dword[r8], r14d
+  .not_match:
+
+  add r8, 4 ; next relptr
+  dec r9
+  jmp .scanloop
+  .scanloop_break:
+
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
   ret
 
 %define FNV_OFFSET 14695981039346656037
 %define FNV_PRIME 1099511628211
-
 
 ;; (kv_stack*, bucket_count, key_length, key_bytes) -> bucket index
 ;;
