@@ -82,6 +82,9 @@ extern kv_stack_2_bindump_buffers
 extern kv_stack_2_rm_by_id
 extern kv_stack_2_pop
 extern kv_stack_2_pop_by_key
+extern kv_stack_2_value_by_key
+extern kv_stack_2_value_by_id
+extern kv_stack_2_top_value
 extern _kv_stack_key_index_bucket
 extern _kv_stack_compact_key_index_data
 extern _kv_stack_rehash_key_index
@@ -206,7 +209,7 @@ _start:
 
   ;mov rdi, r12
   ;mov rsi, foo_key
-  ;mov rdx, 5
+  ;mov rdx, 2
   ;call kv_stack_2_push
 
   ;mov rdi, r12
@@ -228,12 +231,22 @@ _start:
   ;;call kv_stack_2_pop
 
   ;;mov rdi, r12
-  ;;mov rsi, 1
+  ;;mov rsi, 2
   ;;call kv_stack_2_rm_by_id
 
-  ;mov rdi, r12
-  ;mov rsi, foo_key
-  ;call kv_stack_2_pop_by_key
+  ;;mov rdi, r12
+  ;;mov rsi, foo_key
+  ;;call kv_stack_2_pop_by_key
+
+  ;;mov rdi, r12
+  ;;mov rsi, 3
+  ;;call kv_stack_2_top_value
+
+  ;;mov rdi, qword[rax]
+  ;;mov rsi, 10
+  ;;mov rdx, 2
+  ;;mov rcx, 0
+  ;;call write_as_base
 
   ;;mov rdi, r12
   ;;call _kv_stack_compact_frames

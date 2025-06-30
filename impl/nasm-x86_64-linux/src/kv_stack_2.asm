@@ -73,6 +73,9 @@ global kv_stack_2_bindump_buffers
 global kv_stack_2_rm_by_id
 global kv_stack_2_pop
 global kv_stack_2_pop_by_key
+global kv_stack_2_value_by_key
+global kv_stack_2_value_by_id
+global kv_stack_2_top_value
 global _kv_stack_key_index_bucket
 global _kv_stack_compact_key_index_data
 global _kv_stack_rehash_key_index
@@ -680,15 +683,14 @@ _kv_stack_rm_frame:
   ret
 
 ;; (kv_stack*, id)
-kv_stack_2_rm_by_id:
-  push rbp
-  mov rbp, rsp
+;;
+;; returns -1 if not found
+_kv_stack_frame_relptr_from_id:
   push r12
   push r13
   push r14
   push r15
   push rbx
-  sub rsp, 40
 
   mov r12, rdi ; kv_stack*
   mov r13, rsi ; id
@@ -719,10 +721,9 @@ kv_stack_2_rm_by_id:
     jmp .frame_scan_loop
   .frame_scan_loop_break:
 
-  ;; Error if we get here - frame not found
-  mov rdi, no_id_err
-  mov rsi, no_id_err_len
-  call error_exit
+  ;; Return -1 if we get here - frame not found
+  mov rax, -1
+  jmp .epilogue
 
   .frame_found:
   ;; r15 = frame*
@@ -732,6 +733,44 @@ kv_stack_2_rm_by_id:
   call byte_buffer_get_buf
   mov r14, r15
   sub r14, rax ; r14 = frame relptr
+
+  mov rax, r14 ; frame relptr
+
+  .epilogue:
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  ret
+
+;; (kv_stack*, id)
+kv_stack_2_rm_by_id:
+  push rbp
+  mov rbp, rsp
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+  sub rsp, 40
+
+  mov r12, rdi ; kv_stack*
+  mov r13, rsi ; id
+
+  ;; Get frame relptr from id
+  call _kv_stack_frame_relptr_from_id
+  mov r14, rax ; frame relptr
+
+  cmp r14, -1
+  jne .exists
+
+  ;; Error: frame not found
+  mov rdi, no_id_err
+  mov rsi, no_id_err_len
+  call error_exit
+
+  .exists:
 
   mov rdi, r12
   mov rsi, r14
@@ -786,6 +825,8 @@ _kv_stack_compact_if_needed:
   ret
 
 ;; (kv_stack*, key_len, bytes* key) -> frame_relptr
+;;
+;; Returns -1 if frame not found
 _kv_stack_frame_relptr_from_key:
   push r12
   push r13
@@ -815,10 +856,16 @@ _kv_stack_frame_relptr_from_key:
   mov rdx, r13 ; key_len
   mov rcx, r14 ; bytes* key
   call _kv_stack_scan_bucket_for_key
+  mov r8, rax
+
+  ;; Return -1 if not found
+  mov rax, -1
+  cmp r8, 0
+  je .epilogue
 
   ;; Get key_index_value* from key_index_entry*
   xor r9, r9
-  mov r9d, dword[rax+key_index_entry.value_relptr]
+  mov r9d, dword[r8+key_index_entry.value_relptr]
   add r9, r15 ; key_index_value*
 
   ;;; Get the top/rightmost frame relptr from the key_index_value*
@@ -832,6 +879,7 @@ _kv_stack_frame_relptr_from_key:
   xor rax, rax
   mov eax, dword[r9]
 
+  .epilogue
   pop rbx
   pop r15
   pop r14
@@ -903,21 +951,105 @@ kv_stack_2_top:
   pop r12
   ret
 
-;; TODO
-;; -> frame*
-kv_stack_2_top_with_key:
-  ret
-
-;; TODO
+;; (kv_stack*, barray* key) -> u64* (value*)
+;;
+;; Returns *POINTER* to value. You may mutate it. Returns NULL/0 if not found
 kv_stack_2_value_by_key:
+  push r12
+  push r13
+  push r14
+
+  mov r12, rdi ; kv_stack*
+  mov r13, rsi ; barray* key
+
+  ;; Get frame relptr from key
+  mov rdi, r12        ; kv_stack*
+  mov rsi, qword[r13] ; key_len
+  mov rdx, r13
+  add rdx, 8          ; bytes* key
+  call _kv_stack_frame_relptr_from_key
+  mov r14, rax ; frame relptr
+
+  ;; Return 0/NULL if not found
+  mov rax, 0
+  cmp r14, -1
+  je .epilogue
+
+  ;; Work out value* from frame relptr
+  mov rdi, qword[r12+kv_stack.frames]
+  call byte_buffer_get_buf
+  add rax, r14
+  add rax, frame.value ; value*
+
+  .epilogue:
+  pop r14
+  pop r13
+  pop r12
   ret
 
-;; TODO
+;; (kv_stack*, id) -> u64* (value*)
+;;
+;; Returns *POINTER* to value. You may mutate it. Returns NULL/0 if not found
 kv_stack_2_value_by_id:
+  push r12
+  push r13
+  push r14
+
+  ;; Get frame relptr via id (rdi and rsi already correct)
+  call _kv_stack_frame_relptr_from_id
+  mov r14, rax
+
+  ;; Return 0/NULL if not found
+  mov rax, 0
+  cmp r14, -1
+  je .epilogue
+
+  ;; Work out value* from frame relptr
+  mov rdi, qword[r12+kv_stack.frames]
+  call byte_buffer_get_buf
+  add rax, r14
+  add rax, frame.value ; value*
+
+  .epilogue:
+  pop r14
+  pop r13
+  pop r12
   ret
 
-;; TODO
+;; (kv_stack*) -> u64* (value*)
+;;
+;; Returns *POINTER* to value. You may mutate it. Returns NULL/0 if no frames.
 kv_stack_2_top_value:
+  push r12
+  push r13
+  push r14
+
+  mov r12, rdi ; kv_stack*
+
+  ;; Grab frames data length
+  mov rdi, qword[r12+kv_stack.frames]
+  call byte_buffer_get_data_length
+  mov r13, rax ; frames data length
+
+  ;; Return 0 if no frames
+  mov rax, 0
+  cmp r13, 0
+  je .epilogue
+
+  ;; Work out frame relptr
+  mov r14, r13
+  sub r14, frame_size ; frame relptr
+
+  ;; Work out value* from frame relptr
+  mov rdi, qword[r12+kv_stack.frames]
+  call byte_buffer_get_buf
+  add rax, r14
+  add rax, frame.value ; value*
+
+  .epilogue:
+  pop r14
+  pop r13
+  pop r12
   ret
 
 ;; (kv_stack*)
