@@ -2516,17 +2516,26 @@
    [REX W R]"\x89"[RM r12 [m64 rdi 0 1 0]]; mov qword[rdi], r12
 
    ;; Push p-macro
-   [REX W]"\x83"[RM 5 rsp][imm 8 16] ; sub rsp, 16
-   [REX W]"\xC7"[RM 0 [m64 rsp 0 1 0]][imm 32 8] ; mov qword[rsp], 8
-   [REX W][bb/bsumLE "\xB8" [bregnum rsi]][p-macro barray-raw-addr 8 LE] ; mov rsi, p-macro*
-   [REX W]"\x89"[RM rsi [m64 rsp 0 1 8]] ; mov qword[rsp+8], rsi
-   [REX W]"\x8B"[RM rdx rsp] ; mov rdx, rsp
+   ;[REX W]"\x83"[RM 5 rsp][imm 8 16] ; sub rsp, 16
+   ;[REX W]"\xC7"[RM 0 [m64 rsp 0 1 0]][imm 32 8] ; mov qword[rsp], 8
+   ;[REX W][bb/bsumLE "\xB8" [bregnum rsi]][p-macro barray-raw-addr 8 LE] ; mov rsi, p-macro*
+   ;[REX W]"\x89"[RM rsi [m64 rsp 0 1 8]] ; mov qword[rsp+8], rsi
+   ;[REX W]"\x8B"[RM rdx rsp] ; mov rdx, rsp
+   ;[REX W][bb/bsumLE "\xB8" [bregnum rdi]][bb/builtin-addr/macro-stack-structural] ; mov rdi, macro-stack-structural
+   ;[REX W][bb/bsumLE "\xB8" [bregnum rsi]][p-macro-name addr 8 LE]                    ; mov rsi, p-macro-name
+   ;[REX W][bb/bsumLE "\xB8" [bregnum rax]][bb/builtin-func-addr/kv-stack-push]     ; mov rax, kv-stack-push
+   ;"\xFF"[RM 2 rax]                                                                      ; call rax
+   ;[REX W]"\x89"[RM rax [m64 rbp 0 1 -48]]; mov qword[rbp-48], rax - = id
+   ;[REX W]"\x83"[RM 0 rsp][imm 8 16] ; add rsp, 16
+
    [REX W][bb/bsumLE "\xB8" [bregnum rdi]][bb/builtin-addr/macro-stack-structural] ; mov rdi, macro-stack-structural
    [REX W][bb/bsumLE "\xB8" [bregnum rsi]][p-macro-name addr 8 LE]                    ; mov rsi, p-macro-name
+   [REX W][bb/bsumLE "\xB8" [bregnum rdx]][p-macro barray-raw-addr 8 LE] ; mov rdx, p-macro*
    [REX W][bb/bsumLE "\xB8" [bregnum rax]][bb/builtin-func-addr/kv-stack-push]     ; mov rax, kv-stack-push
    "\xFF"[RM 2 rax]                                                                      ; call rax
    [REX W]"\x89"[RM rax [m64 rbp 0 1 -48]]; mov qword[rbp-48], rax - = id
-   [REX W]"\x83"[RM 0 rsp][imm 8 16] ; add rsp, 16
+
+
 
    ;; Encode instruction [qword[r13]]
 
@@ -2546,7 +2555,7 @@
    ;; Pop p-macro by id
    [REX W][bb/bsumLE "\xB8" [bregnum rdi]][bb/builtin-addr/macro-stack-structural] ; mov rdi, macro-stack-structural
    [REX W]"\x8B"[RM rsi [m64 rbp 0 1 -48]] ; mov rsi, qword[rbp-48]
-   [REX W][bb/bsumLE "\xB8" [bregnum rax]][bb/builtin-func-addr/kv-stack-pop-by-id]     ; mov rax, kv-stack-pop-by-id
+   [REX W][bb/bsumLE "\xB8" [bregnum rax]][bb/builtin-func-addr/kv-stack-rm-by-id]     ; mov rax, kv-stack-rm-by-id
    "\xFF"[RM 2 rax]                                                                      ; call rax
 
    ;; Copy return parray's pointers to our output parary, except as buffer-relative
@@ -2933,4 +2942,6 @@
     [call-abs rax]
 
     [pop r12]
-    [ret]]]]]
+    [ret]]]]
+          ]
+ 

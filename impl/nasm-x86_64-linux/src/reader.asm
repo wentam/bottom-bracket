@@ -44,7 +44,7 @@ extern byte_buffer_bindump_buffer
 
 extern macro_stack_reader
 
-extern kv_stack_value_by_key
+extern kv_stack_2_value_by_key
 
 section .rodata
 ;;; Syscall numbers
@@ -178,13 +178,13 @@ _read:
   push rcx
   mov rdi, qword[macro_stack_reader]
   mov rsi, rsp
-  call kv_stack_value_by_key
+  call kv_stack_2_value_by_key
   mov rdi, r12
   mov rsi, r14
   mov rbx, rax
   cmp rax, 0
   je .nullfunc
-  call qword[rax+8]
+  call qword[rax]
   .nullfunc:
 
   pop rcx
@@ -196,13 +196,13 @@ _read:
   ;; No direct macro matches, try for the catchall macro
   mov rdi, qword[macro_stack_reader]
   mov rsi, catchall_macro_name
-  call kv_stack_value_by_key
+  call kv_stack_2_value_by_key
   mov rdi, r12
   mov rsi, r14
   mov rbx, rax
   cmp rax, 0
   je .nullfunc2
-  call qword[rax+8]
+  call qword[rax]
   .nullfunc2:
 
   cmp rbx, 0

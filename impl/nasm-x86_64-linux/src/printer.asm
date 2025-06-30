@@ -4,7 +4,7 @@ extern assert_stack_aligned
 extern write_char
 extern write
 extern macro_stack_printer
-extern kv_stack_value_by_key
+extern kv_stack_2_value_by_key
 
 section .rodata
 data_macro_name: db 4,0,0,0,0,0,0,0,"data"
@@ -26,10 +26,10 @@ print:
   ;; Call top-level 'data' macro
   mov rdi, qword[macro_stack_printer]
   mov rsi, data_macro_name
-  call kv_stack_value_by_key
+  call kv_stack_2_value_by_key
   mov rdi, r12 ; *data
   mov rsi, r13 ; fd
-  call qword[rax+8]
+  call qword[rax]
 
   .done:
   pop r14

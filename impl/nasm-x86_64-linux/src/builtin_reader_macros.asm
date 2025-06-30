@@ -57,6 +57,8 @@ extern byte_in_barray_p
 extern write_char
 extern write_as_base
 
+extern kv_stack_2_push
+
 section .rodata
 
 parray_literal_macro_name: db 1,0,0,0,0,0,0,0,"["
@@ -98,44 +100,28 @@ push_builtin_reader_macros:
   sub rsp, 8
 
   ;; push barray literal macro
-  sub rsp, 16
-  mov qword[rsp], 8
-  mov qword[rsp+8], barray_literal
   mov rdi, qword[macro_stack_reader] ; macro stack
   mov rsi, barray_literal_macro_name ; macro name
-  mov rdx, rsp                       ; code
-  call kv_stack_push
-  add rsp, 16
+  mov rdx, barray_literal
+  call kv_stack_2_push
 
   ;; push comment literal macro
-  sub rsp, 16
-  mov qword[rsp], 8
-  mov qword[rsp+8], comment_literal
   mov rdi, qword[macro_stack_reader] ; macro stack
   mov rsi, comment_literal_macro_name ; macro name
-  mov rdx, rsp                        ; code
-  call kv_stack_push
-  add rsp, 16
+  mov rdx, comment_literal
+  call kv_stack_2_push
 
   ;; push parray literal macro
-  sub rsp, 16
-  mov qword[rsp], 8
-  mov qword[rsp+8], parray_literal
   mov rdi, qword[macro_stack_reader] ; macro stack
   mov rsi, parray_literal_macro_name ; macro name
-  mov rdx, rsp            ; code
-  call kv_stack_push
-  add rsp, 16
+  mov rdx, parray_literal
+  call kv_stack_2_push
 
   ;; push byte_string literal macro
-  sub rsp, 16
-  mov qword[rsp], 8
-  mov qword[rsp+8], byte_string
-  mov rdi, qword[macro_stack_reader]       ; macro stack
-  mov rsi, byte_string_macro_name          ; macro name
-  mov rdx, rsp                            ; code
-  call kv_stack_push
-  add rsp, 16
+  mov rdi, qword[macro_stack_reader] ; macro stack
+  mov rsi, byte_string_macro_name ; macro name
+  mov rdx, byte_string
+  call kv_stack_2_push
 
   add rsp, 8
   ret

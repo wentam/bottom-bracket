@@ -23,6 +23,9 @@ extern barray_invalid_chars
 extern byte_in_barray_p
 extern write_as_base
 
+extern kv_stack_2_push
+extern kv_stack_2_value_by_key
+
 section .rodata
 parray_macro_name: db 6,0,0,0,0,0,0,0,"parray"
 barray_macro_name: db 6,0,0,0,0,0,0,0,"barray"
@@ -38,48 +41,31 @@ push_builtin_printer_macros:
   %endif
 
   ;; push top-level 'data' macro
-  sub rsp, 16
-  mov qword[rsp], 8
-  mov qword[rsp+8], data
-  mov rdi, qword[macro_stack_printer] ; macro stack
-  mov rsi, data_macro_name            ; macro name
-  mov rdx, rsp                        ; code
-  call kv_stack_push
-  add rsp, 16
+  mov rdi, qword[macro_stack_printer]
+  mov rsi, data_macro_name
+  mov rdx, data
+  call kv_stack_2_push
 
   ;; push barray macro
-  sub rsp, 16
-  mov qword[rsp], 8
-  mov qword[rsp+8], barray
-  mov rdi, qword[macro_stack_printer] ; macro stack
-  mov rsi, barray_macro_name          ; macro name
-  mov rdx, rsp                        ; code
-  call kv_stack_push
-  add rsp, 16
+  mov rdi, qword[macro_stack_printer]
+  mov rsi, barray_macro_name
+  mov rdx, barray
+  call kv_stack_2_push
 
   ;; push barray with byte-strings macro
   ;; we intentionally shadow the other barray macro such
   ;; that you can easily pop this one off the stack to get all barrays
   ;; printed literally
-
-  sub rsp, 16
-  mov qword[rsp], 8
-  mov qword[rsp+8], barray_with_byte_strings
-  mov rdi, qword[macro_stack_printer] ; macro stack
-  mov rsi, barray_macro_name          ; macro name
-  mov rdx, rsp ; code
-  call kv_stack_push
-  add rsp, 16
+  mov rdi, qword[macro_stack_printer]
+  mov rsi, barray_macro_name
+  mov rdx, barray_with_byte_strings
+  call kv_stack_2_push
 
   ;; push parray macro
-  sub rsp, 16
-  mov qword[rsp], 8
-  mov qword[rsp+8], parray
-  mov rdi, qword[macro_stack_printer] ; macro stack
-  mov rsi, parray_macro_name          ; macro name
-  mov rdx, rsp ; code
-  call kv_stack_push
-  add rsp, 16
+  mov rdi, qword[macro_stack_printer]
+  mov rsi, parray_macro_name
+  mov rdx, parray
+  call kv_stack_2_push
 
   pop r12
   ret
@@ -105,22 +91,22 @@ data:
   ;; Call parray macro
   mov rdi, qword[macro_stack_printer]
   mov rsi, parray_macro_name
-  mov rax, kv_stack_value_by_key
+  mov rax, kv_stack_2_value_by_key
   call rax
   mov rdi, r12
   mov rsi, r13
-  call qword[rax+8]
+  call qword[rax]
   jmp .epilogue
 
   .barray:
   ;; Call barray macro
   mov rdi, qword[macro_stack_printer]
   mov rsi, barray_macro_name
-  mov rax, kv_stack_value_by_key
+  mov rax, kv_stack_2_value_by_key
   call rax
   mov rdi, r12
   mov rsi, r13
-  call qword[rax+8]
+  call qword[rax]
 
   .epilogue:
   pop r15

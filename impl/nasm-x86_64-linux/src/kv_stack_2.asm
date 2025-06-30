@@ -100,6 +100,9 @@ extern write
 
 extern bindump
 
+extern write_as_base
+extern write_char
+
 section .rodata
 
 not_pow2_err: db "ERROR: Non-power-of-2 bucket count requested for kv_stack. It must be a power of 2.",10
@@ -251,7 +254,7 @@ kv_stack_2_free:
   pop r12
   ret
 
-;; (kv_stack*, barray* key, u64 value)
+;; (kv_stack*, barray* key, u64 value) -> id
 kv_stack_2_push:
   push rbp
   mov rbp, rsp
@@ -433,6 +436,9 @@ kv_stack_2_push:
   ;; Compact if needed
   mov rdi, r12
   call _kv_stack_compact_if_needed
+
+  ;; Return id
+  mov rax, qword[rbp-48]
 
   add rsp, 40
   pop rbx
@@ -962,6 +968,11 @@ kv_stack_2_value_by_key:
   mov r12, rdi ; kv_stack*
   mov r13, rsi ; barray* key
 
+  ;; Return 0/NULL if key is parray
+  mov rax, 0
+  cmp qword[r13], 0
+  jl .epilogue
+
   ;; Get frame relptr from key
   mov rdi, r12        ; kv_stack*
   mov rsi, qword[r13] ; key_len
@@ -994,6 +1005,25 @@ kv_stack_2_value_by_id:
   push r12
   push r13
   push r14
+
+  mov r12, rdi ; kv_stack*
+
+  ;push rdi
+  ;push rsi
+
+  ;mov rdi, rsi
+  ;mov rsi, 10
+  ;mov rdx, 2
+  ;mov rcx, 0
+  ;call write_as_base
+
+  ;mov rdi, 10
+  ;mov rsi, 2
+  ;call write_char
+
+  ;;call kv_stack_2_bindump_buffers
+  ;pop rsi
+  ;pop rdi
 
   ;; Get frame relptr via id (rdi and rsi already correct)
   call _kv_stack_frame_relptr_from_id
@@ -1293,8 +1323,8 @@ _kv_stack_compare_bytes_to_key:
   .qword_loop:
     test rcx, rcx
     jz .qword_loop_break
-    mov rdx, qword[rdx]
-    cmp rdx, qword[rdi]
+    mov r10, qword[rdx]
+    cmp r10, qword[rdi]
     jne .epilogue
     add rdx, 8
     add rdi, 8

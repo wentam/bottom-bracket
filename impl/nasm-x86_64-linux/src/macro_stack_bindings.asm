@@ -10,7 +10,9 @@ global macro_stack_reader
 global macro_stack_printer
 
 extern kv_stack_new
+extern kv_stack_2_new
 extern kv_stack_free
+extern kv_stack_2_free
 extern assert_stack_aligned
 extern push_builtin_reader_macros
 extern push_builtin_printer_macros
@@ -36,11 +38,14 @@ init_macro_stacks:
   %endif
 
   ;; Create stacks
-  call kv_stack_new
+  mov rdi, 64
+  call kv_stack_2_new
   mov qword[macro_stack_structural], rax
-  call kv_stack_new
+  mov rdi, 8
+  call kv_stack_2_new
   mov qword[macro_stack_reader], rax
-  call kv_stack_new
+  mov rdi, 8
+  call kv_stack_2_new
   mov qword[macro_stack_printer], rax
 
   ;; Push builtin macros
@@ -61,11 +66,11 @@ free_macro_stacks:
   %endif
 
   mov rdi, qword[macro_stack_structural]
-  call kv_stack_free
+  call kv_stack_2_free
   mov rdi, qword[macro_stack_reader]
-  call kv_stack_free
+  call kv_stack_2_free
   mov rdi, qword[macro_stack_printer]
-  call kv_stack_free
+  call kv_stack_2_free
 
   add rsp, 8
   ret

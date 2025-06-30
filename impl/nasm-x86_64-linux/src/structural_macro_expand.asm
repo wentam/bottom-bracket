@@ -16,6 +16,7 @@ extern rel_to_abs
 extern macro_stack_structural
 
 extern kv_stack_value_by_key
+extern kv_stack_2_value_by_key
 
 extern write_as_base
 extern write_char
@@ -24,6 +25,8 @@ extern parray_tail_new
 
 extern free
 extern write
+
+extern print
 
 section .bss
 
@@ -191,13 +194,13 @@ structural_macro_expand_relptr:
   ;; Try to expand this parray based on first element
   mov rdi, qword[macro_stack_structural] ; macro stack
   mov rsi, qword[r12+8]           ; name barray (first element of this parray)
-  call kv_stack_value_by_key
+  call kv_stack_2_value_by_key
   mov rdi, r12                    ; arg1 (*data)
   mov rsi, rbx                    ; output buffer
   ;mov rdx, rax
   cmp rax, 0
   je .expand_parray_not_expanded
-  call qword[rax+8]
+  call qword[rax]
   inc qword[expand_count]
   ;mov r15, rax ; r15 = expanded macro
   cmp rax, -1
