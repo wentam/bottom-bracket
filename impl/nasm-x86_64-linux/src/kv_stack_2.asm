@@ -71,6 +71,8 @@ global kv_stack_2_push
 global kv_stack_2_top
 global kv_stack_2_bindump_buffers
 global kv_stack_2_rm_by_id
+global kv_stack_2_pop
+global kv_stack_2_pop_by_key
 global _kv_stack_key_index_bucket
 global _kv_stack_compact_key_index_data
 global _kv_stack_rehash_key_index
@@ -90,6 +92,7 @@ extern byte_buffer_push_bytes
 extern byte_buffer_push_barray_bytes
 extern byte_buffer_bindump_buffer
 extern byte_buffer_pop_bytes
+extern byte_buffer_get_write_ptr
 extern write
 
 extern bindump
@@ -424,31 +427,9 @@ kv_stack_2_push:
   mov dword[rax+frame.key_relptr], esi
   mov qword[rax+frame.value], r14
 
-  ;; If we have ~>25% stale key_index_data bytes, compact key_index_data
-  mov rdi, qword[r12+kv_stack.key_index_data]
-  call byte_buffer_get_data_length
-  shr rax, 2 ; / 4
-  mov rdi, qword[r12+kv_stack.stale_key_index_bytes]
-  cmp rdi, rax
-  jl .no_compact_key_index_data
-  cmp rdi, 256
-  jl .no_compact_key_index_data
+  ;; Compact if needed
   mov rdi, r12
-  call _kv_stack_compact_key_index_data
-  .no_compact_key_index_data:
-
-  ;; If we have ~>25% stale frame bytes, compact frames
-  mov rdi, qword[r12+kv_stack.frames]
-  call byte_buffer_get_data_length
-  shr rax, 2 ; / 4
-  mov rdi, qword[r12+kv_stack.stale_frame_bytes]
-  cmp rdi, rax
-  jl .no_compact_frames
-  cmp rdi, 256
-  jl .no_compact_frames
-  mov rdi, r12
-  call _kv_stack_compact_frames
-  .no_compact_frames:
+  call _kv_stack_compact_if_needed
 
   add rsp, 40
   pop rbx
@@ -459,8 +440,243 @@ kv_stack_2_push:
   pop rbp
   ret
 
-;; TODO
+;; (kv_stack*) -> frame*
+;;
+;; Performating any mutation upon the kv_stack invalidates the returned pointer
+;;
+;; TODO perhaps this should return key or value instead? Need to look at how this is used.
+;; current frame just containers relptrs which isn't very useful. I just returned frame*
+;; to mirror the legacy implementation, and the legacy implementation had a more directly
+;; useful frame containing key and value directly.
 kv_stack_2_pop:
+  push r12
+  push r13
+  push r14
+
+  mov r12, rdi ; kv_stack*
+
+  ;; Work out the top frame relptr
+  mov rdi, qword[r12+kv_stack.frames]
+  call byte_buffer_get_data_length
+  sub rax, frame_size
+  mov r13, rax ; r13 = frame relptr
+
+  ;; Remove frame from key index
+  mov rdi, r12 ; kv_stack*
+  mov rsi, r13 ; frame relptr
+  call _kv_stack_rm_frame_from_key_index
+
+  ;; Shrink frames buffer by frame size
+  mov rdi, qword[r12+kv_stack.frames]
+  mov rsi, frame_size
+  call byte_buffer_pop_bytes
+
+  ; rax already correct return value
+
+  pop r14
+  pop r13
+  pop r12
+  ret
+
+;; (kv_stack*, frame_relptr)
+;;
+;; Frame must still be present in frames buffer. It's alright if the frame has a negative id
+;; (dead frame)
+_kv_stack_rm_frame_from_key_index:
+  push rbp
+  mov rbp, rsp
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+  sub rsp, 24
+
+  mov r12, rdi ; kv_stack*
+  mov r13, rsi ; frame_relptr
+
+  ;; Get frame*
+  mov rdi, qword[r12+kv_stack.frames]
+  call byte_buffer_get_buf
+  mov r14, rax
+  add r14, r13 ; frame*
+
+  ;; Get key_index_data raw buffer*
+  mov rdi, qword[r12+kv_stack.key_index_data]
+  call byte_buffer_get_buf
+  mov r15, rax ; key_index_data*
+
+  ;; Get key*
+  xor rbx, rbx
+  mov ebx, dword[r14+frame.key_relptr] ; key_relptr
+  add rbx, r15 ; key*
+
+  ;; Get bucket* via key*
+  mov rdi, r12
+  mov rsi, qword[r12+kv_stack.key_index_bucket_count]
+  xor rdx, rdx
+  mov dx, word[rbx+key.length]
+  mov rcx, rbx
+  add rcx, key.bytes
+  call _kv_stack_key_index_bucket
+  mov qword[rbp-64], rax ; key_index_bucket*
+
+  ;; Get key_index_entry*
+  mov rdi, r12
+  mov rsi, rax
+  xor rdx, rdx
+  mov dx, word[rbx+key.length]
+  mov rcx, rbx
+  add rcx, key.bytes
+  call _kv_stack_scan_bucket_for_key
+  mov qword[rbp-56], rax ; key_index_entry*
+
+  ;; Get key_index_value* from key_index_entry*
+  xor r9, r9
+  mov r9d, dword[rax+key_index_entry.value_relptr]
+  add r9, r15 ; key_index_value*
+  mov qword[rbp-48], r9 ; key_index_value*
+
+  ;; Shift our frame's relptr out of the key_index_value
+  mov r8w, word[r9+key_index_value.count]
+  add r9, key_index_value.frame_relptrs
+  mov r10, 0
+  .shift_loop:
+    test r8w, r8w
+    jz .shift_loop_break
+
+    ; r9 = u32* relptr
+
+    ;; If relptr matches, shift=1 (r10)
+    cmp r13d, dword[r9]
+    mov rax, 1
+    cmove r10, rax
+
+    ;; If shift (r10) && r8w != 1, shift the element to our right onto us
+    cmp r10, 1
+    jne .noshift
+    cmp r8w, 1
+    je .noshift
+
+    mov eax, dword[r9+4]
+    mov dword[r9], eax
+
+    .noshift:
+
+    add r9, 4 ; next relptr
+    dec r8w
+    jmp .shift_loop
+  .shift_loop_break:
+
+  ;; Decrement count in key_index_value
+  mov rdi, qword[rbp-48]
+  dec word[rdi+key_index_value.count]
+
+  ;; If the count is now 0, remove the key entirely from the index. This means shifting
+  ;; the key_index_entry out of the key_index_bucket. Increment stale counters as relevant
+  cmp word[rdi+key_index_value.count], 0
+  jne .keep_key
+
+  ;; Increment key_index_data stale bytes according to key size (include key length)
+  mov rdi, qword[rbp-56] ; key_index_entry*
+  xor r8, r8
+  mov r8d, dword[rdi+key_index_entry.key_relptr]
+  add r8, r15 ; r8 = key*
+  xor r9, r9
+  mov r9w, word[r8+key.length]
+  add r9, 2 ; length
+  add qword[r12+kv_stack.stale_key_index_bytes], r9
+
+  ;; Increment key_index_data stale bytes according to key_index_value size, including count
+  mov rdi, qword[rbp-48] ; key_index_value*
+  xor r8, r8
+  mov r8w, word[rdi+key_index_value.count]
+  shl r8, 2 ; * 4 (sizeof u32)
+  add r8, 2 ; count itself
+  add qword[r12+kv_stack.stale_key_index_bytes], r8
+
+  ;; Perform shift
+  mov rdi, qword[rbp-56] ; key_index_entry*
+  mov rcx, qword[rbp-64] ; key_index_bucket*
+  add rcx, key_index_bucket_size ; r9 = end of bucket
+  sub rcx, rdi
+  sub rcx, key_index_entry_size ; rcx = bytes to shift
+  mov rsi, rdi
+  add rsi, key_index_entry_size
+  rep movsb ; rsi -> rdi * rcx
+
+  ;; Update entry count
+  mov rcx, qword[rbp-64] ; key_index_bucket*
+  dec byte[rcx+key_index_bucket.entry_count]
+
+  .keep_key:
+
+  ;; Increment stale byte counter in key index data by 4 bytes (size of relptr we removed)
+  add qword[r12+kv_stack.stale_key_index_bytes], 4
+
+  add rsp, 24
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  pop rbp
+  ret
+
+;; (kv_stack*, frame_relptr)
+;;
+;; Removes a frame from both the frames buffer and key index.
+_kv_stack_rm_frame:
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+
+  mov r12, rdi ; kv_stack*
+  mov r14, rsi ; frame_relptr
+
+  ;; Work out frame*
+  mov rdi, qword[r12+kv_stack.frames]
+  call byte_buffer_get_buf
+  add rax, r14
+  mov r15, rax ; frame*
+
+  ;; Set the ID of the target frame to -1 to mark it as deleted. We can't shift it out
+  ;; because that would corrupt our index. We'll occassionaly perform an
+  ;; expensive compaction operation. To free up negative-ID frames.
+  mov dword[r15+frame.id], -1
+
+  ;; Remove this frame from our key index
+  mov rdi, r12 ; kv_stack*
+  mov rsi, r14 ; frame_relptr
+  call _kv_stack_rm_frame_from_key_index
+
+  ;; If the frame we removed was the rightmost/topmost frame, decrement the byte buffer size
+  ;; to remove this top frame from the buffer (a frame with a negative ID can not be on top)
+  mov rdi, qword[r12+kv_stack.frames]
+  call byte_buffer_get_data_length
+  mov rdi, r14
+  add rdi, frame_size
+  cmp rdi, rax
+  jne .not_rightmost
+
+  ;; Decrement
+  mov rdi, qword[r12+kv_stack.frames]
+  mov rsi, frame_size
+  call byte_buffer_pop_bytes
+
+  jmp .was_rightmost
+  .not_rightmost:
+  ;; The frame isn't the rightmost frame, add frame size to our frame stale byte counter
+  add qword[r12+kv_stack.stale_frame_bytes], frame_size
+  .was_rightmost:
+
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
   ret
 
 ;; (kv_stack*, id)
@@ -517,155 +733,28 @@ kv_stack_2_rm_by_id:
   mov r14, r15
   sub r14, rax ; r14 = frame relptr
 
-  ;; Set the ID of the target frame to -1 to mark it as deleted. We can't shift it out
-  ;; because that would corrupt our index. We'll occassionaly perform an
-  ;; expensive compaction operation. To free up negative-ID frames.
-  mov dword[r15+frame.id], -1
-
-  ;; Obtain key* in key_index_data
-  mov rdi, qword[r12+kv_stack.key_index_data]
-  call byte_buffer_get_buf
-  mov qword[rbp-48], rax ; key_index_data raw buffer*
-  xor rbx, rbx
-  mov ebx, dword[r15+frame.key_relptr]
-  add rbx, rax ; key*
-
-  ;; Obtain the bucket in our index for the key references by our frame
   mov rdi, r12
-  mov rsi, qword[r12+kv_stack.key_index_bucket_count]
-  xor rdx, rdx
-  mov dx, word[rbx+key.length]
-  mov rcx, rbx
-  add rcx, key.bytes
-  call _kv_stack_key_index_bucket
-  ; rax = bucket*
-  mov qword[rbp-64], rax
+  mov rsi, r14
+  call _kv_stack_rm_frame
 
-  ;; Obtain the key_index_entry* in our index from the key referenced by our frame
-  mov rdi, r12 ; kv_stack*
-  mov rsi, rax  ; bucket*
-  xor rdx, rdx
-  mov dx, word[rbx+key.length] ; key_len
-  mov rcx, rbx ; key_bytes*
-  add rcx, key.bytes
-  call _kv_stack_scan_bucket_for_key
-  ; rax = key_index_entry*
-  mov qword[rbp-72], rax ; key_index_entry*
+  ;; Compact if needed
+  mov rdi, r12
+  call _kv_stack_compact_if_needed
 
-  ;; Error if not found (key_index_entry* == NULL/0)
-  cmp rax, 0
-  jne .good_entry
+  add rsp, 40
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
+  pop rbp
+  ret
 
-  mov rdi, no_entry_err
-  mov rsi, no_entry_err_len
-  call error_exit
+;; (kv_stack*)
+_kv_stack_compact_if_needed:
+  push r12
 
-  .good_entry:
-
-  ;; Obtain the key_index_value from our key_index_entry*
-  xor rdi, rdi
-  mov edi, dword[rax+key_index_entry.value_relptr]
-  add rdi, qword[rbp-48] ; rdi = value_relptr + key_index_data* = key_index_value*
-  mov qword[rbp-56], rdi ; key_index_value*
-
-  ;; Shift our frame's relptr out of the key_index_value
-  mov r8w, word[rdi+key_index_value.count]
-  mov r9, rdi
-  add r9, key_index_value.frame_relptrs
-  mov r10, 0
-  .shift_loop:
-    test r8w, r8w
-    jz .shift_loop_break
-
-    ; r9 = u32* relptr
-
-    ;; If relptr matches, shift=1 (r10)
-    cmp r14d, dword[r9]
-    mov rax, 1
-    cmove r10, rax
-
-    ;; If shift (r10) && r8w != 1, shift the element to our right onto us
-    cmp r10, 1
-    jne .noshift
-    cmp r8w, 1
-    je .noshift
-
-    mov eax, dword[r9+4]
-    mov dword[r9], eax
-
-    .noshift:
-
-    add r9, 4 ; next relptr
-    dec r8w
-    jmp .shift_loop
-  .shift_loop_break:
-
-  ;; Decrement count in the key_index_value
-  mov rdi, qword[rbp-56] ; key_index_value*
-  dec word[rdi+key_index_value.count]
-
-  ;; If the count is now 0, remove the key entirely from the index. This means shifting
-  ;; the key_index_entry out of the key_index_bucket. Increment stale counters as relevant
-  cmp word[rdi+key_index_value.count], 0
-  jne .keep_key
-
-  ;; Increment key_index_data stale bytes according to key size (include key length)
-  mov rdi, qword[rbp-72] ; key_index_entry*
-  xor r8, r8
-  mov r8d, dword[rdi+key_index_entry.key_relptr]
-  mov rsi, qword[rbp-48] ; key_index_data raw buffer*
-  add r8, rsi ; r8 = key*
-  xor r9, r9
-  mov r9w, word[r8+key.length]
-  add r9, 2 ; length
-  add qword[r12+kv_stack.stale_key_index_bytes], r9
-
-  ;; Increment key_index_data stale bytes according to key_index_value size, including count
-  mov rdi, qword[rbp-56] ; key_index_value*
-  xor r8, r8
-  mov r8w, word[rdi+key_index_value.count]
-  shl r8, 2 ; * 4 (sizeof u32)
-  add r8, 2 ; count itself
-  add qword[r12+kv_stack.stale_key_index_bytes], r8
-
-  ;; Perform shift
-  mov rdi, qword[rbp-72] ; key_index_entry*
-  mov rcx, qword[rbp-64] ; key_index_bucket*
-  add rcx, key_index_bucket_size ; r9 = end of bucket
-  sub rcx, rdi
-  sub rcx, key_index_entry_size ; rcx = bytes to shift
-  mov rsi, rdi
-  add rsi, key_index_entry_size
-  rep movsb ; rsi -> rdi * rcx
-
-  ;; Update entry count
-  mov rcx, qword[rbp-64] ; key_index_bucket*
-  dec byte[rcx+key_index_bucket.entry_count]
-
-  .keep_key:
-
-  ;; Increment stale byte counter in key index data by 4 bytes (size of relptr we removed)
-  add qword[r12+kv_stack.stale_key_index_bytes], 4
-
-  ;; If the frame we removed was the rightmost/topmost frame, decrement the byte buffer size
-  ;; to remove this top frame from the buffer (a frame with a negative ID can not be on top)
-  mov rdi, qword[r12+kv_stack.frames]
-  call byte_buffer_get_data_length
-  mov rdi, r14
-  add rdi, frame_size
-  cmp rdi, rax
-  jne .not_rightmost
-
-  ;; Decrement
-  mov rdi, qword[r12+kv_stack.frames]
-  mov rsi, frame_size
-  call byte_buffer_pop_bytes
-
-  jmp .was_rightmost
-  .not_rightmost:
-  ;; The frame isn't the rightmost frame, add frame size to our frame stale byte counter
-  add qword[r12+kv_stack.stale_frame_bytes], frame_size
-  .was_rightmost:
+  mov r12, rdi ; kv_stack*
 
   ;; Compact frames if waste is ~>= 25%
   mov rdi, qword[r12+kv_stack.frames]
@@ -693,17 +782,91 @@ kv_stack_2_rm_by_id:
   call _kv_stack_compact_key_index_data
   .no_compact_key_index_data:
 
-  add rsp, 40
+  pop r12
+  ret
+
+;; (kv_stack*, key_len, bytes* key) -> frame_relptr
+_kv_stack_frame_relptr_from_key:
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+
+  mov r12, rdi ; kv_stack*
+  mov r13, rsi ; key_len
+  mov r14, rdx ; bytes* key
+
+  ;; Get key_index_data raw buffer*
+  mov rdi, qword[r12+kv_stack.key_index_data]
+  call byte_buffer_get_buf
+  mov r15, rax ; key_index_data raw buffer*
+
+  ;; Get bucket*
+  mov rdi, r12 ; kv_stack*
+  mov rsi, qword[r12+kv_stack.key_index_bucket_count] ; bucket_count
+  mov rdx, r13 ; key_length
+  mov rcx, r14 ; bytes* key
+  call _kv_stack_key_index_bucket
+
+  ;; Scan bucket* for key_index_entry*
+  mov rdi, r12 ; kv_stack*
+  mov rsi, rax ; bucket*
+  mov rdx, r13 ; key_len
+  mov rcx, r14 ; bytes* key
+  call _kv_stack_scan_bucket_for_key
+
+  ;; Get key_index_value* from key_index_entry*
+  xor r9, r9
+  mov r9d, dword[rax+key_index_entry.value_relptr]
+  add r9, r15 ; key_index_value*
+
+  ;;; Get the top/rightmost frame relptr from the key_index_value*
+  xor r8, r8
+  mov r8w, word[r9+key_index_value.count]
+  dec r8
+  shl r8, 2  ; * 4
+  add r9, 2  ; move past count
+  add r9, r8 ; move to relptr
+
+  xor rax, rax
+  mov eax, dword[r9]
+
   pop rbx
   pop r15
   pop r14
   pop r13
   pop r12
-  pop rbp
   ret
 
-;; TODO
+;; (kv_stack*, barray* key)
 kv_stack_2_pop_by_key:
+  push r12
+  push r13
+  push r14
+  push r15
+  push rbx
+
+  mov r12, rdi ; kv_stack*
+  mov r13, rsi ; barray* key
+
+  ;; Get frame relptr via _kv_stack_frame_relptr_from_key
+  mov rdi, r12
+  mov rsi, qword[r13]
+  mov rdx, r13
+  add rdx, 8
+  call _kv_stack_frame_relptr_from_key
+
+  ;; Remove frame using _kv_stack_rm_frame
+  mov rdi, r12
+  mov rsi, rax
+  call _kv_stack_rm_frame
+
+  pop rbx
+  pop r15
+  pop r14
+  pop r13
+  pop r12
   ret
 
 ;; (kv_stack*) -> frame*

@@ -80,6 +80,8 @@ extern kv_stack_2_push
 extern kv_stack_2_top
 extern kv_stack_2_bindump_buffers
 extern kv_stack_2_rm_by_id
+extern kv_stack_2_pop
+extern kv_stack_2_pop_by_key
 extern _kv_stack_key_index_bucket
 extern _kv_stack_compact_key_index_data
 extern _kv_stack_rehash_key_index
@@ -221,12 +223,20 @@ _start:
   ;mov rdi, r12
   ;call _kv_stack_rehash_key_index
 
-  ;mov rdi, r12
-  ;mov rsi, 1
-  ;call kv_stack_2_rm_by_id
+
+  ;;mov rdi, r12
+  ;;call kv_stack_2_pop
+
+  ;;mov rdi, r12
+  ;;mov rsi, 1
+  ;;call kv_stack_2_rm_by_id
 
   ;mov rdi, r12
-  ;call _kv_stack_compact_frames
+  ;mov rsi, foo_key
+  ;call kv_stack_2_pop_by_key
+
+  ;;mov rdi, r12
+  ;;call _kv_stack_compact_frames
 
   ;mov rdi, r12
   ;call kv_stack_2_bindump_buffers
