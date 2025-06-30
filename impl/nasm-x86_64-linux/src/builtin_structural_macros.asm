@@ -52,14 +52,14 @@ extern kv_stack_bindump_buffers
 extern kv_stack_top_value
 extern kv_stack_value_by_id
 
-extern kv_stack_2_push
-extern kv_stack_2_pop
-extern kv_stack_2_value_by_key
-extern kv_stack_2_new
-extern kv_stack_2_free
-extern kv_stack_2_rm_by_id
-extern kv_stack_2_value_by_id
-extern kv_stack_2_bindump_buffers
+extern kv_stack_push
+extern kv_stack_pop
+extern kv_stack_value_by_key
+extern kv_stack_new
+extern kv_stack_free
+extern kv_stack_rm_by_id
+extern kv_stack_value_by_id
+extern kv_stack_bindump_buffers
 
 extern macro_stack_structural
 extern macro_stack_printer
@@ -224,196 +224,196 @@ push_builtin_structural_macros:
   mov rdi, qword[macro_stack_structural]   ; macro stack
   mov rsi, barray_test_macro_name          ; macro name
   mov rdx, barray_test
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; Push platform macro
   mov rdi, qword[macro_stack_structural]   ; macro stack
   mov rsi, platform_macro_name          ; macro name
   mov rdx, platform_macro
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; Push arch macro
   mov rdi, qword[macro_stack_structural]   ; macro stack
   mov rsi, arch_macro_name          ; macro name
   mov rdx, arch_macro
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; Push builtin_bb_push_int64 macro
   mov rdi, qword[macro_stack_structural]    ; macro stack
   mov rsi, builtin_bb_push_int64_macro_name ; macro name
   mov rdx, builtin_bb_push_int64
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; Push builtin_bb_push_int32 macro
   mov rdi, qword[macro_stack_structural]   ; macro stack
   mov rsi, builtin_bb_push_int32_macro_name ; macro name
   mov rdx, builtin_bb_push_int32
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; Push builtin_bb_push_int16 macro
   mov rdi, qword[macro_stack_structural]   ; macro stack
   mov rsi, builtin_bb_push_int16_macro_name ; macro name
   mov rdx, builtin_bb_push_int16
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; Push builtin_print macro
   mov rdi, qword[macro_stack_structural]   ; macro stack
   mov rsi, builtin_print_macro_name ; macro name
   mov rdx, builtin_print
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; Push include macro
   mov rdi, qword[macro_stack_structural]   ; macro stack
   mov rsi, include_macro_name ; macro name
   mov rdx, include
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; Push print_with macro
   mov rdi, qword[macro_stack_structural]   ; macro stack
   mov rsi, print_with_macro_name ; macro name
   mov rdx, print_with
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; Push builtin_rel_to_abs macro
   mov rdi, qword[macro_stack_structural]   ; macro stack
   mov rsi, builtin_rel_to_abs_macro_name ; macro name
   mov rdx, builtin_rel_to_abs
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; Push builtin_macro_stack_structural macro
   mov rdi, qword[macro_stack_structural]
   mov rsi, builtin_macro_stack_structural_macro_name
   mov rdx, builtin_macro_stack_structural
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; Push builtin_kv_stack_push macro
   mov rdi, qword[macro_stack_structural]
   mov rsi, builtin_kv_stack_push_macro_name
   mov rdx, builtin_kv_stack_push
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; Push builtin_kv_stack_pop macro
   mov rdi, qword[macro_stack_structural]
   mov rsi, builtin_kv_stack_pop_macro_name
   mov rdx, builtin_kv_stack_pop
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; Push builtin_kv_stack_rm_by_id macro
   mov rdi, qword[macro_stack_structural]
   mov rsi, builtin_kv_stack_rm_by_id_macro_name
   mov rdx, builtin_kv_stack_rm_by_id
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; Push builtin_sma macro
   mov rdi, qword[macro_stack_structural]
   mov rsi, builtin_sma_macro_name
   mov rdx, builtin_sma
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; Push builtin_smat macro
   mov rdi, qword[macro_stack_structural]
   mov rsi, builtin_smat_macro_name
   mov rdx, builtin_smat
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; Push builtin_bb_push_bb macro
   mov rdi, qword[macro_stack_structural]
   mov rsi, builtin_bb_push_bb_macro_name
   mov rdx, builtin_bb_push_bb
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; Push bsumLE macro
   mov rdi, qword[macro_stack_structural]
   mov rsi, bsumLE_macro_name
   mov rdx, bsumLE
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; Push builtin_bb_new macro
   mov rdi, qword[macro_stack_structural]
   mov rsi, builtin_bb_new_macro_name
   mov rdx, builtin_bb_new
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; Push builtin_bb_free macro
   mov rdi, qword[macro_stack_structural]
   mov rsi, builtin_bb_free_macro_name
   mov rdx, builtin_bb_free
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; Push builtin_bb_get_buf macro
   mov rdi, qword[macro_stack_structural]
   mov rsi, builtin_bb_get_buf_macro_name
   mov rdx, builtin_bb_get_buf
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; Push builtin_bb_get_write_ptr macro
   mov rdi, qword[macro_stack_structural]
   mov rsi, builtin_bb_get_write_ptr_macro_name
   mov rdx, builtin_bb_get_write_ptr
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; Push builtin_bb_write_int64 macro
   mov rdi, qword[macro_stack_structural]
   mov rsi, builtin_bb_write_int64_macro_name
   mov rdx, builtin_bb_write_int64
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; Push builtin_bb_data_len macro
   mov rdi, qword[macro_stack_structural]
   mov rsi, builtin_bb_data_len_macro_name
   mov rdx, builtin_bb_data_len
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; Push builtin_barray_equalp macro
   mov rdi, qword[macro_stack_structural]
   mov rsi, builtin_barray_equalp_macro_name
   mov rdx, builtin_barray_equalp
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; Push builtin_bb_push_int8 macro
   mov rdi, qword[macro_stack_structural]
   mov rsi, builtin_bb_push_int8_macro_name
   mov rdx, builtin_bb_push_int8
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; Push builtin_bb_push_barray macro
   mov rdi, qword[macro_stack_structural]
   mov rsi, builtin_bb_push_barray_macro_name
   mov rdx, builtin_bb_push_barray
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; Push parray-test macro
   mov rdi, qword[macro_stack_structural]
   mov rsi, parray_test_macro_name
   mov rdx, parray_test
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; Push nothing macro
   mov rdi, qword[macro_stack_structural]
   mov rsi, nothing_macro_name
   mov rdx, nothing
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; Push elf64_relocatable macro
   mov rdi, qword[macro_stack_structural]
   mov rsi, elf64_relocatable_macro_name
   mov rdx, elf64_relocatable
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; Push barray-cat macro
   mov rdi, qword[macro_stack_structural]
   mov rsi, barray_cat_macro_name
   mov rdx, barray_cat
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; Push withm macro
   mov rdi, qword[macro_stack_structural]
   mov rsi, withm_macro_name
   mov rdx, withm
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;mov rdi, qword[macro_stack_structural]
-  ;call kv_stack_2_bindump_buffers
+  ;call kv_stack_bindump_buffers
 
   add rsp, 8
   ret
@@ -470,21 +470,21 @@ builtin_rel_to_abs:
  ret
 
 section .rodata
-kv_stack_push_ptr_barray: dq 8, kv_stack_2_push
+kv_stack_push_ptr_barray: dq 8, kv_stack_push
 section .text
 builtin_kv_stack_push:
  mov rax, kv_stack_push_ptr_barray
  ret
 
 section .rodata
-kv_stack_pop_ptr_barray: dq 8, kv_stack_2_pop
+kv_stack_pop_ptr_barray: dq 8, kv_stack_pop
 section .text
 builtin_kv_stack_pop:
  mov rax, kv_stack_pop_ptr_barray
  ret
 
 section .rodata
-kv_stack_rm_by_id_ptr_barray: dq 8, kv_stack_2_rm_by_id
+kv_stack_rm_by_id_ptr_barray: dq 8, kv_stack_rm_by_id
 section .text
 builtin_kv_stack_rm_by_id:
  mov rax, kv_stack_rm_by_id_ptr_barray
@@ -1179,7 +1179,7 @@ _barray_cat_push_layer:
   je .poploop_break
 
   mov rdi, r13
-  call kv_stack_2_pop
+  call kv_stack_pop
 
   dec r15
   jmp .poploop
@@ -1319,7 +1319,7 @@ _barray_cat_push_layer_labels:
 
     mov rdi, r13
     mov rdx, r14
-    call kv_stack_2_push
+    call kv_stack_push
 
     inc qword[rbp-56]
 
@@ -1360,7 +1360,7 @@ _barray_cat_push_layer_labels:
 
     mov rdi, r13
     mov rdx, r14
-    call kv_stack_2_push
+    call kv_stack_push
 
     inc qword[rbp-56]
     .nopush:
@@ -1565,7 +1565,7 @@ _barray_cat_push_layer_content:
 
   mov rdi, rbx
   mov rsi, qword[r15+16]
-  call kv_stack_2_value_by_key
+  call kv_stack_value_by_key
   push rax
   sub rsp, 8
 
@@ -1648,7 +1648,7 @@ barray_cat:
 
   ;; Create label stack
   mov rdi, 8
-  call kv_stack_2_new
+  call kv_stack_new
   mov qword[rbp-56], rax ; qword[rbp-56] = label stack
 
   ;; Push the layer
@@ -1659,7 +1659,7 @@ barray_cat:
 
   ;; Free label stack
   mov rdi, qword[rbp-56]
-  call kv_stack_2_free
+  call kv_stack_free
 
   ;; Update output length
   mov rdi, r13
@@ -1762,7 +1762,7 @@ _with_macros_try_push_impl:
   mov rdi, qword[macro_stack_structural]
   mov rsi, r12 ; macro name
   mov rdx, r15 ; code pointer
-  call kv_stack_2_push
+  call kv_stack_push
 
   jmp .epilogue
 
@@ -2226,7 +2226,7 @@ _withm_macros_push_macro:
   mov rdi, qword[macro_stack_structural]
   mov rsi, qword[r12+16] ; macro name
   mov rdx, rbx ; code
-  call kv_stack_2_push
+  call kv_stack_push
 
   .got_id:
   ;; Push to id to r13 that's in rax
@@ -2324,7 +2324,7 @@ _withm_push_data_macro:
   mov rdi, qword[macro_stack_structural]
   mov rsi, qword[r12+16] ; macro name
   mov rdx, qword[rbp-48] ; code
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; Push our template macro's id to the id byte buffer
   mov rdi, r13
@@ -2600,14 +2600,14 @@ withm:
   ;; Free the macro's malloc'd memory
   mov rdi, qword[macro_stack_structural] ; macro stack
   mov rsi, qword[rbp-72]
-  call kv_stack_2_value_by_id
+  call kv_stack_value_by_id
   mov rdi, qword[rax]
   call free
 
   ;; Remove the macro from the stack by ID
   mov rdi, qword[macro_stack_structural] ; macro stack
   mov rsi, qword[rbp-72]
-  call kv_stack_2_rm_by_id
+  call kv_stack_rm_by_id
 
   sub qword[rbp-64], 8
   jmp .pop_loop
@@ -2854,7 +2854,7 @@ _print_with_push_macro:
     mov rdi, qword[macro_stack_printer]
     mov rsi, qword[rbp-48] ; macro name
     mov rdx, rbx
-    call kv_stack_2_push
+    call kv_stack_push
 
     ;; Store the macro id
     mov rdi, r13
@@ -2968,20 +2968,20 @@ print_with:
 
   ;push rax
   ;mov rdi, qword[macro_stack_structural]
-  ;call kv_stack_2_bindump_buffers
+  ;call kv_stack_bindump_buffers
   ;pop rax
 
   ;; Free the macro's allocation
   mov rdi, qword[macro_stack_printer]
   mov rsi, qword[r14] ; rdi = id
-  call kv_stack_2_value_by_id
+  call kv_stack_value_by_id
   mov rdi, qword[rax]
   call free
 
   ;; Pop the macro
   mov rdi, qword[macro_stack_printer]
   mov rsi, qword[r14] ; rdi = id
-  call kv_stack_2_rm_by_id
+  call kv_stack_rm_by_id
 
   add r14, 8
   dec r15

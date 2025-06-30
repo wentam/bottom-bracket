@@ -74,17 +74,17 @@ extern byte_buffer_free
 extern _malloc
 extern _free
 
-extern kv_stack_2_new
-extern kv_stack_2_free
-extern kv_stack_2_push
-extern kv_stack_2_top
-extern kv_stack_2_bindump_buffers
-extern kv_stack_2_rm_by_id
-extern kv_stack_2_pop
-extern kv_stack_2_pop_by_key
-extern kv_stack_2_value_by_key
-extern kv_stack_2_value_by_id
-extern kv_stack_2_top_value
+extern kv_stack_new
+extern kv_stack_free
+extern kv_stack_push
+extern kv_stack_top
+extern kv_stack_bindump_buffers
+extern kv_stack_rm_by_id
+extern kv_stack_pop
+extern kv_stack_pop_by_key
+extern kv_stack_value_by_key
+extern kv_stack_value_by_id
+extern kv_stack_top_value
 extern _kv_stack_key_index_bucket
 extern _kv_stack_compact_key_index_data
 extern _kv_stack_rehash_key_index
@@ -204,21 +204,21 @@ _start:
 
   ;; TODO tmp START
   ;mov rdi, 2
-  ;call kv_stack_2_new
+  ;call kv_stack_new
   ;mov r12, rax
 
   ;mov rdi, r12
   ;mov rsi, foo_key
   ;mov rdx, 2
-  ;call kv_stack_2_push
+  ;call kv_stack_push
 
   ;mov rdi, r12
   ;mov rsi, foo_key
   ;mov rdx, 5
-  ;call kv_stack_2_push
+  ;call kv_stack_push
 
   ;mov rdi, r12
-  ;call kv_stack_2_bindump_buffers
+  ;call kv_stack_bindump_buffers
 
   ;;mov rdi, r12
   ;;call _kv_stack_compact_key_index_data
@@ -228,19 +228,19 @@ _start:
 
 
   ;;mov rdi, r12
-  ;;call kv_stack_2_pop
+  ;;call kv_stack_pop
 
   ;;mov rdi, r12
   ;;mov rsi, 2
-  ;;call kv_stack_2_rm_by_id
+  ;;call kv_stack_rm_by_id
 
   ;;mov rdi, r12
   ;;mov rsi, foo_key
-  ;;call kv_stack_2_pop_by_key
+  ;;call kv_stack_pop_by_key
 
   ;;mov rdi, r12
   ;;mov rsi, 3
-  ;;call kv_stack_2_top_value
+  ;;call kv_stack_top_value
 
   ;;mov rdi, qword[rax]
   ;;mov rsi, 10
@@ -252,10 +252,10 @@ _start:
   ;;call _kv_stack_compact_frames
 
   ;mov rdi, r12
-  ;call kv_stack_2_bindump_buffers
+  ;call kv_stack_bindump_buffers
 
   ;mov rdi, r12
-  ;call kv_stack_2_free
+  ;call kv_stack_free
 
   ;; TODO tmp END
 

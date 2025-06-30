@@ -23,8 +23,8 @@ extern barray_invalid_chars
 extern byte_in_barray_p
 extern write_as_base
 
-extern kv_stack_2_push
-extern kv_stack_2_value_by_key
+extern kv_stack_push
+extern kv_stack_value_by_key
 
 section .rodata
 parray_macro_name: db 6,0,0,0,0,0,0,0,"parray"
@@ -44,13 +44,13 @@ push_builtin_printer_macros:
   mov rdi, qword[macro_stack_printer]
   mov rsi, data_macro_name
   mov rdx, data
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; push barray macro
   mov rdi, qword[macro_stack_printer]
   mov rsi, barray_macro_name
   mov rdx, barray
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; push barray with byte-strings macro
   ;; we intentionally shadow the other barray macro such
@@ -59,13 +59,13 @@ push_builtin_printer_macros:
   mov rdi, qword[macro_stack_printer]
   mov rsi, barray_macro_name
   mov rdx, barray_with_byte_strings
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; push parray macro
   mov rdi, qword[macro_stack_printer]
   mov rsi, parray_macro_name
   mov rdx, parray
-  call kv_stack_2_push
+  call kv_stack_push
 
   pop r12
   ret
@@ -91,7 +91,7 @@ data:
   ;; Call parray macro
   mov rdi, qword[macro_stack_printer]
   mov rsi, parray_macro_name
-  mov rax, kv_stack_2_value_by_key
+  mov rax, kv_stack_value_by_key
   call rax
   mov rdi, r12
   mov rsi, r13
@@ -102,7 +102,7 @@ data:
   ;; Call barray macro
   mov rdi, qword[macro_stack_printer]
   mov rsi, barray_macro_name
-  mov rax, kv_stack_2_value_by_key
+  mov rax, kv_stack_value_by_key
   call rax
   mov rdi, r12
   mov rsi, r13

@@ -57,7 +57,7 @@ extern byte_in_barray_p
 extern write_char
 extern write_as_base
 
-extern kv_stack_2_push
+extern kv_stack_push
 
 section .rodata
 
@@ -103,25 +103,25 @@ push_builtin_reader_macros:
   mov rdi, qword[macro_stack_reader] ; macro stack
   mov rsi, barray_literal_macro_name ; macro name
   mov rdx, barray_literal
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; push comment literal macro
   mov rdi, qword[macro_stack_reader] ; macro stack
   mov rsi, comment_literal_macro_name ; macro name
   mov rdx, comment_literal
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; push parray literal macro
   mov rdi, qword[macro_stack_reader] ; macro stack
   mov rsi, parray_literal_macro_name ; macro name
   mov rdx, parray_literal
-  call kv_stack_2_push
+  call kv_stack_push
 
   ;; push byte_string literal macro
   mov rdi, qword[macro_stack_reader] ; macro stack
   mov rsi, byte_string_macro_name ; macro name
   mov rdx, byte_string
-  call kv_stack_2_push
+  call kv_stack_push
 
   add rsp, 8
   ret
