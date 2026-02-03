@@ -293,3 +293,14 @@ Also see the programs/ subdirectory in this repository for more examples.
 // * So it's a macro assembler? (no)
 // * So it's a text generator? (no)
 // * These are not like C template/substitution macros.
+
+// Possible handy quotes:
+//
+// bottom-bracket is a minimal, working counterexample to common assumptions in language design.
+//
+// bottom-bracket is not intended as a Forth replacement or critique. Forth explores a different design space. This project asks a different question.
+//
+// This is not a comparison with existing languages, and discussion framed as ‘X already does this’ is orthogonal to the goal of the project.
+//
+// This project isn’t attempting to evaluate expressiveness across languages. The writeup focuses on a different design axis.
+

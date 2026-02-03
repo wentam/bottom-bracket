@@ -1,3 +1,6 @@
+* Our hashmap/kv_stack_2 is wrong. We use a fixed bucket size and rehash on overflow, but true
+hash conflicts are still possible meaning it's possible to end up in a recursive rehash loop.
+buckets must be dynamically-sized.
 * byte buffer/arena should accept initial backing buffer size as arg
   * should allow you to say 0 for sane default mebbe?
   * make the default size SMALL. Our goal is to make sure everything stays in L1

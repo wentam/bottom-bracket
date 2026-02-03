@@ -258,6 +258,12 @@
  ;;     we access the label absolutely or relatively.
  ;;   * Any instruction that has relative or absolute modes should have an "abs" or "rel" suffix.
 
+ ;; NOTE: Put more commonly used instructions earlier in this table. This table is linear-scanned,
+ ;; and the size of the table is bounded to size of around 6000 entries. Because a small subset
+ ;; of the total set of x86 instructions is commonly used, this linear scan can actually
+ ;; be faster than a hashmap lookup in practice so long as more common instructions are
+ ;; kept near the top.
+
  [noexpand-data instruction-table
   [[mov      [[[r64 re64] [r64 re64]] [REX W [if-ext [p 0] R] [if-ext [p 1] B]] "\x8B" [RM [p 0] [p 1]]]
              [[[r64 re64] [m64 me64]] [REX W [if-ext [p 0] R] [if-ext [memop-index [p 1]] X] [if-ext [memop-base [p 1]] B]] "\x8B" [RM [p 0] [p 1]]]
